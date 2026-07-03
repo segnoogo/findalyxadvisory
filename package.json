@@ -1,0 +1,12 @@
+{
+  "name": "findalyx-advisory",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Outillage de developpement uniquement (tests + verification de types). L'application se construit avec `bash src/assembler.sh` et n'a AUCUNE dependance npm pour tourner ou etre livree.",
+  "scripts": {
+    "build": "bash src/assembler.sh",
+    "test": "node tests/run.js",
+    "typecheck": "npx -p typescript@5.4 tsc -p jsconfig.json"
+  },
+  "license": "UNLICENSED"
+}

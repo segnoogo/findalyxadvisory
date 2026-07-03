@@ -1,0 +1,74 @@
+/* =========================================================================
+   Tests golden-master du moteur (src/moteur.js) — données SYNTHÉTIQUES.
+   Exécution :  node tests/run.js     (aucune dépendance)
+   Ces tests encodent les garanties « au franc près » du moteur : mapping,
+   bilan équilibré (Actif net = Capitaux propres), TFT réconcilié, bilan
+   prévisionnel bouclé, cohérence de la valorisation. Un développeur qui
+   modifie le moteur les relance pour vérifier qu'il n'a rien cassé.
+   ========================================================================= */
+const M = require('../src/moteur.js');
+const { balances, matrice } = require('./fixtures.js');
+
+let pass = 0, fail = 0;
+const ok = (cond, msg) => { if (cond) pass++; else { fail++; console.error('  ✗ ' + msg); } };
+const near = (a, b, eps, msg) =>
+  ok(a != null && Math.abs(a - b) <= eps, `${msg} — attendu ${b}, obtenu ${a}`);
+
+console.log('== 1. Ingestion (lireBalance) ==');
+const lu = M.lireBalance(matrice);
+ok(lu.controle.nb === 17, `17 comptes après exclusion des sous-totaux (obtenu ${lu.controle.nb})`);
+ok(lu.controle.sousTotauxExclus >= 1, `au moins 1 sous-total exclu (obtenu ${lu.controle.sousTotauxExclus})`);
+near(lu.controle.ecart, 0, 0.5, 'balance équilibrée (écart débit − crédit)');
+
+console.log('== 2. États financiers : golden values + invariants ==');
+const tbagr = M.appliquerMapping(M.construireTbagr(balances), {});
+const etats = M.calculerEtats(tbagr);
+const v = etats.v;
+
+// Valeurs de référence (en K), exercice 2024
+near(v.CA[2024],           130,  0.001, 'CA 2024');
+near(v.MARGE_BRUTE[2024],   70,  0.001, 'Marge brute 2024');
+near(v.EBITDA[2024],        30,  0.001, 'EBITDA 2024');
+near(v.EBIT[2024],          22,  0.001, 'EBIT 2024');
+near(v.RESULTAT_NET[2024],  19,  0.001, 'Résultat net 2024');
+// Exercice 2023
+near(v.CA[2023],           112,  0.001, 'CA 2023');
+near(v.EBITDA[2023],        25.5,0.001, 'EBITDA 2023');
+near(v.RESULTAT_NET[2023],  15.3,0.001, 'Résultat net 2023');
+
+// INVARIANT 1 — bilan équilibré : Actif net = Capitaux propres, chaque exercice
+etats.annees.forEach(a =>
+  near(v.ACTIF_NET[a], v.CAPITAUX_PROPRES[a], 0.001, `Bilan équilibré ${a} (Actif net = Capitaux propres)`));
+
+// INVARIANT 2 — TFT réconcilié : clôture du TFT = trésorerie nette du bilan
+for (let i = 1; i < etats.annees.length; i++) {
+  const a = etats.annees[i];
+  near(etats.tft[a].ZG, v.TRESORERIE_NETTE[a], 0.001, `TFT réconcilié ${a} (ZG = trésorerie de clôture)`);
+}
+
+console.log('== 3. Ratios ==');
+const r = M.calculerRatios(etats);
+ok(r.ratios.length === 16, `16 ratios (obtenu ${r.ratios.length})`);
+ok(r.score >= 0 && r.score <= 100, `score de santé dans [0, 100] (obtenu ${r.score})`);
+const mEbitda = r.ratios.find(x => x.k === 'margeEbitda').vals[2024];
+near(mEbitda, 30 / 130 * 100, 0.01, 'ratio marge EBITDA 2024 (≈ 23,08 %)');
+
+console.log('== 4. Projections (bilan prévisionnel bouclé) ==');
+const hyp = M.hypothesesParDefaut(etats);
+const proj = M.projeter(etats, hyp, 5);
+ok(proj.annees.length === 5, `5 années projetées (obtenu ${proj.annees.length})`);
+proj.annees.forEach(a => {
+  const actif  = proj.bs.IMMO_NET[a] + proj.bs.BFR[a] + proj.bs.TRESO_NETTE[a];
+  const passif = proj.bs.CP[a] + proj.bs.PROVISIONS[a] + proj.bs.DETTES_FIN[a];
+  near(actif, passif, 0.001, `Bilan prévisionnel bouclé ${a} (actif = passif)`);
+});
+
+console.log('== 5. Valorisation ==');
+const valo = M.valoriser(proj, hyp, etats);
+ok(isFinite(valo.ev), `valeur d'entreprise (EV) finie (obtenu ${Math.round(valo.ev)} K)`);
+near(valo.equityDcf, valo.ev - valo.detteNette, 0.001, 'Equity DCF = EV − dette nette');
+ok(valo.eqMin <= valo.equityDcf + 1e-6 && valo.equityDcf <= valo.eqMax + 1e-6,
+   `valeur centrale dans la fourchette [${Math.round(valo.eqMin)}, ${Math.round(valo.eqMax)}]`);
+
+console.log(`\n${fail ? '❌ ÉCHEC' : '✅ SUCCÈS'} — ${pass} assertions passées, ${fail} échec(s).`);
+process.exit(fail ? 1 : 0);

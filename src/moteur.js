@@ -1,3 +1,4 @@
+// @ts-check
 /* =========================================================================
    Findalyx Advisory — moteur d'analyse (portage JavaScript du moteur Python)
    Ingestion de balances -> TBAGR -> mapping -> états (P&L, Bilan, TFT)
@@ -5,7 +6,98 @@
    P&L : produits +, charges - ; Bilan : signes naturels, CP affichés + .
    ========================================================================= */
 
+/* ---------- Types du domaine (JSDoc — pour l'éditeur et le vérificateur) --- */
+/**
+ * @typedef {Object} CompteBalance  Un compte lu dans une balance.
+ * @property {string} compte   Numéro de compte (2 à 10 chiffres).
+ * @property {string} libelle  Intitulé.
+ * @property {number} si_d     Solde initial débit.
+ * @property {number} si_c     Solde initial crédit.
+ * @property {number} mvt_d    Mouvements débit.
+ * @property {number} mvt_c    Mouvements crédit.
+ * @property {number} sf_d     Solde final débit.
+ * @property {number} sf_c     Solde final crédit.
+ * @property {number} [net]    Solde net = sf_d - sf_c (débit +, crédit -).
+ */
+/**
+ * @typedef {Object} Balance  Une balance annuelle.
+ * @property {number} annee
+ * @property {CompteBalance[]} comptes
+ */
+/**
+ * @typedef {Object} LigneTbagr  Une ligne de la balance agrégée (TBAGR).
+ * @property {string} compte
+ * @property {string} libelle
+ * @property {Object<number,number>} vals  Solde par exercice (en K, crédits -).
+ * @property {string} [mapping]  Code de la ligne de restitution rattachée.
+ * @property {("BS"|"PL")} [bsPl]
+ * @property {boolean} [corrige]  true si le mapping provient d'un override manuel.
+ */
+/**
+ * @typedef {Object} Tbagr
+ * @property {number[]} annees
+ * @property {LigneTbagr[]} lignes
+ */
+/**
+ * @typedef {Object} Etats  États financiers calculés.
+ * @property {number[]} annees
+ * @property {Object<string, Object<number,number>>} v    Agrégats : v[CODE][annee].
+ * @property {Object<number, Object<string,number>>} tft  TFT officiel par exercice.
+ */
+/**
+ * @typedef {Object} LigneDef  Définition d'une ligne de restitution.
+ * @property {string} code
+ * @property {string} lib
+ * @property {string[]} pref  Préfixes de comptes rattachés.
+ * @property {string} [siCrediteur]  Ligne alternative si le solde est créditeur.
+ * @property {string} [siDebiteur]   Ligne alternative si le solde est débiteur.
+ */
+/**
+ * @typedef {Object} LignePerso  Ligne personnalisée d'un dossier.
+ * @property {string} code
+ * @property {string} agregat  Agrégat de rattachement (ex. "OPEX", "CA", "CAPITAUX_PROPRES").
+ * @property {("PL"|"BS")} [etat]
+ */
+/**
+ * @typedef {Object} RatioDef  Définition d'un ratio.
+ * @property {string} k
+ * @property {string} lab
+ * @property {string} unit
+ * @property {string} cat
+ * @property {(x:any)=>(number|null)} calc
+ * @property {number[]} seuils
+ * @property {boolean} [inverse]
+ */
+/**
+ * @typedef {Object} Hypotheses  Hypothèses du business plan et de la valorisation.
+ * @property {number} croissance_ca
+ * @property {number} tx_achats
+ * @property {number} tx_personnel
+ * @property {number} tx_autres_opex
+ * @property {number} tx_autres_produits
+ * @property {number} tx_amort
+ * @property {number} tx_capex
+ * @property {number} dso
+ * @property {number} dio
+ * @property {number} dpo
+ * @property {number} tx_interet
+ * @property {number} tx_remb_dette
+ * @property {number} tx_is
+ * @property {number} tx_distribution
+ * @property {number} wacc
+ * @property {number} g
+ * @property {number} multiple_ebitda
+ */
+/**
+ * @typedef {Object} Projection  Projections du business plan (5 ans par défaut).
+ * @property {number[]} annees
+ * @property {Object<string,Object<number,number>>} pl
+ * @property {Object<string,Object<number,number>>} bs
+ * @property {Object<number,Object<string,number>>} tft
+ */
+
 /* ---------- Référentiel des lignes de restitution (nomenclature databook) -- */
+/** @type {LigneDef[]} */
 const LIGNES_PL = [
   {code:"CA_MARCHANDISES", lib:"Ventes de marchandises", pref:["701"]},
   {code:"CA_PRODUITS", lib:"Production vendue (biens et travaux)", pref:["702","703","705"]},
@@ -41,6 +133,7 @@ const LIGNES_PL = [
   {code:"PARTICIPATION", lib:"Participation des travailleurs", pref:["87"]},
   {code:"IS", lib:"Impôt sur le résultat", pref:["89"]},
 ];
+/** @type {LigneDef[]} */
 const LIGNES_BS = [
   {code:"IMMO_INCORP", lib:"Immobilisations incorporelles", pref:["20","21"]},
   {code:"IMMO_CORP", lib:"Immobilisations corporelles", pref:["22","23","24"]},
@@ -82,8 +175,13 @@ function estCompte(v){const s=nettoyer(v).replace(/\.0$/,"");return /^\d{2,10}$/
 function estNombre(v){
   if(typeof v==="number") return isFinite(v);
   const s=nettoyer(v).replace(/[   ]/g,"").replace(",",".").replace(/^\((.*)\)$/,"$1");
-  return s!=="" && !isNaN(parseFloat(s)) && isFinite(s);
+  return s!=="" && !isNaN(parseFloat(s)) && isFinite(+s);
 }
+/**
+ * Convertit une cellule en nombre : gère espaces, séparateur virgule, parenthèses = négatif.
+ * @param {*} v
+ * @returns {number}
+ */
 function toNum(v){
   if(v===null||v===undefined||v==="") return 0;
   if(typeof v==="number") return isFinite(v)?v:0;
@@ -101,6 +199,12 @@ const MOTS_ENTETE=["compte","libelle","intitule","debit","credit","solde","mouve
 const KW_SI=["n-1","initial","debut","ouverture","anterieur","report"];
 const KW_MVT=["mouv","mvt","periode","exercice","cumul"];
 
+/**
+ * Lit une balance : détecte les colonnes par leur contenu, exclut les sous-totaux
+ * hiérarchiques, et renvoie les comptes + un contrôle d'équilibre.
+ * @param {any[][]} matrice  Lignes × colonnes (cellules brutes du tableur).
+ * @returns {{comptes: CompteBalance[], controle: {nb:number, sfDebit:number, sfCredit:number, ecart:number, sousTotauxExclus:number}}}
+ */
 function lireBalance(matrice){
   const nl=matrice.length;
   const nc=Math.max(...matrice.map(r=>r.length),0);
@@ -181,6 +285,7 @@ function lireBalance(matrice){
   let comptes=[];
   for(let i=premLigne;i<nl;i++){
     if(!estCompte(cell(i,colCompte))) continue;
+    /** @type {CompteBalance} */
     const e={compte:nettoyer(cell(i,colCompte)).replace(/\.0$/,""),
              libelle:nettoyer(cell(i,colLib)),
              si_d:0,si_c:0,mvt_d:0,mvt_c:0,sf_d:0,sf_c:0};
@@ -235,7 +340,12 @@ function lireBalance(matrice){
 }
 
 /* ---------- 2. TBAGR (agrégation multi-exercices, en K) ---------- */
-function construireTbagr(balances){ /* balances: [{annee, comptes:[...]}] */
+/**
+ * Agrège plusieurs balances annuelles en une TBAGR (une ligne par compte, en K, crédits -).
+ * @param {Balance[]} balances
+ * @returns {Tbagr}
+ */
+function construireTbagr(balances){
   const annees=balances.map(b=>b.annee).sort((a,b)=>a-b);
   const map={};
   for(const b of balances){
@@ -247,13 +357,19 @@ function construireTbagr(balances){ /* balances: [{annee, comptes:[...]}] */
   }
   const lignes=Object.values(map).sort((a,b)=>a.compte.localeCompare(b.compte));
   lignes.forEach(l=>{annees.forEach(a=>{if(!(a in l.vals)) l.vals[a]=0;});});
-  return {annees, lignes};
+  return /** @type {Tbagr} */ ({annees, lignes});
 }
 
 /* ---------- 3. Mapping automatique + overrides ---------- */
 function indexPrefixes(defs){const ix={};defs.forEach(d=>d.pref.forEach(p=>{if(!(p in ix)||p.length>=p.length) ix[p]=d;}));return ix;}
 const IX_PL=indexPrefixes(LIGNES_PL), IX_BS=indexPrefixes(LIGNES_BS);
 
+/**
+ * Mapping automatique d'un compte vers une ligne de restitution (par préfixe SYSCOHADA).
+ * @param {string} compte
+ * @param {number} soldeMoyen  Signe → ligne débitrice/créditrice alternative.
+ * @returns {string}  Code de ligne, ou "NON_MAPPE".
+ */
 function mapperCompte(compte, soldeMoyen){
   const classe=compte[0];
   const ix=("678".includes(classe))?IX_PL:IX_BS;
@@ -266,6 +382,12 @@ function mapperCompte(compte, soldeMoyen){
   }
   return "NON_MAPPE";
 }
+/**
+ * Applique le mapping (auto + overrides manuels) à chaque ligne de la TBAGR (mutation).
+ * @param {Tbagr} tbagr
+ * @param {Object<string,string>} [overrides]  compte -> code de ligne forcé.
+ * @returns {Tbagr}
+ */
 function appliquerMapping(tbagr, overrides){
   overrides=overrides||{};
   tbagr.lignes.forEach(l=>{
@@ -283,6 +405,12 @@ function sommeLigne(tbagr,code,annee){
   for(const l of tbagr.lignes) if(l.mapping===code) t+=l.vals[annee]||0;
   return t;
 }
+/**
+ * Calcule les états financiers : P&L analytique, bilan actif net, TFT officiel SYSCOHADA.
+ * @param {Tbagr} tbagr  TBAGR mappée.
+ * @param {LignePerso[]} [lignesPerso]  Lignes personnalisées du dossier.
+ * @returns {Etats}
+ */
 function calculerEtats(tbagr,lignesPerso){
   const A=tbagr.annees, v={};
   const S=(code,a)=>sommeLigne(tbagr,code,a);
@@ -369,11 +497,12 @@ function calculerEtats(tbagr,lignesPerso){
             OP:ZB,CAPEX:ZC,FIN:ZD+ZE,FCF:ZF,
             OUVERTURE:v.TRESORERIE_NETTE[p],CLOTURE:v.TRESORERIE_NETTE[a]};
   }
-  return {annees:A, v, tft};
+  return /** @type {Etats} */ (/** @type {any} */ ({annees:A, v, tft}));
 }
 
 
 /* ---------- 5. Ratios (16 ratios, 3 catégories — nomenclature Findalyx) ---------- */
+/** @type {RatioDef[]} */
 const RATIOS_META=[
  {k:"margeBrute",lab:"Marge brute",unit:"%",cat:"rentabilite",
   calc:(x)=>x.ca?x.mb/x.ca*100:null, seuils:[20,10]},
@@ -414,6 +543,11 @@ function statutRatio(m,val){
   if(m.inverse) return val<=bon?"good":(val<=moyen?"warn":"bad");
   return val>=bon?"good":(val>=moyen?"warn":"bad");
 }
+/**
+ * Calcule les 16 ratios, leur statut (good/warn/bad) et un score de santé sur 100.
+ * @param {Etats} etats
+ * @returns {{ratios:any[], score:number, synthese:string, nbGood:number, nbWarn:number, nbBad:number}}
+ */
 function calculerRatios(etats){
   const A=etats.annees, v=etats.v;
   const base=(a)=>({
@@ -452,6 +586,11 @@ function calculerRatios(etats){
 
 
 /* ---------- 6. Projections (business plan 5 ans) et valorisation ---------- */
+/**
+ * Reformate les états en agrégats P&L/BS par exercice, base des projections.
+ * @param {Etats} etats
+ * @returns {*}
+ */
 function agregatsHistoriques(etats){
   const A=etats.annees,v=etats.v,h={};
   for(const a of A){
@@ -476,6 +615,11 @@ function agregatsHistoriques(etats){
   return h;
 }
 function borne(v,lo,hi){return Math.max(lo,Math.min(hi,v));}
+/**
+ * Dérive des hypothèses par défaut à partir de l'historique (croissance, marges, BFR, WACC…).
+ * @param {Etats} etats
+ * @returns {Hypotheses}
+ */
 function hypothesesParDefaut(etats){
   const A=etats.annees,h=agregatsHistoriques(etats);
   const a0=A[0],a1=A[A.length-1],n=Math.max(1,A.length-1);
@@ -498,6 +642,13 @@ function hypothesesParDefaut(etats){
     wacc:0.15, g:0.03, multiple_ebitda:5.0,
   };
 }
+/**
+ * Projette P&L, bilan et TFT sur `nb` années (bilan bouclé par la trésorerie).
+ * @param {Etats} etats
+ * @param {Hypotheses} hyp
+ * @param {number} [nb]  Durée en années (5 par défaut).
+ * @returns {Projection}
+ */
 function projeter(etats,hyp,nb){
   nb=nb||5;
   const A=etats.annees,h=agregatsHistoriques(etats);
@@ -561,8 +712,15 @@ function projeter(etats,hyp,nb){
       RESERVES_RAN:reserves,RN:rn,SUBV_PROV_REGL:prec.SUBV_PROV_REGL,PROVISIONS:prec.PROVISIONS,
       DETTES_FIN:dettes,TRESO_NETTE:treso,BFR:bfr,IMMO_NET:immoNet};
   }
-  return {annees,pl,bs,tft};
+  return /** @type {Projection} */ ({annees,pl,bs,tft});
 }
+/**
+ * Valorisation : FCFF, DCF (valeur terminale de Gordon), multiples EV/EBITDA, sensibilité WACC×g.
+ * @param {Projection} proj
+ * @param {Hypotheses} hyp
+ * @param {Etats} etats
+ * @returns {Object}  ev, detteNette, equityDcf, evMult, equityMult, fourchette eqMin/eqMax, etc.
+ */
 function valoriser(proj,hyp,etats){
   const A=etats.annees,h=agregatsHistoriques(etats);
   const bsH=h[A[A.length-1]].bs;
@@ -603,6 +761,11 @@ function valoriser(proj,hyp,etats){
 
 
 /* ---------- 7. Commentaires automatiques (projets de rédaction) ---------- */
+/**
+ * Génère des projets de commentaires (P&L, bilan, TFT) — chiffrés, à enrichir par l'analyste.
+ * @param {Etats} etats
+ * @returns {{pl:Array<{t:string,x:string}>, bs:Array<{t:string,x:string}>, tft:Array<{t:string,x:string}>}}
+ */
 function genererCommentaires(etats){
   const A=etats.annees, v=etats.v, n=A.length;
   const a1=A[n-1], a0=n>1?A[n-2]:null, aD=A[0];

@@ -1,0 +1,14 @@
+{
+  "//": "Outillage pour l'editeur (VS Code) et la verification de types en ligne de commande. N'affecte PAS le build (assembler.sh) ni l'app livree.",
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": false,
+    "noEmit": true,
+    "target": "ES2017",
+    "lib": ["ES2017", "DOM"],
+    "strict": false,
+    "skipLibCheck": true
+  },
+  "include": ["src/**/*.js", "src/**/*.d.ts"],
+  "exclude": ["src/libs.js", "node_modules"]
+}

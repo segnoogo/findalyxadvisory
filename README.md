@@ -62,6 +62,18 @@ Le dépôt est servi par **GitHub Pages** depuis la racine → `advisory.findaly
 `CNAME`). Après un `git push`, forcer le rechargement (Ctrl+F5) pour contourner le cache du
 service worker.
 
+## Développement
+
+- **Architecture & conventions** : voir [`ARCHITECTURE.md`](ARCHITECTURE.md) — flux de
+  données, contrat de scope global (les modules partagent une seule portée), carte des
+  modules, glossaire.
+- **Tests** : `npm test` (ou `node tests/run.js`) — golden-master sur **données
+  synthétiques**, aucune dépendance. À relancer après toute modification du moteur.
+- **Vérification de types** : `npm run typecheck`. `src/moteur.js` est typé en JSDoc +
+  `// @ts-check` (0 erreur attendue) ; VS Code vérifie en direct sans rien installer.
+- **Bibliothèques tierces** : embarquées dans `src/libs.js` — inventaire et procédure de
+  mise à jour dans [`src/libs.manifest.md`](src/libs.manifest.md).
+
 ## Notes importantes
 
 - **Aucune donnée client** dans ce dépôt (cf. `.gitignore`) : balances et livrables réels
