@@ -75,6 +75,13 @@ letter-spacing:.3px;padding:6px 10px;border-top:2px solid #c9d6ea}
 box-shadow:0 1px 3px rgba(16,24,40,.04),0 8px 22px rgba(20,32,64,.07);
 transition:transform .16s ease,box-shadow .16s ease}
 .ratio:hover{transform:translateY(-3px);box-shadow:0 10px 26px rgba(20,42,90,.14)}
+.rbar{margin-top:11px}
+.rbar-track{position:relative;height:7px;border-radius:5px}
+.rbar-cur{position:absolute;top:50%;width:12px;height:12px;border-radius:50%;background:var(--navy);
+border:2px solid #fff;box-shadow:0 1px 3px rgba(10,20,60,.35);transform:translate(-50%,-50%)}
+.rbar-ticks{position:relative;height:13px;margin-top:6px;font-size:9px;color:var(--muted);font-variant-numeric:tabular-nums}
+.rbar-ticks span{position:absolute;transform:translateX(-50%);white-space:nowrap}
+.rbar-ticks .moy{font-weight:700;color:var(--navy)}
 .ratio .r-haut{display:flex;justify-content:space-between;align-items:start;gap:6px;min-height:30px}
 .ratio .r-lab{font-size:10.2px;color:var(--muted);line-height:1.25}
 .ratio .r-val{font-size:21.2px;font-weight:700;color:var(--navy);margin:4px 0 2px}

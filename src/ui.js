@@ -772,6 +772,30 @@ function vueRatios(){
     if(x===null||x===undefined) return "-";
     return (r.unit==="x"?x.toFixed(2):Math.round(x))+(r.unit==="%"?"%":r.unit==="j"?" j":"x");
   };
+  // Bornes de benchmark sectoriel par défaut (reprises de la plateforme Findalyx —
+  // DEFAULT_BENCHMARK : min = P25, max = P75 ; la moyenne affichée = milieu de plage).
+  const BENCH={
+    roe:{min:12,max:20}, roa:{min:5,max:10}, roce:{min:10,max:18},
+    margeBrute:{min:35,max:50}, margeEbitda:{min:15,max:30}, margeNette:{min:5,max:12},
+    liquiditeGenerale:{min:1.2,max:2.0}, liquiditeReduite:{min:0.8,max:1.5}, liquiditeImmediate:{min:0.2,max:0.5},
+    bfrJours:{min:30,max:60}, delaiClients:{min:30,max:90}, delaiFournisseurs:{min:45,max:90},
+    gearing:{min:0,max:1.0}, leverage:{min:0,max:3.0}, couvertureInterets:{min:3.0,max:8.0}, autonomieFinanciere:{min:30,max:60},
+  };
+  const barreRatio=(r,a)=>{
+    const v=r.vals[a], b=BENCH[r.k];
+    if(v===null||v===undefined||!isFinite(v)||!b) return "";
+    const min=b.min, max=b.max, moy=(min+max)/2, w=(max-min)||1;
+    const lo=min-w*0.75, hi=max+w*0.75;              /* min à 30%, moy à 50%, max à 70% */
+    const p=Math.max(0,Math.min(100,(v-lo)/(hi-lo)*100));
+    const R="#f6ccc7",Y="#fbe4c8",G="#c9e9d5";
+    const grad=r.inverse                              /* plus bas = mieux -> vert à gauche */
+      ?`linear-gradient(90deg,${G} 0 30%,${Y} 30% 70%,${R} 70% 100%)`
+      :`linear-gradient(90deg,${R} 0 30%,${Y} 30% 70%,${G} 70% 100%)`;
+    const fs=(x)=>r.unit==="x"?x.toFixed(1)+"x":(r.unit==="j"?Math.round(x)+" j":(Math.round(x*10)/10)+"%");
+    return `<div class="rbar" title="Position vs benchmark sectoriel (min · moyenne · max)">`+
+      `<div class="rbar-track" style="background:${grad}"><span class="rbar-cur" style="left:${p.toFixed(1)}%"></span></div>`+
+      `<div class="rbar-ticks"><span style="left:30%">${fs(min)}</span><span class="moy" style="left:50%">${fs(moy)}</span><span style="left:70%">${fs(max)}</span></div></div>`;
+  };
   const cats=[["rentabilite","Rentabilité"],["liquidite","Liquidité & BFR"],["endettement","Structure & endettement"]];
   const blocs=cats.map(([cat,titre])=>{
     const icCat={rentabilite:["chart","#224289"],liquidite:["wallet","#16904E"],endettement:["coins","#FA6706"]};
@@ -783,6 +807,7 @@ function vueRatios(){
         <div class="r-haut"><span class="r-lab">${r.lab}</span>${badge}</div>
         <div class="r-val">${fRatio(r,a1)}</div>
         <div class="r-hist">${hist||"&nbsp;"}</div>
+        ${barreRatio(r,a1)}
       </div>`;
     }).join("");
     return `<h2 class="h2">${titre}</h2><div class="ratios">${cartes}</div>`;
