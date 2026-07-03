@@ -1,0 +1,35 @@
+# ================= Findalyx Advisory =================
+
+# --- Donnees clients : NE JAMAIS versionner ---
+# (ce depot ne contient que du code ; les balances/livrables reels restent dehors)
+*.xlsx
+*.xls
+*.xlsm
+*.csv
+*.pptx
+*.pdf
+donnees/
+data/
+sorties/
+balances/
+
+# --- Docs internes / strategie commerciale : ne pas publier ---
+RESUME_PROJET_ADVISORY.md
+PROCESSUS-METIER.md
+docs-internes/
+
+# --- Systeme / editeurs ---
+.DS_Store
+Thumbs.db
+desktop.ini
+*~
+*.tmp
+*.log
+.vscode/
+.idea/
+
+# --- Node (au cas ou) ---
+node_modules/
+
+# Pour ajouter volontairement un fichier ignore (ex. un modele Excel d'exemple) :
+#   git add -f chemin/du/fichier

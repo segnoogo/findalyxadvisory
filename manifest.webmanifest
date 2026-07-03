@@ -1,0 +1,17 @@
+{
+  "name": "Findalyx Advisory — Due diligence, Business plan, Valorisation",
+  "short_name": "Findalyx Advisory",
+  "description": "Analyse financière OHADA : databook de due diligence, business plan et valorisation à partir des balances.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "landscape",
+  "background_color": "#172554",
+  "theme_color": "#172554",
+  "lang": "fr",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
