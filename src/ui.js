@@ -728,40 +728,76 @@ function fdelta(v0,v1){
 function vueAnalyse(){
   if(!ETATS) return '<div class="mut">Importez d\'abord des balances.</div>';
   const A=ETATS.annees,a1=A[A.length-1],a0=A.length>1?A[A.length-2]:null,v=ETATS.v;
-  const R=calculerRatios(ETATS);
-  const ca1=v.CA[a1];
-
-  /* bandeau santé */
-  const sante=`
-  <div class="card sante">
-    <div class="s-gauche">
-      <div class="s-score ${R.score>=70?"g":R.score>=45?"w":"b"}">${R.score}<span>/100</span></div>
-      <div>
-        <b>Score de santé financière</b>
-        <div class="s-bar"><div class="s-fill ${R.score>=70?"g":R.score>=45?"w":"b"}" style="width:${R.score}%"></div></div>
-        <div class="mut">${R.nbGood} ratio(s) au vert · ${R.nbWarn} à surveiller · ${R.nbBad} critique(s)</div>
-      </div>
-    </div>
-    <div class="s-synthese">${R.synthese}</div>
-  </div>`;
+  const R=calculerRatios(ETATS), Sc=calculerScores(ETATS);
+  const ca1=v.CA[a1],U=uni();
 
   /* KPI clés avec variation vs N-1 */
   const kpis=[
-    kpiCard("Chiffre d'affaires FY"+String(a1).slice(-2),fmt(ca1)+" "+uni().suf,"",a0?fdelta(v.CA[a0],v.CA[a1]):"","chart","#224289"),
-    kpiCard("EBITDA",fmt(v.EBITDA[a1])+" "+uni().suf,ca1?Math.round(v.EBITDA[a1]/ca1*100)+"% du CA":"",a0?fdelta(v.EBITDA[a0],v.EBITDA[a1]):"","coins","#FA6706"),
-    kpiCard("Résultat net",fmt(v.RESULTAT_NET[a1])+" "+uni().suf,ca1?Math.round(v.RESULTAT_NET[a1]/ca1*100)+"% du CA":"",a0?fdelta(v.RESULTAT_NET[a0],v.RESULTAT_NET[a1]):"","file","#172554"),
-    kpiCard("Trésorerie nette",fmt(v.TRESORERIE_NETTE[a1])+" "+uni().suf,v.TRESORERIE_NETTE[a1]<0?"négative":"",a0?fdelta(Math.abs(v.TRESORERIE_NETTE[a0])||1,v.TRESORERIE_NETTE[a1]):"","wallet","#16904E"),
+    kpiCard("Chiffre d'affaires FY"+String(a1).slice(-2),fmt(ca1)+" "+U.suf,"",a0?fdelta(v.CA[a0],v.CA[a1]):"","chart","#224289"),
+    kpiCard("EBITDA",fmt(v.EBITDA[a1])+" "+U.suf,ca1?Math.round(v.EBITDA[a1]/ca1*100)+"% du CA":"",a0?fdelta(v.EBITDA[a0],v.EBITDA[a1]):"","coins","#FA6706"),
+    kpiCard("Résultat net",fmt(v.RESULTAT_NET[a1])+" "+U.suf,ca1?Math.round(v.RESULTAT_NET[a1]/ca1*100)+"% du CA":"",a0?fdelta(v.RESULTAT_NET[a0],v.RESULTAT_NET[a1]):"","file","#172554"),
+    kpiCard("Trésorerie nette",fmt(v.TRESORERIE_NETTE[a1])+" "+U.suf,v.TRESORERIE_NETTE[a1]<0?"négative":"",a0?fdelta(Math.abs(v.TRESORERIE_NETTE[a0])||1,v.TRESORERIE_NETTE[a1]):"","wallet","#16904E"),
   ].join("");
 
+  /* Forces & points de vigilance (auto-détectés) */
+  const forces=[],vig=[];
+  const dCA=a0&&v.CA[a0]?v.CA[a1]/v.CA[a0]-1:null;
+  const mEb=ca1?v.EBITDA[a1]/ca1:null, mEb0=a0&&v.CA[a0]?v.EBITDA[a0]/v.CA[a0]:null;
+  const put=(c,arr,t)=>{if(c&&arr.length<5)arr.push(t);};
+  put(dCA!==null&&dCA>0.02,forces,`Croissance du CA de ${Math.round(dCA*100)}% sur un an`);
+  put(mEb!==null&&mEb>0.15,forces,`Marge EBITDA solide (${Math.round(mEb*100)}% du CA)`);
+  put(v.TRESORERIE_NETTE[a1]>0,forces,"Trésorerie nette positive");
+  put(v.CAPITAUX_PROPRES[a1]>0&&-v.DETTES_FINANCIERES[a1]/Math.max(1,v.CAPITAUX_PROPRES[a1])<0.5,forces,"Endettement financier maîtrisé");
+  R.ratios.filter(r=>r.statut==="good").forEach(r=>put(true,forces,`${r.lab} au vert`));
+  put(v.CAPITAUX_PROPRES[a1]<0,vig,"Capitaux propres négatifs — continuité d'exploitation à documenter");
+  put(v.TRESORERIE_NETTE[a1]<0,vig,"Trésorerie nette négative (concours bancaires courants)");
+  put(v.RESULTAT_NET[a1]<0,vig,"Résultat net déficitaire");
+  put(v.EBITDA[a1]<0,vig,"EBITDA négatif — rentabilité d'exploitation à redresser");
+  put(mEb!==null&&mEb0!==null&&mEb<mEb0-0.02,vig,`Érosion de la marge EBITDA (${Math.round(mEb0*100)}% → ${Math.round(mEb*100)}%)`);
+  put(dCA!==null&&dCA<-0.02,vig,`Recul du CA de ${Math.round(-dCA*100)}% sur un an`);
+  R.ratios.filter(r=>r.statut==="bad").forEach(r=>put(true,vig,`${r.lab} en zone critique`));
+  const liste=(arr,cls,vide)=>arr.length?`<ul class="diag ${cls}">${arr.map(t=>`<li>${t}</li>`).join("")}</ul>`:`<div class="mut" style="margin-top:8px">${vide}</div>`;
+  const diag=`<div class="deux">
+    <div class="card"><b>Forces</b>${liste(forces,"good","—")}</div>
+    <div class="card"><b>Points de vigilance</b>${liste(vig,"bad","Aucun point de vigilance majeur détecté.")}</div>
+  </div>`;
+
+  /* Commentaires automatiques */
+  const com=genererCommentaires(ETATS);
+  const blocCom=(t,arr)=>arr.length?`<div class="comm"><div class="comm-titre">${t}</div><ul class="comm-liste">${arr.map(c=>`<li><b>${c.t}.</b> ${c.x}</li>`).join("")}</ul></div>`:"";
+  const commentaires=`<div class="card"><b>Lecture de l'analyste — projets de commentaires</b>
+    ${blocCom("Compte de résultat",com.pl)}${blocCom("Bilan",com.bs)}${blocCom("Flux de trésorerie",com.tft)}</div>`;
+
+  /* 3 modèles de score (à la fin — support, pas cœur de l'analyse) */
+  const bar=(lab,val)=>`<div class="sc-dim"><span>${lab}</span><div class="sc-dbar"><span style="width:${Math.max(0,Math.min(100,val))}%"></span></div><b>${val}</b></div>`;
+  const N=Sc.notation, Z=Sc.altman, B=Sc.bceao;
+  const carteScore=`<div class="scores3">
+    <div class="card sc"><div class="sc-haut"><div><div class="sc-lab">Notation financière</div><div class="sc-sub">Profitabilité · Liquidité · Solvabilité</div></div>
+      <div class="sc-grade ${N.ton}">${N.grade}<span>${N.global}/100</span></div></div>
+      <div class="sc-mention ${N.ton}">${N.mention}</div>
+      ${bar("Profitabilité",N.prof)}${bar("Liquidité",N.liq)}${bar("Solvabilité",N.solv)}</div>
+    <div class="card sc"><div class="sc-haut"><div><div class="sc-lab">Altman Z-Score</div><div class="sc-sub">Risque de défaillance (EMS 1995)</div></div>
+      <div class="sc-grade ${Z.ton}">${Z.grade}<span>Z = ${Z.z}</span></div></div>
+      <div class="sc-mention ${Z.ton}">Zone ${Z.zone}</div>
+      ${Z.comp.map(c=>`<div class="sc-dim"><span>${c.k}</span><b>${(Math.round(c.v*100)/100).toFixed(2)}</b></div>`).join("")}</div>
+    <div class="card sc"><div class="sc-haut"><div><div class="sc-lab">Cotation BCEAO</div><div class="sc-sub">Bankabilité — normes UEMOA</div></div>
+      <div class="sc-grade ${B.ton}">${B.cote}<span>${B.nOk}/4</span></div></div>
+      <div class="sc-mention ${B.ton}">${B.mention}</div>
+      ${B.crit.map(c=>`<div class="sc-crit"><span>${c.ok?"✓":"✕"} ${c.lib}</span><em>${c.seuil}</em></div>`).join("")}</div>
+  </div>`;
+
   return `<h1>Analyse</h1>
-  ${sante}
   <div class="kpis k4">${kpis}</div>
+  ${diag}
   <div class="deux">
     <div class="card"><b>Soldes de gestion</b><canvas id="g1" height="230"></canvas></div>
     <div class="card"><b>Marges en % du CA</b><canvas id="g3" height="230"></canvas></div>
     <div class="card"><b>Structure des charges</b><canvas id="g4" height="230"></canvas></div>
     <div class="card"><b>BFR et trésorerie nette</b><canvas id="g2" height="230"></canvas></div>
-  </div>`;
+  </div>
+  <h2 class="h2">Scores &amp; notation</h2>
+  ${carteScore}
+  ${commentaires}`;
 }
 function vueRatios(){
   if(!ETATS) return '<div class="mut">Importez d\'abord des balances.</div>';
@@ -772,15 +808,7 @@ function vueRatios(){
     if(x===null||x===undefined) return "-";
     return (r.unit==="x"?x.toFixed(2):Math.round(x))+(r.unit==="%"?"%":r.unit==="j"?" j":"x");
   };
-  // Bornes de benchmark sectoriel par défaut (reprises de la plateforme Findalyx —
-  // DEFAULT_BENCHMARK : min = P25, max = P75 ; la moyenne affichée = milieu de plage).
-  const BENCH={
-    roe:{min:12,max:20}, roa:{min:5,max:10}, roce:{min:10,max:18},
-    margeBrute:{min:35,max:50}, margeEbitda:{min:15,max:30}, margeNette:{min:5,max:12},
-    liquiditeGenerale:{min:1.2,max:2.0}, liquiditeReduite:{min:0.8,max:1.5}, liquiditeImmediate:{min:0.2,max:0.5},
-    bfrJours:{min:30,max:60}, delaiClients:{min:30,max:90}, delaiFournisseurs:{min:45,max:90},
-    gearing:{min:0,max:1.0}, leverage:{min:0,max:3.0}, couvertureInterets:{min:3.0,max:8.0}, autonomieFinanciere:{min:30,max:60},
-  };
+  /* BENCH est défini dans moteur.js (global, partagé avec les 3 scores) */
   const barreRatio=(r,a)=>{
     const v=r.vals[a], b=BENCH[r.k];
     if(v===null||v===undefined||!isFinite(v)||!b) return "";

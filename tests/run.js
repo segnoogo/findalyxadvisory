@@ -70,5 +70,13 @@ near(valo.equityDcf, valo.ev - valo.detteNette, 0.001, 'Equity DCF = EV − dett
 ok(valo.eqMin <= valo.equityDcf + 1e-6 && valo.equityDcf <= valo.eqMax + 1e-6,
    `valeur centrale dans la fourchette [${Math.round(valo.eqMin)}, ${Math.round(valo.eqMax)}]`);
 
+console.log('== 6. Scores (3 modèles) ==');
+const sc = M.calculerScores(etats);
+ok(sc.notation.global >= 0 && sc.notation.global <= 100, `Notation dans [0,100] (obtenu ${sc.notation.global})`);
+ok(['A','B','C','D','E'].includes(sc.notation.grade), `Notation : grade A-E valide (${sc.notation.grade})`);
+ok(isFinite(sc.altman.z), `Altman : Z fini (${sc.altman.z})`);
+ok(['AAA','AA','A','BBB','BB','B','CCC','D'].includes(sc.altman.grade), `Altman : grade AAA-D valide (${sc.altman.grade})`);
+ok(['A','B','C','D','E'].includes(sc.bceao.cote) && sc.bceao.nOk >= 0 && sc.bceao.nOk <= 4, `BCEAO : cote A-E et nOk 0-4 (${sc.bceao.cote}, ${sc.bceao.nOk}/4)`);
+
 console.log(`\n${fail ? '❌ ÉCHEC' : '✅ SUCCÈS'} — ${pass} assertions passées, ${fail} échec(s).`);
 process.exit(fail ? 1 : 0);

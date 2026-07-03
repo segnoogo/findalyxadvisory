@@ -585,6 +585,85 @@ function calculerRatios(etats){
 }
 
 
+/* ---------- 5b. Scores (3 modèles : Notation, Altman Z, Cotation BCEAO) ---------- */
+/** Bornes de benchmark sectoriel par défaut (min = P25, max = P75). @type {Object<string,{min:number,max:number}>} */
+const BENCH={
+  roe:{min:12,max:20}, roa:{min:5,max:10}, roce:{min:10,max:18},
+  margeBrute:{min:35,max:50}, margeEbitda:{min:15,max:30}, margeNette:{min:5,max:12},
+  liquiditeGenerale:{min:1.2,max:2.0}, liquiditeReduite:{min:0.8,max:1.5}, liquiditeImmediate:{min:0.2,max:0.5},
+  bfrJours:{min:30,max:60}, delaiClients:{min:30,max:90}, delaiFournisseurs:{min:45,max:90},
+  gearing:{min:0,max:1.0}, leverage:{min:0,max:3.0}, couvertureInterets:{min:3.0,max:8.0}, autonomieFinanciere:{min:30,max:60},
+};
+/** Normalise une valeur de ratio en score 0-100 par rapport au benchmark [min,max]. */
+function scoreRatio(val, bench, higherBetter){
+  if(val===null||val===undefined||!isFinite(val)||!bench) return null;
+  const lo=bench.min, hi=bench.max;
+  if(higherBetter){
+    if(val>=hi) return 100;
+    if(val>=lo) return 60+(val-lo)/((hi-lo)||1)*40;
+    if(lo<=0) return 30;
+    const floor=lo*0.5;
+    if(val<=floor) return 0;
+    return (val-floor)/((lo-floor)||1)*60;
+  }
+  if(val<=lo) return 100;
+  if(val<=hi) return 60+(hi-val)/((hi-lo)||1)*40;
+  const ceil=hi*1.5;
+  if(val>=ceil) return 0;
+  return Math.max(0,60*(1-(val-hi)/((ceil-hi)||1)));
+}
+/**
+ * Calcule les 3 modèles de score sur le dernier exercice.
+ * @param {Etats} etats
+ * @returns {*}  { notation, altman, bceao }
+ */
+function calculerScores(etats){
+  const A=etats.annees, a=A[A.length-1], v=etats.v;
+  const g=(c)=>v[c]?(v[c][a]||0):0;
+  const ac=g("STOCKS")+g("CLIENTS")+g("AUTRES_CREANCES")+g("AVANCES_FRS")+g("HAO_ACTIF")+g("TRESO_ACTIF");
+  const pc=-(g("FOURNISSEURS")+g("CLIENTS_AVANCES")+g("DETTES_SOCIALES")+g("DETTES_FISCALES")+g("AUTRES_DETTES")+g("HAO_PASSIF")+g("TRESO_PASSIF"));
+  const ta=g("ACTIFS_IMMOBILISES")+ac;
+  const cp=g("CAPITAUX_PROPRES"), ebit=g("EBIT"), rn=g("RESULTAT_NET"), ca=g("CA");
+  const totalDettes=ta-cp;
+
+  /* Modèle 1 — Notation (Profitabilité 30% · Liquidité 30% · Solvabilité 40%) */
+  const rr=calculerRatios(etats).ratios;
+  const dim={rentabilite:[],liquidite:[],endettement:[]};
+  rr.forEach(r=>{const s=scoreRatio(r.vals[a],BENCH[r.k],!r.inverse); if(s!==null) dim[r.cat].push(s);});
+  const moy=(arr)=>arr.length?arr.reduce((x,y)=>x+y,0)/arr.length:0;
+  const sProf=moy(dim.rentabilite), sLiq=moy(dim.liquidite), sSolv=moy(dim.endettement);
+  const global=Math.round(sProf*0.30+sLiq*0.30+sSolv*0.40);
+  const gr=global>=80?["A","Excellent","g"]:global>=70?["B","Bon","g"]:global>=60?["C","Moyen","w"]:global>=50?["D","Faible","w"]:["E","Critique","b"];
+  const notation={global,prof:Math.round(sProf),liq:Math.round(sLiq),solv:Math.round(sSolv),grade:gr[0],mention:gr[1],ton:gr[2]};
+
+  /* Modèle 2 — Altman Z-Score (Emerging Markets, Z'' 1995) */
+  const raN=g("RAN_RESULTATS_ANT"), fr=ac-pc;
+  const X1=ta?fr/ta:0, X2=ta?raN/ta:0, X3=ta?ebit/ta:0, X4=totalDettes?cp/totalDettes:0;
+  const Z=3.25+6.56*X1+3.26*X2+6.72*X3+1.05*X4;
+  const zn=Z>2.6?["Sûre","g"]:Z>=1.1?["Grise","w"]:["Détresse","b"];
+  const zGrade=Z>5.85?"AAA":Z>4.5?"AA":Z>3.75?"A":Z>2.6?"BBB":Z>1.75?"BB":Z>1.1?"B":Z>0?"CCC":"D";
+  const altman={z:Math.round(Z*100)/100,zone:zn[0],ton:zn[1],grade:zGrade,
+    comp:[{k:"X1 · FR / Actif",v:X1,c:6.56},{k:"X2 · Report à nouveau / Actif",v:X2,c:3.26},
+          {k:"X3 · EBIT / Actif",v:X3,c:6.72},{k:"X4 · Capitaux propres / Dettes",v:X4,c:1.05}]};
+
+  /* Modèle 3 — Cotation BCEAO (UEMOA) */
+  const liqGen=pc?ac/pc:0, caf=rn-g("DA"), detteFin=-g("DETTES_FINANCIERES");
+  const capRemb=caf>0?detteFin/caf:999, margeN=ca?rn/ca*100:0, auto=ta?cp/ta*100:0;
+  const crit=[
+    {lib:"Liquidité générale",val:liqGen,unite:"x",seuil:"≥ 1,00",ok:liqGen>=1},
+    {lib:"Capacité de remboursement (dette / CAF)",val:capRemb,unite:"x",seuil:"≤ 4,00",ok:caf>0&&capRemb<=4},
+    {lib:"Marge nette",val:margeN,unite:"%",seuil:"> 0 %",ok:margeN>0},
+    {lib:"Autonomie financière",val:auto,unite:"%",seuil:"≥ 20 %",ok:auto>=20},
+  ];
+  const nOk=crit.filter(c=>c.ok).length;
+  const cote=["E","D","C","B","A"][nOk];
+  const cLib={A:"Signature de haute qualité",B:"Bonne signature",C:"Signature moyenne",D:"Signature faible",E:"Signature à risque"}[cote];
+  const cTon={A:"g",B:"g",C:"w",D:"w",E:"b"}[cote];
+  const bceao={cote,mention:cLib,ton:cTon,nOk,crit};
+
+  return {notation,altman,bceao};
+}
+
 /* ---------- 6. Projections (business plan 5 ans) et valorisation ---------- */
 /**
  * Reformate les états en agrégats P&L/BS par exercice, base des projections.
@@ -854,4 +933,4 @@ function genererCommentaires(etats){
 
 /* export Node pour les tests */
 if(typeof module!=="undefined") module.exports={lireBalance,construireTbagr,appliquerMapping,
-  calculerEtats,calculerRatios,RATIOS_META,LIGNES_PL,LIGNES_BS,mapperCompte,hypothesesParDefaut,projeter,valoriser,genererCommentaires};
+  calculerEtats,calculerRatios,calculerScores,scoreRatio,BENCH,RATIOS_META,LIGNES_PL,LIGNES_BS,mapperCompte,hypothesesParDefaut,projeter,valoriser,genererCommentaires};
