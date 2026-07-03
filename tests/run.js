@@ -78,5 +78,11 @@ ok(isFinite(sc.altman.z), `Altman : Z fini (${sc.altman.z})`);
 ok(['AAA','AA','A','BBB','BB','B','CCC','D'].includes(sc.altman.grade), `Altman : grade AAA-D valide (${sc.altman.grade})`);
 ok(['A','B','C','D','E'].includes(sc.bceao.cote) && sc.bceao.nOk >= 0 && sc.bceao.nOk <= 4, `BCEAO : cote A-E et nOk 0-4 (${sc.bceao.cote}, ${sc.bceao.nOk}/4)`);
 
+console.log('== 7. Agrégats benchmark (contribution anonymisée) ==');
+const agb = M.agregatsBenchmark(etats);
+ok(Object.keys(agb).length === 16, `16 champs d'agrégats (obtenu ${Object.keys(agb).length})`);
+near(agb.ca, v.CA[etats.annees[etats.annees.length - 1]], 0.001, 'agrégat ca = CA de l\'état');
+ok(agb.dettes_financieres >= 0 && agb.dettes_fournisseurs >= 0, 'dettes exprimées en magnitude positive');
+
 console.log(`\n${fail ? '❌ ÉCHEC' : '✅ SUCCÈS'} — ${pass} assertions passées, ${fail} échec(s).`);
 process.exit(fail ? 1 : 0);

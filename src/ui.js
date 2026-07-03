@@ -798,7 +798,7 @@ function vueAnalyse(){
     <div class="card"><b>BFR et trésorerie nette</b><canvas id="g2" height="230"></canvas></div>
   </div>
   ${rappelSecteur()}
-  <h2 class="h2">Scores &amp; notation</h2>
+  <h2 class="h2" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap"><span>Scores &amp; notation</span><button class="btn sm" onclick="contribuerBenchmark()">Contribuer au benchmark (anonyme)</button></h2>
   ${carteScore}
   ${commentaires}`;
 }
@@ -807,6 +807,26 @@ function rappelSecteur(){
   const cur=(DOSSIER&&DOSSIER.secteur)||"Général";
   return `<div class="mut" style="margin-bottom:12px">Comparaison sectorielle : <b style="color:var(--navy)">${cur}</b> — modifiable dans <b>Paramètres</b>. <span style="font-size:11px">Bornes indicatives, à calibrer.</span></div>`;
 }
+function contribuerBenchmark(){
+  if(!ETATS||!DOSSIER)return;
+  const ag=agregatsBenchmark(ETATS), sect=DOSSIER.secteur||"Général", U=uni();
+  const champs=[["Chiffre d'affaires","ca"],["Marge brute","marge_brute"],["EBITDA","ebitda"],["EBIT","ebit"],
+    ["Résultat net","resultat_net"],["Total actif","total_actif"],["Capitaux propres","capitaux_propres"],
+    ["Dettes financières","dettes_financieres"],["Actif circulant","actif_circulant"],["Passif circulant","passif_circulant"],
+    ["Stocks","stocks"],["Créances clients","creances_clients"],["Dettes fournisseurs","dettes_fournisseurs"],
+    ["Trésorerie","tresorerie_actif"],["Charges d'intérêts","charges_interets"]];
+  const lignes=champs.map(([lab,k])=>`<div class="hyp-l"><span>${lab}</span><b>${fmt(ag[k])} ${U.suf}</b></div>`).join("");
+  document.getElementById("modal").innerHTML=`<div class="voile" onclick="fermerModal(event)"><div class="fenetre card">
+    <div class="f-titre">Contribuer au benchmark — secteur « ${esc(sect)} » · exercice ${ag.annee}</div>
+    <div class="mut" style="margin:8px 0 12px">Agrégats <b>anonymisés</b> (aucun nom, aucune ligne de compte) pour enrichir les bornes du secteur. Le nom « <b>${esc(DOSSIER.societe)}</b> » n'est <b>pas</b> transmis.</div>
+    <div style="max-height:44vh;overflow:auto">${lignes}</div>
+    <div class="row" style="margin-top:14px;justify-content:flex-end;gap:8px">
+      <button class="btn" onclick="fermerModal()">Annuler</button>
+      <button class="btn primary" onclick="envoyerContribution()">Envoyer</button>
+    </div>
+  </div></div>`;
+}
+function envoyerContribution(){fermerModal();toast("Service benchmark en ligne à activer (Edge Function — étape suivante).");}
 function vueRatios(){
   if(!ETATS) return '<div class="mut">Importez d\'abord des balances.</div>';
   const A=ETATS.annees,a1=A[A.length-1];

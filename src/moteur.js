@@ -684,6 +684,26 @@ function calculerScores(etats, secteur){
   return {notation,altman,bceao};
 }
 
+/**
+ * Extrait les agrégats du dernier exercice pour une contribution benchmark — ANONYMISÉ
+ * (agrégats seulement, aucune donnée nominative). En K. Mêmes champs que benchmark_companies.
+ * @param {Etats} etats
+ * @returns {*}
+ */
+function agregatsBenchmark(etats){
+  const A=etats.annees, a=A[A.length-1], v=etats.v;
+  const g=(c)=>v[c]?(v[c][a]||0):0;
+  const ac=g("STOCKS")+g("CLIENTS")+g("AUTRES_CREANCES")+g("AVANCES_FRS")+g("HAO_ACTIF")+g("TRESO_ACTIF");
+  const pc=-(g("FOURNISSEURS")+g("CLIENTS_AVANCES")+g("DETTES_SOCIALES")+g("DETTES_FISCALES")+g("AUTRES_DETTES")+g("HAO_PASSIF")+g("TRESO_PASSIF"));
+  return {
+    annee:a, ca:g("CA"), marge_brute:g("MARGE_BRUTE"), ebitda:g("EBITDA"), ebit:g("EBIT"),
+    resultat_net:g("RESULTAT_NET"), total_actif:g("ACTIFS_IMMOBILISES")+ac, capitaux_propres:g("CAPITAUX_PROPRES"),
+    dettes_financieres:-g("DETTES_FINANCIERES"), actif_circulant:ac, passif_circulant:pc,
+    stocks:g("STOCKS"), creances_clients:g("CLIENTS"), dettes_fournisseurs:-g("FOURNISSEURS"),
+    tresorerie_actif:g("TRESO_ACTIF"), charges_interets:-g("FRAIS_FIN"),
+  };
+}
+
 /* ---------- 6. Projections (business plan 5 ans) et valorisation ---------- */
 /**
  * Reformate les états en agrégats P&L/BS par exercice, base des projections.
@@ -953,4 +973,4 @@ function genererCommentaires(etats){
 
 /* export Node pour les tests */
 if(typeof module!=="undefined") module.exports={lireBalance,construireTbagr,appliquerMapping,
-  calculerEtats,calculerRatios,calculerScores,scoreRatio,BENCH_SECTEURS,SECTEURS,benchDe,RATIOS_META,LIGNES_PL,LIGNES_BS,mapperCompte,hypothesesParDefaut,projeter,valoriser,genererCommentaires};
+  calculerEtats,calculerRatios,calculerScores,agregatsBenchmark,scoreRatio,BENCH_SECTEURS,SECTEURS,benchDe,RATIOS_META,LIGNES_PL,LIGNES_BS,mapperCompte,hypothesesParDefaut,projeter,valoriser,genererCommentaires};
