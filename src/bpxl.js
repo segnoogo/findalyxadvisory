@@ -40,6 +40,13 @@ function construireFeuillesBP(wb){
   const prep=(ws,libArr)=>{const r=ws.addRow(libArr);return r;};
   const cellF=(ws,rn,c,f,fmt)=>{const cl=ws.getCell(rn,c);cl.value={formula:f};if(fmt)cl.numFmt=fmt;return cl;};
   const cellV=(ws,rn,c,val,fmt)=>{const cl=ws.getCell(rn,c);cl.value=val;if(fmt)cl.numFmt=fmt;return cl;};
+  /* ---- historique branché sur la TBAGR (SUMIF ; mêmes compositions que les feuilles états) ---- */
+  const nT=DOSSIER.tbagr.lignes.length, finT=4+nT;
+  const refTB=q(nomOnglet("TBAGR")), colTB=i=>String.fromCharCode(70+i);
+  const su=(codes,i,signe)=>(signe==="-"?"-(":"(")+codes.map(c=>
+    `SUMIF(${refTB}!$B$5:$B$${finT},"${c}",${refTB}!${colTB(i)}$5:${colTB(i)}$${finT})`).join("+")+")";
+  const hc=(row,i)=>`${L(cH(i))}${row}`;
+  const pca=ag=>(typeof persoDe==="function"?persoDe(ag):[]).map(x=>x.code);
   const totalRow=(ws,rn,nb)=>{const r=ws.getRow(rn);r.font={bold:true,color:{argb:"FF172554"}};
     for(let c=2;c<=nb;c++)r.getCell(c).fill={type:"pattern",pattern:"solid",fgColor:{argb:"FFF7F9FC"}};};
 
@@ -105,7 +112,8 @@ function construireFeuillesBP(wb){
     defs.forEach(d=>{
       const rn=d.rn;
       cellV(ws,rn,2,d.lib);
-      if(d.hist)A.forEach((a,i)=>cellV(ws,rn,cH(i),d.pct?d.hist(a):mnt(d.hist(a)),d.pct?PCT:NF));
+      if(d.fh)A.forEach((a,i)=>cellF(ws,rn,cH(i),d.fh(i),d.pct?PCT:NF));
+      else if(d.hist)A.forEach((a,i)=>cellV(ws,rn,cH(i),d.pct?d.hist(a):mnt(d.hist(a)),d.pct?PCT:NF));
       if(d.f)AP.forEach((a,i)=>cellF(ws,rn,cP(i),d.f(i,a),d.pct?PCT:NF));
       if(d.sec){const r=ws.getRow(rn);r.getCell(2).font={bold:true,italic:true,color:{argb:"FF172554"}};}
       if(d.pctRow){const r=ws.getRow(rn);r.font={italic:true,color:{argb:"FF808080"}};}
@@ -160,6 +168,26 @@ function construireFeuillesBP(wb){
     f:i=>`IF(${P(rp.EBT,i)}>0,-${h1(hy.is)}*${P(rp.EBT,i)},0)`},
    {rn:rp.RN,lib:"Résultat net",st:1,hist:a=>v.RESULTAT_NET[a],
     f:i=>`${P(rp.EBT,i)}+${P(rp.IS,i)}`}];
+  /* historique de chaque ligne P&L, branché sur la TBAGR */
+  const FHP={};
+  FHP[rp.CA]=i=>su(["CA_MARCHANDISES","CA_PRODUITS","CA_SERVICES","CA_ACCESSOIRES",...pca("CA")],i,"-");
+  FHP[rp.CD]=i=>su(["ACHATS_MARCH","ACHATS_MP","AUTRES_ACHATS",...pca("COUTS_DIRECTS")],i,"-");
+  FHP[rp.MB]=i=>`${hc(rp.CA,i)}+${hc(rp.CD,i)}`;
+  FHP[rp.PMB]=i=>`IF(${hc(rp.CA,i)}=0,"",${hc(rp.MB,i)}/${hc(rp.CA,i)})`;
+  FHP[rp.AP_]=i=>su(["SUBVENTIONS","PROD_STOCKEE","PROD_IMMOBILISEE","AUTRES_PRODUITS",...pca("AUTRES_PROD")],i,"-");
+  H.opex.forEach((o,j)=>{FHP[rp.opex0+j]=i=>su([o.code],i,"-");});
+  FHP[rp.TFG]=i=>`SUM(${L(cH(i))}${rp.opex0}:${L(cH(i))}${rp.opex0+m-1})`;
+  FHP[rp.PERS]=i=>su(["CHARGES_PERSONNEL",...pca("CHARGES_PERSONNEL")],i,"-");
+  FHP[rp.EBITDA]=i=>`${hc(rp.MB,i)}+${hc(rp.AP_,i)}+${hc(rp.TFG,i)}+${hc(rp.PERS,i)}`;
+  FHP[rp.PEB]=i=>`IF(${hc(rp.CA,i)}=0,"",${hc(rp.EBITDA,i)}/${hc(rp.CA,i)})`;
+  FHP[rp.DA]=i=>su(["DOTATIONS","REPRISES",...pca("DA")],i,"-");
+  FHP[rp.EBIT]=i=>`${hc(rp.EBITDA,i)}+${hc(rp.DA,i)}`;
+  FHP[rp.PF]=i=>`MAX(0,${su(["REVENUS_FIN","FRAIS_FIN"],i,"-")})`;
+  FHP[rp.FF]=i=>`MIN(0,${su(["REVENUS_FIN","FRAIS_FIN"],i,"-")})`;
+  FHP[rp.EBT]=i=>`${hc(rp.EBIT,i)}+${hc(rp.PF,i)}+${hc(rp.FF,i)}`;
+  FHP[rp.IS]=i=>su(["IS","PARTICIPATION",...pca("IMPOTS")],i,"-");
+  FHP[rp.RN]=i=>`${hc(rp.EBT,i)}+${hc(rp.IS,i)}+${su(["PRODUITS_HAO","CHARGES_HAO",...pca("RESULTAT_HAO")],i,"-")}`;
+  defsP.forEach(d=>{if(FHP[d.rn])d.fh=FHP[d.rn];});
   feuille(nomP,"Compte de résultat prévisionnel — FORMULES — scénario "+sc.lab+" — "+u.lib,defsP);
 
   /* ================= Bilan prévisionnel ================= */
@@ -194,6 +222,24 @@ function construireFeuillesBP(wb){
     f:i=>`${B(rb.CP,i)}+${B(rb.DET,i)}+${B(rb.PROV,i)}-${B(rb.IMN,i)}-${B(rb.BFR,i)}`},
    {rn:rb.CTRL,lib:"Contrôle : actif - passif (doit être 0)",pctRow:1,hist:()=>0,
     f:i=>`${B(rb.IMN,i)}+${B(rb.BFR,i)}+${B(rb.TRES,i)}-${B(rb.CP,i)}-${B(rb.DET,i)}-${B(rb.PROV,i)}`}];
+  /* historique de chaque ligne du bilan, branché sur la TBAGR */
+  const FHB={};
+  FHB[rb.BRUT]=i=>su(["IMMO_INCORP","IMMO_CORP","AVANCES_IMMO","IMMO_FIN",...pca("ACTIFS_IMMOBILISES")],i,"+");
+  FHB[rb.AMC]=i=>su(["AMORT_DEPREC"],i,"+");
+  FHB[rb.IMN]=i=>`${hc(rb.BRUT,i)}+${hc(rb.AMC,i)}`;
+  FHB[rb.STK]=i=>su(["STOCKS"],i,"+");
+  FHB[rb.CLI]=i=>su(["CLIENTS"],i,"+");
+  FHB[rb.ACR]=i=>su(["AUTRES_CREANCES","AVANCES_FRS","HAO_ACTIF"],i,"+");
+  FHB[rb.FRN]=i=>su(["FOURNISSEURS"],i,"+");
+  FHB[rb.ADT]=i=>su(["DETTES_SOCIALES","DETTES_FISCALES","AUTRES_DETTES","CLIENTS_AVANCES","HAO_PASSIF"],i,"+");
+  FHB[rb.BFR]=i=>`SUM(${L(cH(i))}${rb.STK}:${L(cH(i))}${rb.ADT})`;
+  FHB[rb.DET]=i=>su(["DETTES_FINANCIERES",...pca("FINANCEMENT")],i,"-");
+  FHB[rb.PROV]=i=>su(["PROVISIONS_RC"],i,"-");
+  FHB[rb.TRES]=i=>su(["TRESO_ACTIF","TRESO_PASSIF",...pca("TRESORERIE_NETTE")],i,"+");
+  FHB[rb.CP]=i=>`${su(["CAPITAL","PRIMES_RESERVES","RAN_RESULTATS_ANT","SUBV_PROV_REGL",...pca("CAPITAUX_PROPRES")],i,"-")}+${rP}!${L(cH(i))}${rp.RN}`;
+  FHB[rb.DIV]=()=>`0`;
+  FHB[rb.CTRL]=i=>`${hc(rb.IMN,i)}+${hc(rb.BFR,i)}+${hc(rb.TRES,i)}-${hc(rb.CP,i)}-${hc(rb.DET,i)}-${hc(rb.PROV,i)}`;
+  defsB.forEach(d=>{if(FHB[d.rn])d.fh=FHB[d.rn];});
   feuille(nomB,"Bilan prévisionnel — FORMULES — bouclé par la trésorerie — "+u.lib,defsB);
 
   /* ================= Dette (par millésime) ================= */

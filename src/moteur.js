@@ -586,14 +586,32 @@ function calculerRatios(etats){
 
 
 /* ---------- 5b. Scores (3 modèles : Notation, Altman Z, Cotation BCEAO) ---------- */
-/** Bornes de benchmark sectoriel par défaut (min = P25, max = P75). @type {Object<string,{min:number,max:number}>} */
-const BENCH={
-  roe:{min:12,max:20}, roa:{min:5,max:10}, roce:{min:10,max:18},
-  margeBrute:{min:35,max:50}, margeEbitda:{min:15,max:30}, margeNette:{min:5,max:12},
-  liquiditeGenerale:{min:1.2,max:2.0}, liquiditeReduite:{min:0.8,max:1.5}, liquiditeImmediate:{min:0.2,max:0.5},
-  bfrJours:{min:30,max:60}, delaiClients:{min:30,max:90}, delaiFournisseurs:{min:45,max:90},
-  gearing:{min:0,max:1.0}, leverage:{min:0,max:3.0}, couvertureInterets:{min:3.0,max:8.0}, autonomieFinanciere:{min:30,max:60},
+/**
+ * Bornes de benchmark PAR SECTEUR (min = P25, max = P75). "Général" = défaut neutre ;
+ * chaque secteur ne surcharge que les ratios qui diffèrent (fusionnés avec "Général").
+ * @type {Object<string, Object<string,{min:number,max:number}>>}
+ */
+const BENCH_SECTEURS={
+  "Général":{
+    roe:{min:12,max:20}, roa:{min:5,max:10}, roce:{min:10,max:18},
+    margeBrute:{min:35,max:50}, margeEbitda:{min:15,max:30}, margeNette:{min:5,max:12},
+    liquiditeGenerale:{min:1.2,max:2.0}, liquiditeReduite:{min:0.8,max:1.5}, liquiditeImmediate:{min:0.2,max:0.5},
+    bfrJours:{min:30,max:60}, delaiClients:{min:30,max:90}, delaiFournisseurs:{min:45,max:90},
+    gearing:{min:0,max:1.0}, leverage:{min:0,max:3.0}, couvertureInterets:{min:3.0,max:8.0}, autonomieFinanciere:{min:30,max:60},
+  },
+  /* Secteurs — EXEMPLES INDICATIFS à calibrer avec des données réelles (BRVM / dossiers anonymisés). */
+  "Commerce & distribution":{ margeBrute:{min:12,max:28}, margeEbitda:{min:4,max:12}, margeNette:{min:1,max:5}, bfrJours:{min:5,max:35}, delaiClients:{min:5,max:35} },
+  "Services & conseil":{ margeBrute:{min:45,max:75}, margeEbitda:{min:15,max:35}, margeNette:{min:8,max:20}, delaiClients:{min:30,max:75} },
+  "Industrie & agro-industrie":{ margeBrute:{min:25,max:45}, margeEbitda:{min:12,max:25}, bfrJours:{min:45,max:100}, leverage:{min:0,max:3.5} },
 };
+/** Liste des secteurs disponibles (pour le sélecteur). */
+const SECTEURS=Object.keys(BENCH_SECTEURS);
+/** Bornes effectives d'un secteur (surcharges fusionnées avec "Général"). */
+function benchDe(secteur){
+  const base=BENCH_SECTEURS["Général"];
+  const ov=secteur&&BENCH_SECTEURS[secteur];
+  return ov?Object.assign({},base,ov):base;
+}
 /** Normalise une valeur de ratio en score 0-100 par rapport au benchmark [min,max]. */
 function scoreRatio(val, bench, higherBetter){
   if(val===null||val===undefined||!isFinite(val)||!bench) return null;
@@ -615,9 +633,10 @@ function scoreRatio(val, bench, higherBetter){
 /**
  * Calcule les 3 modèles de score sur le dernier exercice.
  * @param {Etats} etats
+ * @param {string} [secteur]  Secteur de comparaison (bornes de benchmark).
  * @returns {*}  { notation, altman, bceao }
  */
-function calculerScores(etats){
+function calculerScores(etats, secteur){
   const A=etats.annees, a=A[A.length-1], v=etats.v;
   const g=(c)=>v[c]?(v[c][a]||0):0;
   const ac=g("STOCKS")+g("CLIENTS")+g("AUTRES_CREANCES")+g("AVANCES_FRS")+g("HAO_ACTIF")+g("TRESO_ACTIF");
@@ -627,9 +646,10 @@ function calculerScores(etats){
   const totalDettes=ta-cp;
 
   /* Modèle 1 — Notation (Profitabilité 30% · Liquidité 30% · Solvabilité 40%) */
+  const bench=benchDe(secteur);
   const rr=calculerRatios(etats).ratios;
   const dim={rentabilite:[],liquidite:[],endettement:[]};
-  rr.forEach(r=>{const s=scoreRatio(r.vals[a],BENCH[r.k],!r.inverse); if(s!==null) dim[r.cat].push(s);});
+  rr.forEach(r=>{const s=scoreRatio(r.vals[a],bench[r.k],!r.inverse); if(s!==null) dim[r.cat].push(s);});
   const moy=(arr)=>arr.length?arr.reduce((x,y)=>x+y,0)/arr.length:0;
   const sProf=moy(dim.rentabilite), sLiq=moy(dim.liquidite), sSolv=moy(dim.endettement);
   const global=Math.round(sProf*0.30+sLiq*0.30+sSolv*0.40);
@@ -933,4 +953,4 @@ function genererCommentaires(etats){
 
 /* export Node pour les tests */
 if(typeof module!=="undefined") module.exports={lireBalance,construireTbagr,appliquerMapping,
-  calculerEtats,calculerRatios,calculerScores,scoreRatio,BENCH,RATIOS_META,LIGNES_PL,LIGNES_BS,mapperCompte,hypothesesParDefaut,projeter,valoriser,genererCommentaires};
+  calculerEtats,calculerRatios,calculerScores,scoreRatio,BENCH_SECTEURS,SECTEURS,benchDe,RATIOS_META,LIGNES_PL,LIGNES_BS,mapperCompte,hypothesesParDefaut,projeter,valoriser,genererCommentaires};

@@ -234,7 +234,8 @@ function vueAccueil(){
   const creation=`<div class="card">
     <b>Nouveau dossier</b>
     <div class="row" style="margin-top:10px">
-      <input id="nouvNom" class="sel" placeholder="Nom de la société (ex. COSAMA SA)" style="width:320px">
+      <input id="nouvNom" class="sel" placeholder="Nom de la société (ex. COSAMA SA)" style="width:280px">
+      <select id="nouvSecteur" class="sel" title="Secteur de comparaison (benchmark)">${SECTEURS.map(s=>`<option>${s}</option>`).join("")}</select>
       <button class="btn primary" onclick="creerDossier()">Créer</button>
     </div>
   </div>`;
@@ -252,7 +253,8 @@ async function creerDossier(){
     toast("Quota atteint : votre licence permet "+q.max+" société(s) ("+q.used+" utilisées). Contactez Findalyx pour l'augmenter.");
     return;
   }
-  DOSSIER={id:idNouveau,societe:nom,balances:[],overrides:{}};
+  const sect=(document.getElementById("nouvSecteur")||{}).value||"Général";
+  DOSSIER={id:idNouveau,societe:nom,secteur:sect,balances:[],overrides:{}};
   sauverDossier();localStorage.setItem(ACTIF_KEY,DOSSIER.id);VUE="import";shell();
 }
 function ouvrirDossier(id,garderVue){
@@ -728,7 +730,7 @@ function fdelta(v0,v1){
 function vueAnalyse(){
   if(!ETATS) return '<div class="mut">Importez d\'abord des balances.</div>';
   const A=ETATS.annees,a1=A[A.length-1],a0=A.length>1?A[A.length-2]:null,v=ETATS.v;
-  const R=calculerRatios(ETATS), Sc=calculerScores(ETATS);
+  const R=calculerRatios(ETATS), Sc=calculerScores(ETATS, DOSSIER&&DOSSIER.secteur);
   const ca1=v.CA[a1],U=uni();
 
   /* KPI clés avec variation vs N-1 */
@@ -795,9 +797,15 @@ function vueAnalyse(){
     <div class="card"><b>Structure des charges</b><canvas id="g4" height="230"></canvas></div>
     <div class="card"><b>BFR et trésorerie nette</b><canvas id="g2" height="230"></canvas></div>
   </div>
+  ${rappelSecteur()}
   <h2 class="h2">Scores &amp; notation</h2>
   ${carteScore}
   ${commentaires}`;
+}
+function changerSecteur(s){if(!DOSSIER)return;DOSSIER.secteur=s;sauverDossier();rendre();}
+function rappelSecteur(){
+  const cur=(DOSSIER&&DOSSIER.secteur)||"Général";
+  return `<div class="mut" style="margin-bottom:12px">Comparaison sectorielle : <b style="color:var(--navy)">${cur}</b> — modifiable dans <b>Paramètres</b>. <span style="font-size:11px">Bornes indicatives, à calibrer.</span></div>`;
 }
 function vueRatios(){
   if(!ETATS) return '<div class="mut">Importez d\'abord des balances.</div>';
@@ -810,7 +818,7 @@ function vueRatios(){
   };
   /* BENCH est défini dans moteur.js (global, partagé avec les 3 scores) */
   const barreRatio=(r,a)=>{
-    const v=r.vals[a], b=BENCH[r.k];
+    const v=r.vals[a], b=benchDe(DOSSIER&&DOSSIER.secteur)[r.k];
     if(v===null||v===undefined||!isFinite(v)||!b) return "";
     const min=b.min, max=b.max, moy=(min+max)/2, w=(max-min)||1;
     const lo=min-w*0.75, hi=max+w*0.75;              /* min à 30%, moy à 50%, max à 70% */
@@ -843,6 +851,7 @@ function vueRatios(){
   return `<h1>Ratios</h1>
   <div class="mut" style="margin-bottom:12px">16 ratios calculés sur le dernier exercice (FY${String(a1).slice(-2)}),
   avec l'historique des exercices précédents — l'interprétation reste à l'appréciation de l'analyste.</div>
+  ${rappelSecteur()}
   ${blocs}`;
 }
 function dessinerGraphs(){
