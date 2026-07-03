@@ -601,7 +601,7 @@ function vueParams(){
   const secteurCtl=`<div class="card"><div class="sec-titre" style="margin-top:0">Secteur d'activité (benchmark)</div>
     <div class="hyp-l"><span>Secteur de comparaison des ratios et de la notation</span>
       <select class="sel" style="width:46%" onchange="changerSecteur(this.value)">${SECTEURS.map(s=>`<option${s===(DOSSIER.secteur||"Général")?" selected":""}>${s}</option>`).join("")}</select></div>
-    <div class="mut" style="margin-top:8px">Détermine les bornes min · moyenne · max des ratios et le calcul de la Notation financière. Bornes sectorielles indicatives — à calibrer.</div></div>`;
+    <div class="mut" style="margin-top:8px">Détermine la comparaison sectorielle des ratios et le calcul de la Notation. Le benchmark provient de la base en ligne — aucune borne n'est affichée tant que le secteur n'a pas assez de sociétés.</div></div>`;
   return `<h1>Paramètres — fiche société</h1>
   <div class="mut" style="margin-bottom:12px">Ces informations alimentent automatiquement les rapports
   (présentation de la société, contexte de mission) et les pages de garde. Tout est facultatif — les

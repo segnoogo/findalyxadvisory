@@ -7,3 +7,6 @@ declare var CONF_UNITE: { f: number; dec: number; suf: string } | undefined;
 
 /** Present uniquement sous Node (execution des tests) ; absent dans le navigateur. */
 declare var module: { exports: any } | undefined;
+
+/** Bornes de benchmark recuperees en ligne (secteur -> ratio -> {min,max,mean}), posees par ui.js. */
+declare var BENCH_ONLINE: Record<string, Record<string, { min: number; max: number; mean?: number }>> | null | undefined;

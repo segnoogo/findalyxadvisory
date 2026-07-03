@@ -804,8 +804,25 @@ function vueAnalyse(){
 }
 function changerSecteur(s){if(!DOSSIER)return;DOSSIER.secteur=s;sauverDossier();rendre();}
 function rappelSecteur(){
+  if(!_benchFetched){_benchFetched=true;chargerBenchmarksEnLigne();}
   const cur=(DOSSIER&&DOSSIER.secteur)||"Général";
-  return `<div class="mut" style="margin-bottom:12px">Comparaison sectorielle : <b style="color:var(--navy)">${cur}</b> — modifiable dans <b>Paramètres</b>. <span style="font-size:11px">Bornes indicatives, à calibrer.</span></div>`;
+  return `<div class="mut" style="margin-bottom:12px">Comparaison sectorielle : <b style="color:var(--navy)">${cur}</b> — modifiable dans <b>Paramètres</b>.</div>`;
+}
+var BENCH_FN=(typeof LIC_FN!=="undefined"&&LIC_FN)?LIC_FN.replace("verifier-licence","benchmark"):"";
+var BENCH_ONLINE=null, _benchFetched=false;
+function _benchConvertir(secteurs){const o={};for(const s in secteurs){if(secteurs[s]&&secteurs[s].ratios)o[s]=secteurs[s].ratios;}return o;}
+async function chargerBenchmarksEnLigne(){
+  try{const c=JSON.parse(localStorage.getItem("fx_bench_cache")||"null");if(c&&c.secteurs)BENCH_ONLINE=_benchConvertir(c.secteurs);}catch(e){}
+  if(!BENCH_FN)return;
+  try{
+    const r=await fetch(BENCH_FN,{method:"POST",headers:{"Content-Type":"application/json","apikey":LIC_KEY,"Authorization":"Bearer "+LIC_KEY},body:JSON.stringify({op:"benchmarks"})});
+    const d=await r.json();
+    if(d&&d.ok&&d.secteurs){
+      localStorage.setItem("fx_bench_cache",JSON.stringify({t:Date.now(),secteurs:d.secteurs}));
+      BENCH_ONLINE=_benchConvertir(d.secteurs);
+      if(VUE==="ratios"||VUE==="analyse")rendre();
+    }
+  }catch(e){}
 }
 function contribuerBenchmark(){
   if(!ETATS||!DOSSIER)return;
@@ -826,7 +843,18 @@ function contribuerBenchmark(){
     </div>
   </div></div>`;
 }
-function envoyerContribution(){fermerModal();toast("Service benchmark en ligne à activer (Edge Function — étape suivante).");}
+async function envoyerContribution(){
+  if(!ETATS||!DOSSIER){fermerModal();return;}
+  const ag=agregatsBenchmark(ETATS), sect=DOSSIER.secteur||"Général";
+  fermerModal(); toast("Envoi en cours…");
+  if(!BENCH_FN){toast("Endpoint benchmark non configuré.");return;}
+  try{
+    const r=await fetch(BENCH_FN,{method:"POST",headers:{"Content-Type":"application/json","apikey":LIC_KEY,"Authorization":"Bearer "+LIC_KEY},body:JSON.stringify(Object.assign({op:"contribuer",secteur:sect},ag))});
+    const d=await r.json();
+    if(d&&d.ok){toast("Merci — société ajoutée au benchmark (anonyme).");chargerBenchmarksEnLigne();}
+    else toast("Échec : "+((d&&d.raison)||"réponse serveur"));
+  }catch(e){toast("Envoi impossible (hors ligne ?).");}
+}
 function vueRatios(){
   if(!ETATS) return '<div class="mut">Importez d\'abord des balances.</div>';
   const A=ETATS.annees,a1=A[A.length-1];
@@ -839,7 +867,8 @@ function vueRatios(){
   /* BENCH est défini dans moteur.js (global, partagé avec les 3 scores) */
   const barreRatio=(r,a)=>{
     const v=r.vals[a], b=benchDe(DOSSIER&&DOSSIER.secteur)[r.k];
-    if(v===null||v===undefined||!isFinite(v)||!b) return "";
+    if(v===null||v===undefined||!isFinite(v)) return "";
+    if(!b) return `<div class="rbar"><div class="rbar-track rbar-neutre"></div><div class="rbar-ticks"></div></div>`;
     const min=b.min, max=b.max, moy=(min+max)/2, w=(max-min)||1;
     const lo=min-w*0.75, hi=max+w*0.75;              /* min à 30%, moy à 50%, max à 70% */
     const p=Math.max(0,Math.min(100,(v-lo)/(hi-lo)*100));

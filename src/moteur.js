@@ -586,31 +586,17 @@ function calculerRatios(etats){
 
 
 /* ---------- 5b. Scores (3 modèles : Notation, Altman Z, Cotation BCEAO) ---------- */
+/** Taxonomie des secteurs (pour le sélecteur). Les bornes de benchmark viennent EN LIGNE. */
+const SECTEURS=["Général","Commerce & distribution","Services & conseil","Industrie & agro-industrie"];
 /**
- * Bornes de benchmark PAR SECTEUR (min = P25, max = P75). "Général" = défaut neutre ;
- * chaque secteur ne surcharge que les ratios qui diffèrent (fusionnés avec "Général").
- * @type {Object<string, Object<string,{min:number,max:number}>>}
+ * Bornes effectives d'un secteur — UNIQUEMENT le benchmark en ligne (aucune borne embarquée/fabriquée).
+ * Renvoie {} si le secteur n'a pas encore de benchmark : dans ce cas on n'affiche pas de comparaison.
+ * @param {string} [secteur]
+ * @returns {Object<string,{min:number,max:number,mean?:number}>}
  */
-const BENCH_SECTEURS={
-  "Général":{
-    roe:{min:12,max:20}, roa:{min:5,max:10}, roce:{min:10,max:18},
-    margeBrute:{min:35,max:50}, margeEbitda:{min:15,max:30}, margeNette:{min:5,max:12},
-    liquiditeGenerale:{min:1.2,max:2.0}, liquiditeReduite:{min:0.8,max:1.5}, liquiditeImmediate:{min:0.2,max:0.5},
-    bfrJours:{min:30,max:60}, delaiClients:{min:30,max:90}, delaiFournisseurs:{min:45,max:90},
-    gearing:{min:0,max:1.0}, leverage:{min:0,max:3.0}, couvertureInterets:{min:3.0,max:8.0}, autonomieFinanciere:{min:30,max:60},
-  },
-  /* Secteurs — EXEMPLES INDICATIFS à calibrer avec des données réelles (BRVM / dossiers anonymisés). */
-  "Commerce & distribution":{ margeBrute:{min:12,max:28}, margeEbitda:{min:4,max:12}, margeNette:{min:1,max:5}, bfrJours:{min:5,max:35}, delaiClients:{min:5,max:35} },
-  "Services & conseil":{ margeBrute:{min:45,max:75}, margeEbitda:{min:15,max:35}, margeNette:{min:8,max:20}, delaiClients:{min:30,max:75} },
-  "Industrie & agro-industrie":{ margeBrute:{min:25,max:45}, margeEbitda:{min:12,max:25}, bfrJours:{min:45,max:100}, leverage:{min:0,max:3.5} },
-};
-/** Liste des secteurs disponibles (pour le sélecteur). */
-const SECTEURS=Object.keys(BENCH_SECTEURS);
-/** Bornes effectives d'un secteur (surcharges fusionnées avec "Général"). */
 function benchDe(secteur){
-  const base=BENCH_SECTEURS["Général"];
-  const ov=secteur&&BENCH_SECTEURS[secteur];
-  return ov?Object.assign({},base,ov):base;
+  const online=(typeof BENCH_ONLINE!=="undefined"&&BENCH_ONLINE&&secteur)?BENCH_ONLINE[secteur]:null;
+  return online||{};
 }
 /** Normalise une valeur de ratio en score 0-100 par rapport au benchmark [min,max]. */
 function scoreRatio(val, bench, higherBetter){
@@ -645,11 +631,16 @@ function calculerScores(etats, secteur){
   const cp=g("CAPITAUX_PROPRES"), ebit=g("EBIT"), rn=g("RESULTAT_NET"), ca=g("CA");
   const totalDettes=ta-cp;
 
-  /* Modèle 1 — Notation (Profitabilité 30% · Liquidité 30% · Solvabilité 40%) */
+  /* Modèle 1 — Notation (Profitabilité 30% · Liquidité 30% · Solvabilité 40%).
+     Normalisation vs le benchmark du secteur s'il existe, sinon vs les seuils internes. */
   const bench=benchDe(secteur);
   const rr=calculerRatios(etats).ratios;
   const dim={rentabilite:[],liquidite:[],endettement:[]};
-  rr.forEach(r=>{const s=scoreRatio(r.vals[a],bench[r.k],!r.inverse); if(s!==null) dim[r.cat].push(s);});
+  rr.forEach(r=>{
+    let bnd=bench[r.k];
+    if(!bnd&&r.seuils){const bon=r.seuils[0],moyen=r.seuils[1];bnd=r.inverse?{min:bon,max:moyen}:{min:moyen,max:bon};}
+    const s=scoreRatio(r.vals[a],bnd,!r.inverse); if(s!==null) dim[r.cat].push(s);
+  });
   const moy=(arr)=>arr.length?arr.reduce((x,y)=>x+y,0)/arr.length:0;
   const sProf=moy(dim.rentabilite), sLiq=moy(dim.liquidite), sSolv=moy(dim.endettement);
   const global=Math.round(sProf*0.30+sLiq*0.30+sSolv*0.40);
@@ -973,4 +964,4 @@ function genererCommentaires(etats){
 
 /* export Node pour les tests */
 if(typeof module!=="undefined") module.exports={lireBalance,construireTbagr,appliquerMapping,
-  calculerEtats,calculerRatios,calculerScores,agregatsBenchmark,scoreRatio,BENCH_SECTEURS,SECTEURS,benchDe,RATIOS_META,LIGNES_PL,LIGNES_BS,mapperCompte,hypothesesParDefaut,projeter,valoriser,genererCommentaires};
+  calculerEtats,calculerRatios,calculerScores,agregatsBenchmark,scoreRatio,SECTEURS,benchDe,RATIOS_META,LIGNES_PL,LIGNES_BS,mapperCompte,hypothesesParDefaut,projeter,valoriser,genererCommentaires};
