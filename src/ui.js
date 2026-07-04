@@ -291,24 +291,24 @@ function wizEtapeSecteur(){
 function wizSetSecteur(i){WIZ.secteur=SECTEURS[i]||"Général";rendre();}
 function wizEtapeSociete(){
   const f=WIZ.infos||{};
-  let grille="";
-  if(WIZ.showInfos){
-    grille=INFOS_CHAMPS.map(grp=>{
-      const lignes=grp[2].map(c=>{
-        const k=c[0], lab=c[1], ph=c[2], type=c[3];
-        return type==="zone"
-          ?`<label style="grid-column:1/-1">${esc(lab)}<textarea id="wiz_${k}" class="sel" rows="2" placeholder="${esc(ph)}">${esc(f[k]||"")}</textarea></label>`
-          :`<label>${esc(lab)}<input id="wiz_${k}" class="sel" value="${esc(f[k]||"")}" placeholder="${esc(ph)}"></label>`;
-      }).join("");
-      return `<div class="wiz-sub"><div class="wiz-subttl">${esc(grp[1])}</div><div class="wiz-form">${lignes}</div></div>`;
+  const renderGrp=grp=>{
+    const lignes=grp[2].map(c=>{
+      const k=c[0], lab=c[1], ph=c[2], type=c[3];
+      return type==="zone"
+        ?`<label style="grid-column:1/-1">${esc(lab)}<textarea id="wiz_${k}" class="sel" rows="2" placeholder="${esc(ph)}">${esc(f[k]||"")}</textarea></label>`
+        :`<label>${esc(lab)}<input id="wiz_${k}" class="sel" value="${esc(f[k]||"")}" placeholder="${esc(ph)}"></label>`;
     }).join("");
-  }
-  const nb=Object.keys(f).length;
-  const btn=`<button class="btn sm" style="margin-top:12px" onclick="wizToggleInfos()">${WIZ.showInfos?"▴ Masquer les informations détaillées":"▾ Compléter la fiche société (facultatif)"+(nb?" · "+nb+" rempli(s)":"")}</button>`;
+    return `<div class="wiz-sub"><div class="wiz-subttl">${esc(grp[1])}</div><div class="wiz-form">${lignes}</div></div>`;
+  };
+  const base=renderGrp(INFOS_CHAMPS[0]);
+  const reste=WIZ.showInfos?INFOS_CHAMPS.slice(1).map(renderGrp).join(""):"";
+  const nbAutres=INFOS_CHAMPS.slice(1).reduce((n,g)=>n+g[2].filter(c=>f[c[0]]).length,0);
+  const btn=`<button class="btn sm" style="margin-top:12px" onclick="wizToggleInfos()">${WIZ.showInfos?"▴ Masquer les informations complémentaires":"▾ Plus d'informations (activité, dirigeants, mission…)"+(nbAutres?" · "+nbAutres+" rempli(s)":"")}</button>`;
   return `<b>Fiche société</b>
-   <div class="mut" style="margin:6px 0 12px">Seul le <b>nom</b> est requis. Tu peux détailler la fiche maintenant (facultatif) ou plus tard dans Paramètres — elle alimente les rapports.</div>
+   <div class="mut" style="margin:6px 0 12px">Seul le <b>nom</b> est requis. Le reste est facultatif (aussi modifiable ensuite dans Paramètres) et alimente les rapports.</div>
    <div class="wiz-form"><label style="grid-column:1/-1">Nom de la société *<input id="wizNom" class="sel" value="${esc(WIZ.nom||"")}" placeholder="ex. COSAMA SA"></label></div>
-   ${btn}${grille}`;
+   ${base}
+   ${btn}${reste}`;
 }
 function wizToggleInfos(){ wizLire(); WIZ.showInfos=!WIZ.showInfos; rendre(); }
 function wizEtapeBalances(){
