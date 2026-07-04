@@ -52,6 +52,28 @@ h1{font-size:17.1px;color:var(--navy);margin:2px 0 14px}
 .card{background:#fff;border:1px solid transparent;border-radius:16px;padding:18px 20px;margin-bottom:16px}
 .card.doss{display:flex;align-items:center;justify-content:space-between}
 .mut{color:var(--muted);font-size:10.7px}
+/* --- assistant nouveau dossier (wizard) --- */
+.wiz-steps{display:flex;align-items:center;gap:6px;margin:2px 0 16px;flex-wrap:wrap}
+.wiz-step{display:flex;align-items:center;gap:7px;font-size:11.5px;color:var(--muted)}
+.wiz-step .wnum{display:inline-flex;align-items:center;justify-content:center;width:23px;height:23px;border-radius:50%;background:#e3e8f0;color:var(--muted);font-weight:700;font-size:11px}
+.wiz-step.active{color:var(--navy);font-weight:600}
+.wiz-step.active .wnum{background:var(--navy);color:#fff}
+.wiz-step.done{color:var(--ink)}
+.wiz-step.done .wnum{background:var(--green);color:#fff}
+.wiz-sep{flex:0 0 22px;height:2px;background:#e3e8f0;border-radius:2px}
+.wiz-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(215px,1fr));gap:10px;margin-top:4px}
+.wiz-card{border:1.5px solid var(--border);border-radius:10px;padding:13px 14px;cursor:pointer;transition:border-color .12s,background .12s;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.wiz-card:hover{border-color:#aab6d0}
+.wiz-card.on{border-color:var(--navy);background:var(--lblue)}
+.wiz-form{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:4px}
+.wiz-form label{display:flex;flex-direction:column;gap:5px;font-size:10.7px;color:var(--muted)}
+.wiz-form label .sel{width:100%;color:var(--ink);font-size:12.5px}
+.wiz-recap>div{display:flex;justify-content:space-between;gap:16px;padding:9px 2px;border-bottom:1px solid var(--border)}
+.wiz-recap>div .mut{min-width:150px;font-size:11px}
+.wiz-nav{margin-top:14px;align-items:center}
+.wiz-sub{margin-top:16px}
+.wiz-subttl{font-weight:600;color:var(--navy);font-size:11.5px;margin-bottom:7px}
+.wiz-form textarea.sel{font-family:inherit;resize:vertical;min-height:52px}
 .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 .tb{width:100%;border-collapse:collapse;font-size:11.2px}
 .tb th{background:var(--navy);color:#fff;text-align:left;padding:8px 10px;font-weight:600;

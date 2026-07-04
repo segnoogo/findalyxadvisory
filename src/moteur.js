@@ -587,7 +587,7 @@ function calculerRatios(etats){
 
 /* ---------- 5b. Scores (3 modèles : Notation, Altman Z, Cotation BCEAO) ---------- */
 /** Taxonomie des secteurs (pour le sélecteur). Les bornes de benchmark viennent EN LIGNE. */
-const SECTEURS=["Général","Commerce & distribution","Services & conseil","Industrie & agro-industrie"];
+const SECTEURS=["Général","Commerce & distribution","Services & conseil","Agro-industrie","Industrie manufacturière"];
 /**
  * Bornes effectives d'un secteur — UNIQUEMENT le benchmark en ligne (aucune borne embarquée/fabriquée).
  * Renvoie {} si le secteur n'a pas encore de benchmark : dans ce cas on n'affiche pas de comparaison.

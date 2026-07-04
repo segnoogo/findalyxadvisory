@@ -52,6 +52,28 @@ h1{font-size:17.1px;color:var(--navy);margin:2px 0 14px}
 .card{background:#fff;border:1px solid transparent;border-radius:16px;padding:18px 20px;margin-bottom:16px}
 .card.doss{display:flex;align-items:center;justify-content:space-between}
 .mut{color:var(--muted);font-size:10.7px}
+/* --- assistant nouveau dossier (wizard) --- */
+.wiz-steps{display:flex;align-items:center;gap:6px;margin:2px 0 16px;flex-wrap:wrap}
+.wiz-step{display:flex;align-items:center;gap:7px;font-size:11.5px;color:var(--muted)}
+.wiz-step .wnum{display:inline-flex;align-items:center;justify-content:center;width:23px;height:23px;border-radius:50%;background:#e3e8f0;color:var(--muted);font-weight:700;font-size:11px}
+.wiz-step.active{color:var(--navy);font-weight:600}
+.wiz-step.active .wnum{background:var(--navy);color:#fff}
+.wiz-step.done{color:var(--ink)}
+.wiz-step.done .wnum{background:var(--green);color:#fff}
+.wiz-sep{flex:0 0 22px;height:2px;background:#e3e8f0;border-radius:2px}
+.wiz-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(215px,1fr));gap:10px;margin-top:4px}
+.wiz-card{border:1.5px solid var(--border);border-radius:10px;padding:13px 14px;cursor:pointer;transition:border-color .12s,background .12s;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.wiz-card:hover{border-color:#aab6d0}
+.wiz-card.on{border-color:var(--navy);background:var(--lblue)}
+.wiz-form{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:4px}
+.wiz-form label{display:flex;flex-direction:column;gap:5px;font-size:10.7px;color:var(--muted)}
+.wiz-form label .sel{width:100%;color:var(--ink);font-size:12.5px}
+.wiz-recap>div{display:flex;justify-content:space-between;gap:16px;padding:9px 2px;border-bottom:1px solid var(--border)}
+.wiz-recap>div .mut{min-width:150px;font-size:11px}
+.wiz-nav{margin-top:14px;align-items:center}
+.wiz-sub{margin-top:16px}
+.wiz-subttl{font-weight:600;color:var(--navy);font-size:11.5px;margin-bottom:7px}
+.wiz-form textarea.sel{font-family:inherit;resize:vertical;min-height:52px}
 .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 .tb{width:100%;border-collapse:collapse;font-size:11.2px}
 .tb th{background:var(--navy);color:#fff;text-align:left;padding:8px 10px;font-weight:600;
@@ -1463,7 +1485,7 @@ function calculerRatios(etats){
 
 /* ---------- 5b. Scores (3 modèles : Notation, Altman Z, Cotation BCEAO) ---------- */
 /** Taxonomie des secteurs (pour le sélecteur). Les bornes de benchmark viennent EN LIGNE. */
-const SECTEURS=["Général","Commerce & distribution","Services & conseil","Industrie & agro-industrie"];
+const SECTEURS=["Général","Commerce & distribution","Services & conseil","Agro-industrie","Industrie manufacturière"];
 /**
  * Bornes effectives d'un secteur — UNIQUEMENT le benchmark en ligne (aucune borne embarquée/fabriquée).
  * Renvoie {} si le secteur n'a pas encore de benchmark : dans ce cas on n'affiche pas de comparaison.
@@ -3697,6 +3719,7 @@ function rendre(){
   else if(VUE==="valo"){el.innerHTML=vueValo();dessinerFootball();}
   else if(VUE==="params") el.innerHTML=vueParams();
   else if(VUE==="exports") el.innerHTML=vueExports();
+  else if(VUE==="wizard") el.innerHTML=vueWizard();
   document.querySelectorAll("#vue select[data-compte]").forEach(s=>{s.value=s.dataset.val;});
 }
 
@@ -3804,15 +3827,12 @@ function vueAccueil(){
   const barre=`<div class="card" style="display:flex;align-items:center;gap:10px">
     <b>Mes sociétés</b><span class="chip">${nb}</span>
     <button class="btn sm" onclick="ACC_LISTE=!ACC_LISTE;rendre()">${ouverte?"Replier la liste":"Afficher la liste"}</button>
-    <button class="btn sm primary" style="margin-left:auto" onclick="ACC_LISTE=true;rendre();setTimeout(()=>{const e=document.getElementById('nouvNom');if(e)e.focus()},50)">+ Nouvelle société</button>
+    <button class="btn sm primary" style="margin-left:auto" onclick="ouvrirWizard()">+ Nouvelle société</button>
   </div>`;
   const creation=`<div class="card">
     <b>Nouveau dossier</b>
-    <div class="row" style="margin-top:10px">
-      <input id="nouvNom" class="sel" placeholder="Nom de la société (ex. COSAMA SA)" style="width:280px">
-      <select id="nouvSecteur" class="sel" title="Secteur de comparaison (benchmark)">${SECTEURS.map(s=>`<option>${s}</option>`).join("")}</select>
-      <button class="btn primary" onclick="creerDossier()">Créer</button>
-    </div>
+    <div class="mut" style="margin:6px 0 12px">Assistant guidé en 4 étapes : secteur de comparaison, informations de la société, balances, puis lancement de l'analyse.</div>
+    <button class="btn primary" onclick="ouvrirWizard()">Créer une société (assistant)</button>
   </div>`;
   return `<h1>Accueil</h1>
   ${synth}
@@ -3847,6 +3867,121 @@ function supprimerDossier(id){
   sauverDossiers(chargerDossiers().filter(d=>d.id!==id));
   if(DOSSIER&&DOSSIER.id===id){DOSSIER=null;ETATS=null;localStorage.removeItem(ACTIF_KEY);}
   shell();
+}
+
+/* ---------- assistant nouveau dossier (wizard) ---------- */
+var WIZ=null;
+function ouvrirWizard(){WIZ={step:1,nom:"",secteur:"Général",infos:{},showInfos:false,dossierId:null};VUE="wizard";shell();}
+function wizStepper(){
+  return `<div class="wiz-steps">`+["Secteur","Société","Balances","Récap"].map((lab,i)=>{
+    const n=i+1,cls=n<WIZ.step?"done":(n===WIZ.step?"active":"todo");
+    return `<div class="wiz-step ${cls}"><span class="wnum">${n<WIZ.step?"✓":n}</span>${lab}</div>`;
+  }).join(`<span class="wiz-sep"></span>`)+`</div>`;
+}
+function wizEtapeSecteur(){
+  const cartes=SECTEURS.map((s,i)=>`<div class="wiz-card ${WIZ.secteur===s?"on":""}" onclick="wizSetSecteur(${i})">
+    <b>${esc(s)}</b>${s==="Général"?'<span class="chip muted">défaut</span>':""}</div>`).join("");
+  return `<b>Secteur de comparaison (benchmark)</b>
+   <div class="mut" style="margin:6px 0 12px">Sert à comparer les ratios et la notation à un groupe de pairs. « Général » = médiane de toutes les sociétés. <b>Ce n'est pas le métier exact</b> de la société — celui-ci se renseigne à l'étape suivante (facultatif). Modifiable ensuite dans Paramètres.</div>
+   <div class="wiz-grid">${cartes}</div>`;
+}
+function wizSetSecteur(i){WIZ.secteur=SECTEURS[i]||"Général";if(WIZ.dossierId&&DOSSIER){DOSSIER.secteur=WIZ.secteur;sauverDossier();}rendre();}
+function wizEtapeSociete(){
+  const f=WIZ.infos||{};
+  let grille="";
+  if(WIZ.showInfos){
+    grille=INFOS_CHAMPS.map(grp=>{
+      const lignes=grp[2].map(c=>{
+        const k=c[0], lab=c[1], ph=c[2], type=c[3];
+        return type==="zone"
+          ?`<label style="grid-column:1/-1">${esc(lab)}<textarea id="wiz_${k}" class="sel" rows="2" placeholder="${esc(ph)}">${esc(f[k]||"")}</textarea></label>`
+          :`<label>${esc(lab)}<input id="wiz_${k}" class="sel" value="${esc(f[k]||"")}" placeholder="${esc(ph)}"></label>`;
+      }).join("");
+      return `<div class="wiz-sub"><div class="wiz-subttl">${esc(grp[1])}</div><div class="wiz-form">${lignes}</div></div>`;
+    }).join("");
+  }
+  const nb=Object.keys(f).length;
+  const btn=`<button class="btn sm" style="margin-top:12px" onclick="wizToggleInfos()">${WIZ.showInfos?"▴ Masquer les informations détaillées":"▾ Compléter la fiche société (facultatif)"+(nb?" · "+nb+" rempli(s)":"")}</button>`;
+  return `<b>Fiche société</b>
+   <div class="mut" style="margin:6px 0 12px">Seul le <b>nom</b> est requis. Tu peux détailler la fiche maintenant (facultatif) ou plus tard dans Paramètres — elle alimente les rapports.</div>
+   <div class="wiz-form"><label style="grid-column:1/-1">Nom de la société *<input id="wizNom" class="sel" value="${esc(WIZ.nom||"")}" placeholder="ex. COSAMA SA"></label></div>
+   ${btn}${grille}`;
+}
+function wizToggleInfos(){ wizLire(); WIZ.showInfos=!WIZ.showInfos; rendre(); }
+function wizEtapeBalances(){
+  const bal=(DOSSIER?DOSSIER.balances:[]).slice().sort((a,b)=>a.annee-b.annee).map(b=>{
+    const eq=Math.abs(b.controle.ecart)<1;
+    return `<tr><td>FY${b.annee}</td><td>${esc(b.fichier)}</td>
+      <td><span class="chip ${eq?"ok":"bad"}">${eq?"équilibrée":"écart "+fmt(b.controle.ecart/1000)}</span></td>
+      <td><button class="btn sm" onclick="retirerBalance(${b.annee})">Retirer</button></td></tr>`;
+  }).join("");
+  return `<b>Charger les balances générales</b>
+   <div class="mut" style="margin:6px 0 12px">Un fichier par exercice (xlsx, xls, csv) — colonnes détectées automatiquement. Vous pouvez en importer plusieurs.</div>
+   <div class="row">
+     <input type="file" id="fBal" class="sel" accept=".xlsx,.xls,.csv">
+     <input type="number" id="fAnnee" class="sel" placeholder="Exercice (ex. 2023)" style="width:150px">
+     <select id="fFeuille" class="sel" style="min-width:160px"><option value="">Feuille…</option></select>
+     <button class="btn primary" onclick="importerBalance()">Importer</button>
+   </div>
+   <table class="tb" style="margin-top:12px"><tr><th>Exercice</th><th>Fichier</th><th>Contrôle</th><th></th></tr>
+   ${bal||'<tr><td colspan="4" class="mut">Aucune balance importée pour l’instant.</td></tr>'}</table>`;
+}
+function wizEtapeRecap(){
+  const f=(DOSSIER&&DOSSIER.infos)||{},nb=DOSSIER?DOSSIER.balances.length:0;
+  const bal=DOSSIER?DOSSIER.balances.slice().sort((a,b)=>a.annee-b.annee).map(b=>{
+    const eq=Math.abs(b.controle.ecart)<1;return `FY${b.annee} <span class="chip ${eq?"ok":"bad"}">${eq?"OK":"écart"}</span>`;}).join(" · "):"";
+  const info=[["secteur","Secteur d'activité"],["formeJuridique","Forme juridique"],["dirigeant","Dirigeant"],["adresse","Implantation"]]
+    .filter(x=>f[x[0]]).map(x=>`<div><span class="mut">${x[1]}</span>${esc(f[x[0]])}</div>`).join("");
+  return `<b>Récapitulatif</b>
+   <div class="wiz-recap" style="margin-top:8px">
+     <div><span class="mut">Société</span><b>${esc(DOSSIER?DOSSIER.societe:"")}</b></div>
+     <div><span class="mut">Secteur (benchmark)</span><b>${esc(DOSSIER?DOSSIER.secteur:"")}</b></div>
+     ${info}
+     <div><span class="mut">Balances</span><span>${bal||'<span class="chip bad">aucune</span>'}</span></div>
+   </div>
+   <div class="mut" style="margin-top:12px">${nb?"Tout est prêt — lancez l’analyse.":"Revenez à l’étape « Balances » pour importer au moins un exercice."}</div>`;
+}
+function vueWizard(){
+  if(!WIZ)return '<div class="mut">…</div>';
+  const s=WIZ.step;
+  const corps=s===1?wizEtapeSecteur():s===2?wizEtapeSociete():s===3?wizEtapeBalances():wizEtapeRecap();
+  const gauche=s>1?`<button class="btn" onclick="wizPrecedent()">← Précédent</button>`:`<button class="btn" onclick="wizAnnuler()">Annuler</button>`;
+  const droite=s<4?`<button class="btn primary" style="margin-left:auto" onclick="wizSuivant()">Suivant →</button>`
+    :`<button class="btn primary" style="margin-left:auto" onclick="wizLancer()">Lancer l'analyse →</button>`;
+  return `<h1>Nouvelle société</h1>${wizStepper()}
+   <div class="card">${corps}</div>
+   <div class="row wiz-nav">${gauche}${droite}</div>`;
+}
+function wizLire(){
+  if(WIZ.step===2){
+    const e=document.getElementById("wizNom"); if(e) WIZ.nom=e.value.trim();
+    const inf=Object.assign({}, WIZ.infos||{});
+    INFOS_CHAMPS.forEach(grp=>grp[2].forEach(c=>{
+      const el=document.getElementById("wiz_"+c[0]);
+      if(el){ const v=el.value.trim(); if(v) inf[c[0]]=v; else delete inf[c[0]]; }
+    }));
+    WIZ.infos=inf;
+  }
+}
+async function wizSuivant(){
+  wizLire();
+  if(WIZ.step===2){
+    if(!WIZ.nom){toast("Entrez le nom de la société");return;}
+    if(!WIZ.dossierId){
+      const id="d"+Date.now();
+      const q=await licAjouterSociete(id,WIZ.nom);
+      if(!q.ok){toast("Quota atteint : licence "+q.max+" société(s), "+q.used+" utilisées. Contactez Findalyx.");return;}
+      DOSSIER={id,societe:WIZ.nom,secteur:WIZ.secteur,infos:WIZ.infos,balances:[],overrides:{}};
+      WIZ.dossierId=id;localStorage.setItem(ACTIF_KEY,id);sauverDossier();
+    }else{DOSSIER.societe=WIZ.nom;DOSSIER.secteur=WIZ.secteur;DOSSIER.infos=WIZ.infos;sauverDossier();}
+  }
+  WIZ.step=Math.min(4,WIZ.step+1);shell();
+}
+function wizPrecedent(){wizLire();WIZ.step=Math.max(1,WIZ.step-1);shell();}
+function wizAnnuler(){const had=WIZ&&WIZ.dossierId;WIZ=null;VUE=had?"import":"accueil";shell();}
+function wizLancer(){
+  if(!DOSSIER||!DOSSIER.balances.length){toast("Importez au moins une balance pour lancer l’analyse");return;}
+  recalculer();WIZ=null;VUE="analyse";shell();
 }
 
 /* --- import --- */
@@ -4378,23 +4513,34 @@ function vueAnalyse(){
   ${commentaires}`;
 }
 function changerSecteur(s){if(!DOSSIER)return;DOSSIER.secteur=s;sauverDossier();rendre();}
+function anneeCibleBench(){
+  return (ETATS&&ETATS.annees.length)?ETATS.annees[ETATS.annees.length-1]
+    :((DOSSIER&&DOSSIER.balances.length)?Math.max(...DOSSIER.balances.map(b=>b.annee)):null);
+}
 function rappelSecteur(){
-  if(!_benchFetched){_benchFetched=true;chargerBenchmarksEnLigne();}
+  const an=anneeCibleBench();
+  if(an&&an!==_benchAnnee)chargerBenchmarksEnLigne(an);
   const cur=(DOSSIER&&DOSSIER.secteur)||"Général";
-  return `<div class="mut" style="margin-bottom:12px">Comparaison sectorielle : <b style="color:var(--navy)">${cur}</b> — modifiable dans <b>Paramètres</b>.</div>`;
+  const millesime=_benchAnneeUtil||_benchAnnee;
+  const suf=millesime?` (benchmark ${millesime})`:"";
+  return `<div class="mut" style="margin-bottom:12px">Comparaison sectorielle : <b style="color:var(--navy)">${cur}</b>${suf} — modifiable dans <b>Paramètres</b>.</div>`;
 }
 var BENCH_FN=(typeof LIC_FN!=="undefined"&&LIC_FN)?LIC_FN.replace("verifier-licence","benchmark"):"";
-var BENCH_ONLINE=null, _benchFetched=false;
+var BENCH_ONLINE=null, _benchAnnee=null, _benchAnneeUtil=null;
 function _benchConvertir(secteurs){const o={};for(const s in secteurs){if(secteurs[s]&&secteurs[s].ratios)o[s]=secteurs[s].ratios;}return o;}
-async function chargerBenchmarksEnLigne(){
-  try{const c=JSON.parse(localStorage.getItem("fx_bench_cache")||"null");if(c&&c.secteurs)BENCH_ONLINE=_benchConvertir(c.secteurs);}catch(e){}
+function _benchMillesime(secteurs){for(const s in secteurs){if(secteurs[s]&&secteurs[s].annee)return secteurs[s].annee;}return null;}
+async function chargerBenchmarksEnLigne(annee){
+  const cle=annee!=null?("fx_bench_cache_"+annee):"fx_bench_cache";
+  _benchAnnee=annee!=null?annee:_benchAnnee;
+  try{const c=JSON.parse(localStorage.getItem(cle)||"null");if(c&&c.secteurs){BENCH_ONLINE=_benchConvertir(c.secteurs);_benchAnneeUtil=_benchMillesime(c.secteurs)||annee||null;}}catch(e){}
   if(!BENCH_FN)return;
   try{
-    const r=await fetch(BENCH_FN,{method:"POST",headers:{"Content-Type":"application/json","apikey":LIC_KEY,"Authorization":"Bearer "+LIC_KEY},body:JSON.stringify({op:"benchmarks"})});
+    const r=await fetch(BENCH_FN,{method:"POST",headers:{"Content-Type":"application/json","apikey":LIC_KEY,"Authorization":"Bearer "+LIC_KEY},body:JSON.stringify(annee!=null?{op:"benchmarks",annee}:{op:"benchmarks"})});
     const d=await r.json();
     if(d&&d.ok&&d.secteurs){
-      localStorage.setItem("fx_bench_cache",JSON.stringify({t:Date.now(),secteurs:d.secteurs}));
+      localStorage.setItem(cle,JSON.stringify({t:Date.now(),annee:annee!=null?annee:null,secteurs:d.secteurs}));
       BENCH_ONLINE=_benchConvertir(d.secteurs);
+      _benchAnneeUtil=_benchMillesime(d.secteurs)||annee||null;
       if(VUE==="ratios"||VUE==="analyse")rendre();
     }
   }catch(e){}
@@ -4426,7 +4572,7 @@ async function envoyerContribution(){
   try{
     const r=await fetch(BENCH_FN,{method:"POST",headers:{"Content-Type":"application/json","apikey":LIC_KEY,"Authorization":"Bearer "+LIC_KEY},body:JSON.stringify(Object.assign({op:"contribuer",secteur:sect},ag))});
     const d=await r.json();
-    if(d&&d.ok){toast("Merci — société ajoutée au benchmark (anonyme).");chargerBenchmarksEnLigne();}
+    if(d&&d.ok){toast("Merci — société ajoutée au benchmark (anonyme).");const an=anneeCibleBench();try{localStorage.removeItem(an!=null?"fx_bench_cache_"+an:"fx_bench_cache");}catch(e){}chargerBenchmarksEnLigne(an!=null?an:undefined);}
     else toast("Échec : "+((d&&d.raison)||"réponse serveur"));
   }catch(e){toast("Envoi impossible (hors ligne ?).");}
 }
