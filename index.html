@@ -3871,7 +3871,7 @@ function supprimerDossier(id){
 
 /* ---------- assistant nouveau dossier (wizard) ---------- */
 var WIZ=null;
-function ouvrirWizard(){WIZ={step:1,nom:"",secteur:"Général",infos:{},showInfos:false,dossierId:null};VUE="wizard";shell();}
+function ouvrirWizard(){WIZ={step:1,nom:"",secteur:"Général",infos:{},showInfos:false,balances:[]};VUE="wizard";shell();}
 function wizStepper(){
   return `<div class="wiz-steps">`+["Secteur","Société","Balances","Récap"].map((lab,i)=>{
     const n=i+1,cls=n<WIZ.step?"done":(n===WIZ.step?"active":"todo");
@@ -3885,7 +3885,7 @@ function wizEtapeSecteur(){
    <div class="mut" style="margin:6px 0 12px">Sert à comparer les ratios et la notation à un groupe de pairs. « Général » = médiane de toutes les sociétés. <b>Ce n'est pas le métier exact</b> de la société — celui-ci se renseigne à l'étape suivante (facultatif). Modifiable ensuite dans Paramètres.</div>
    <div class="wiz-grid">${cartes}</div>`;
 }
-function wizSetSecteur(i){WIZ.secteur=SECTEURS[i]||"Général";if(WIZ.dossierId&&DOSSIER){DOSSIER.secteur=WIZ.secteur;sauverDossier();}rendre();}
+function wizSetSecteur(i){WIZ.secteur=SECTEURS[i]||"Général";rendre();}
 function wizEtapeSociete(){
   const f=WIZ.infos||{};
   let grille="";
@@ -3909,7 +3909,7 @@ function wizEtapeSociete(){
 }
 function wizToggleInfos(){ wizLire(); WIZ.showInfos=!WIZ.showInfos; rendre(); }
 function wizEtapeBalances(){
-  const bal=(DOSSIER?DOSSIER.balances:[]).slice().sort((a,b)=>a.annee-b.annee).map(b=>{
+  const bal=(WIZ.balances||[]).slice().sort((a,b)=>a.annee-b.annee).map(b=>{
     const eq=Math.abs(b.controle.ecart)<1;
     return `<tr><td>FY${b.annee}</td><td>${esc(b.fichier)}</td>
       <td><span class="chip ${eq?"ok":"bad"}">${eq?"équilibrée":"écart "+fmt(b.controle.ecart/1000)}</span></td>
@@ -3927,25 +3927,25 @@ function wizEtapeBalances(){
    ${bal||'<tr><td colspan="4" class="mut">Aucune balance importée pour l’instant.</td></tr>'}</table>`;
 }
 function wizEtapeRecap(){
-  const f=(DOSSIER&&DOSSIER.infos)||{},nb=DOSSIER?DOSSIER.balances.length:0;
-  const bal=DOSSIER?DOSSIER.balances.slice().sort((a,b)=>a.annee-b.annee).map(b=>{
-    const eq=Math.abs(b.controle.ecart)<1;return `FY${b.annee} <span class="chip ${eq?"ok":"bad"}">${eq?"OK":"écart"}</span>`;}).join(" · "):"";
+  const f=WIZ.infos||{},nb=(WIZ.balances||[]).length;
+  const bal=(WIZ.balances||[]).slice().sort((a,b)=>a.annee-b.annee).map(b=>{
+    const eq=Math.abs(b.controle.ecart)<1;return `FY${b.annee} <span class="chip ${eq?"ok":"bad"}">${eq?"OK":"écart"}</span>`;}).join(" · ");
   const info=[["secteur","Secteur d'activité"],["formeJuridique","Forme juridique"],["dirigeant","Dirigeant"],["adresse","Implantation"]]
     .filter(x=>f[x[0]]).map(x=>`<div><span class="mut">${x[1]}</span>${esc(f[x[0]])}</div>`).join("");
   return `<b>Récapitulatif</b>
    <div class="wiz-recap" style="margin-top:8px">
-     <div><span class="mut">Société</span><b>${esc(DOSSIER?DOSSIER.societe:"")}</b></div>
-     <div><span class="mut">Secteur (benchmark)</span><b>${esc(DOSSIER?DOSSIER.secteur:"")}</b></div>
+     <div><span class="mut">Société</span><b>${esc(WIZ.nom||"—")}</b></div>
+     <div><span class="mut">Secteur (benchmark)</span><b>${esc(WIZ.secteur||"Général")}</b></div>
      ${info}
      <div><span class="mut">Balances</span><span>${bal||'<span class="chip bad">aucune</span>'}</span></div>
    </div>
-   <div class="mut" style="margin-top:12px">${nb?"Tout est prêt — lancez l’analyse.":"Revenez à l’étape « Balances » pour importer au moins un exercice."}</div>`;
+   <div class="mut" style="margin-top:12px">${nb?"Clique « Lancer l'analyse » : la société sera créée et l'analyse s'ouvrira.":"Reviens à l'étape « Balances » pour importer au moins un exercice."}</div>`;
 }
 function vueWizard(){
   if(!WIZ)return '<div class="mut">…</div>';
   const s=WIZ.step;
   const corps=s===1?wizEtapeSecteur():s===2?wizEtapeSociete():s===3?wizEtapeBalances():wizEtapeRecap();
-  const gauche=s>1?`<button class="btn" onclick="wizPrecedent()">← Précédent</button>`:`<button class="btn" onclick="wizAnnuler()">Annuler</button>`;
+  const gauche=`<button class="btn" onclick="wizAnnuler()">Annuler</button>`+(s>1?`<button class="btn" onclick="wizPrecedent()">← Précédent</button>`:"");
   const droite=s<4?`<button class="btn primary" style="margin-left:auto" onclick="wizSuivant()">Suivant →</button>`
     :`<button class="btn primary" style="margin-left:auto" onclick="wizLancer()">Lancer l'analyse →</button>`;
   return `<h1>Nouvelle société</h1>${wizStepper()}
@@ -3963,25 +3963,24 @@ function wizLire(){
     WIZ.infos=inf;
   }
 }
-async function wizSuivant(){
+function wizSuivant(){
   wizLire();
-  if(WIZ.step===2){
-    if(!WIZ.nom){toast("Entrez le nom de la société");return;}
-    if(!WIZ.dossierId){
-      const id="d"+Date.now();
-      const q=await licAjouterSociete(id,WIZ.nom);
-      if(!q.ok){toast("Quota atteint : licence "+q.max+" société(s), "+q.used+" utilisées. Contactez Findalyx.");return;}
-      DOSSIER={id,societe:WIZ.nom,secteur:WIZ.secteur,infos:WIZ.infos,balances:[],overrides:{}};
-      WIZ.dossierId=id;localStorage.setItem(ACTIF_KEY,id);sauverDossier();
-    }else{DOSSIER.societe=WIZ.nom;DOSSIER.secteur=WIZ.secteur;DOSSIER.infos=WIZ.infos;sauverDossier();}
-  }
+  if(WIZ.step===2 && !WIZ.nom){toast("Entrez le nom de la société");return;}
   WIZ.step=Math.min(4,WIZ.step+1);shell();
 }
 function wizPrecedent(){wizLire();WIZ.step=Math.max(1,WIZ.step-1);shell();}
-function wizAnnuler(){const had=WIZ&&WIZ.dossierId;WIZ=null;VUE=had?"import":"accueil";shell();}
-function wizLancer(){
-  if(!DOSSIER||!DOSSIER.balances.length){toast("Importez au moins une balance pour lancer l’analyse");return;}
-  recalculer();WIZ=null;VUE="analyse";shell();
+function wizAnnuler(){WIZ=null;VUE="accueil";shell();}
+async function wizLancer(){
+  wizLire();
+  if(!WIZ.nom){toast("Renseignez le nom de la société (étape « Société »).");WIZ.step=2;shell();return;}
+  if(!WIZ.balances||!WIZ.balances.length){toast("Importez au moins une balance.");WIZ.step=3;shell();return;}
+  const id="d"+Date.now();
+  const q=await licAjouterSociete(id,WIZ.nom);
+  if(!q.ok){toast("Quota atteint : licence "+q.max+" société(s), "+q.used+" utilisées. Contactez Findalyx.");return;}
+  DOSSIER={id,societe:WIZ.nom,secteur:WIZ.secteur,infos:WIZ.infos,balances:WIZ.balances,overrides:{}};
+  localStorage.setItem(ACTIF_KEY,id);
+  recalculer();sauverDossier();
+  WIZ=null;VUE="analyse";shell();
 }
 
 /* --- import --- */
@@ -4036,13 +4035,19 @@ function importerBalance(){
   try{
     const mat=XLSX.utils.sheet_to_json(ws,{header:1,raw:true,defval:null});
     const res=lireBalance(mat);
-    DOSSIER.balances=DOSSIER.balances.filter(b=>b.annee!==annee);
-    DOSSIER.balances.push({annee,fichier:fichier.name,feuille,comptes:res.comptes,controle:res.controle});
+    const b={annee,fichier:fichier.name,feuille,comptes:res.comptes,controle:res.controle};
+    if(WIZ&&VUE==="wizard"){
+      WIZ.balances=WIZ.balances.filter(x=>x.annee!==annee);WIZ.balances.push(b);shell();
+      toast("Balance FY"+annee+" ajoutée ("+res.controle.nb+" comptes)");return;
+    }
+    DOSSIER.balances=DOSSIER.balances.filter(x=>x.annee!==annee);
+    DOSSIER.balances.push(b);
     recalculer();sauverDossier();shell();
     toast("Balance FY"+annee+" importée ("+res.controle.nb+" comptes)");
   }catch(err){toast("Erreur : "+err.message);}
 }
 function retirerBalance(annee){
+  if(WIZ&&VUE==="wizard"){WIZ.balances=WIZ.balances.filter(b=>b.annee!==annee);shell();return;}
   DOSSIER.balances=DOSSIER.balances.filter(b=>b.annee!==annee);
   recalculer();sauverDossier();shell();
 }
