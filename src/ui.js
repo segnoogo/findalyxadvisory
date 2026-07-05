@@ -724,7 +724,6 @@ const DEF_PL=[
   {code:"VARIATION_STOCKS",lib:"Variation de stocks",detail:true},
   {code:"COUTS_DIRECTS",lib:"Coûts directs",st:"stot",toujours:true},
   {code:"MARGE_BRUTE",lib:"Marge brute",st:"total",toujours:true},
-  {code:"MARGE_BRUTE",lib:"Marge brute",type:"pct"},
   /* — Autres produits (repliés en une ligne) — */
   {code:"AUTRES_PROD",lib:"Autres produits",toujours:true},
   /* — Frais généraux (personnel inclus) — */
@@ -737,10 +736,8 @@ const DEF_PL=[
   {code:"FRAIS_GENERAUX",lib:"Frais généraux",st:"stot",toujours:true},
   /* — EBITDA — */
   {code:"EBITDA",lib:"EBITDA",st:"total",toujours:true},
-  {code:"EBITDA",lib:"EBITDA",type:"pct"},
   {code:"DA",lib:"Dotations et reprises (nettes)",toujours:true},
   {code:"EBIT",lib:"EBIT",st:"total",toujours:true},
-  {code:"EBIT",lib:"EBIT",type:"pct"},
   /* — Résultat financier — */
   {code:"REVENUS_FIN",lib:"Produits financiers",detail:true},
   {code:"FRAIS_FIN",lib:"Charges financières",detail:true},
@@ -753,7 +750,6 @@ const DEF_PL=[
   {code:"RESULTAT_AVANT_IMPOT",lib:"Résultat avant impôt",st:"total",toujours:true},
   {code:"IMPOTS",lib:"Impôt sur le résultat",toujours:true},
   {code:"RESULTAT_NET",lib:"Résultat net",st:"total",toujours:true},
-  {code:"RESULTAT_NET",lib:"Résultat net",type:"pct"},
 ];
 /* DEF_PL avec les lignes personnalisées insérées avant le sous-total de leur agrégat
    (mêmes règles que le databook) — visibles en vue détaillée. */
@@ -856,6 +852,16 @@ function blocCommentaires(){
       oninput="DOSSIER.notes['${SOUS_ETAT}']=this.value;sauverDossier()">${esc(note)}</textarea>
   </div>`;
 }
+function blocRatiosMarge(){
+  const A=ETATS.annees;
+  const rats=[["MARGE_BRUTE","Marge brute / CA"],["EBITDA","Marge d'EBITDA"],
+    ["EBIT","Marge d'exploitation (EBIT)"],["RESULTAT_NET","Marge nette"]];
+  const lignes=rats.map(([code,lib])=>`<tr class="pct"><td>${lib}</td>${A.map(a=>{
+    const ca=ETATS.v.CA[a];return `<td class="num">${ca?Math.round(ETATS.v[code][a]/ca*1000)/10+" %":"-"}</td>`;}).join("")}</tr>`).join("");
+  return `<div class="card" style="padding:0;margin-top:12px">
+    <div class="bande">Ratios de marge (% du chiffre d'affaires)</div>
+    <div class="tscroll"><table class="tb etat"><tr><th>${uni().lib}</th>${A.map(a=>`<th class="num">FY${String(a).slice(-2)}</th>`).join("")}</tr>${lignes}</table></div></div>`;
+}
 function vueEtats(){
   if(!ETATS) return '<div class="mut">Importez d\'abord des balances.</div>';
   const tabs=[["pl","Compte de résultat"],["bs","Bilan (actif net)"],["tft","Flux de trésorerie"],["adj","EBITDA ajusté & BFR normatif"]]
@@ -869,7 +875,7 @@ function vueEtats(){
     <button class="${PL_VUE==="synth"?"on":""}" onclick="PL_VUE='synth';rendre()">Synthétique</button>
     <button class="${PL_VUE==="detail"?"on":""}" onclick="PL_VUE='detail';rendre()">Détaillée</button></div>`:"";
   return `<h1>États financiers</h1>
-  <div class="row" style="margin-bottom:12px;align-items:center">${tabs}${vueBtn}</div>${corps}${blocCommentaires()}`;
+  <div class="row" style="margin-bottom:12px;align-items:center">${tabs}${vueBtn}</div>${corps}${SOUS_ETAT==="pl"?blocRatiosMarge():""}${blocCommentaires()}`;
 }
 
 /* --- cartes KPI (style liasses fiscales) --- */

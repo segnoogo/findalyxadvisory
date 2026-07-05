@@ -9,9 +9,7 @@ const DB_PL=[
  {"code": "ACHATS_MP", "lib": "Achats de matières premières"},
  {"code": "VARIATION_STOCKS", "lib": "Variation de stocks"},
  {"code": "COUTS_DIRECTS", "lib": "Coûts directs", "type": "sous_total", "somme": ["ACHATS_MARCH", "ACHATS_MP", "VARIATION_STOCKS"]},
- {"code": "MARGE_BRUTE", "lib": "Marge brute", "type": "sous_total", "somme": ["CA", "COUTS_DIRECTS"]},
- {"code": "PCT_MARGE_BRUTE", "lib": "% Marge brute / CA", "type": "pourcentage", "num": "MARGE_BRUTE"},
- {"code": "AUTRES_PROD", "lib": "Autres produits", "codes": ["SUBVENTIONS", "PROD_STOCKEE", "PROD_IMMOBILISEE", "AUTRES_PRODUITS"]},
+ {"code": "MARGE_BRUTE", "lib": "Marge brute", "type": "sous_total", "somme": ["CA", "COUTS_DIRECTS"]}, {"code": "AUTRES_PROD", "lib": "Autres produits", "codes": ["SUBVENTIONS", "PROD_STOCKEE", "PROD_IMMOBILISEE", "AUTRES_PRODUITS"]},
  {"code": "AUTRES_ACHATS", "lib": "Autres achats"},
  {"code": "TRANSPORTS", "lib": "Transports"},
  {"code": "SERVICES_EXT", "lib": "Services extérieurs", "codes": ["SOUS_TRAITANCE", "LOCATIONS", "ENTRETIEN", "ASSURANCES", "PUBLICITE", "TELECOM", "FRAIS_BANCAIRES", "HONORAIRES", "PERSONNEL_EXT", "AUTRES_SERV_EXT"]},
@@ -19,13 +17,9 @@ const DB_PL=[
  {"code": "AUTRES_CHARGES", "lib": "Autres charges"},
  {"code": "CHARGES_PERSONNEL", "lib": "Charges de personnel"},
  {"code": "FRAIS_GENERAUX", "lib": "Frais généraux", "type": "sous_total", "somme": ["AUTRES_ACHATS", "TRANSPORTS", "SERVICES_EXT", "IMPOTS_TAXES", "AUTRES_CHARGES", "CHARGES_PERSONNEL"]},
- {"code": "EBITDA", "lib": "EBITDA", "type": "sous_total", "somme": ["MARGE_BRUTE", "AUTRES_PROD", "FRAIS_GENERAUX"]},
- {"code": "PCT_EBITDA", "lib": "% EBITDA / CA", "type": "pourcentage", "num": "EBITDA"},
- {"code": "DOTATIONS", "lib": "Dotations aux amortissements et provisions"},
+ {"code": "EBITDA", "lib": "EBITDA", "type": "sous_total", "somme": ["MARGE_BRUTE", "AUTRES_PROD", "FRAIS_GENERAUX"]}, {"code": "DOTATIONS", "lib": "Dotations aux amortissements et provisions"},
  {"code": "REPRISES", "lib": "Reprises de provisions"},
- {"code": "EBIT", "lib": "EBIT (résultat d'exploitation)", "type": "sous_total", "somme": ["EBITDA", "DOTATIONS", "REPRISES"]},
- {"code": "PCT_EBIT", "lib": "% EBIT / CA", "type": "pourcentage", "num": "EBIT"},
- {"code": "REVENUS_FIN", "lib": "Produits financiers"},
+ {"code": "EBIT", "lib": "EBIT (résultat d'exploitation)", "type": "sous_total", "somme": ["EBITDA", "DOTATIONS", "REPRISES"]}, {"code": "REVENUS_FIN", "lib": "Produits financiers"},
  {"code": "FRAIS_FIN", "lib": "Charges financières"},
  {"code": "RESULTAT_FINANCIER", "lib": "Résultat financier", "type": "sous_total", "somme": ["REVENUS_FIN", "FRAIS_FIN"]},
  {"code": "RAO", "lib": "Résultat des activités ordinaires", "type": "sous_total", "somme": ["EBIT", "RESULTAT_FINANCIER"]},
@@ -35,8 +29,7 @@ const DB_PL=[
  {"code": "RESULTAT_AVANT_IMPOT", "lib": "Résultat avant impôt", "type": "sous_total", "somme": ["RAO", "RESULTAT_HAO"]},
  {"code": "PARTICIPATION", "lib": "Participation des travailleurs"},
  {"code": "IS", "lib": "Impôt sur le résultat"},
- {"code": "RESULTAT_NET", "lib": "Résultat net", "type": "sous_total", "somme": ["RESULTAT_AVANT_IMPOT", "PARTICIPATION", "IS"]},
- {"code": "PCT_RESULTAT_NET", "lib": "% Résultat net / CA", "type": "pourcentage", "num": "RESULTAT_NET"}
+ {"code": "RESULTAT_NET", "lib": "Résultat net", "type": "sous_total", "somme": ["RESULTAT_AVANT_IMPOT", "PARTICIPATION", "IS"]}
 ];
 const DB_BS=[
  {"code": "IMMO_INCORP", "lib": "Immobilisations incorporelles", "section": "IMMOBILISATIONS"},
@@ -246,6 +239,20 @@ async function genererDatabook(){
       local[l.code]=idx;
       rows[(nom===ongPL?"PL_":"BS_")+l.code]=idx;
     });
+    /* bloc ratios de marge en bas (feuille P&L uniquement) */
+    if(local["CA"]){
+      ws.addRow([]);
+      const rh=ws.addRow([null,"Ratios de marge (% du chiffre d'affaires)"]);
+      rh.getCell(2).font={bold:true,color:{argb:"FF172554"}};
+      [["MARGE_BRUTE","Marge brute / CA"],["EBITDA","Marge d'EBITDA"],
+       ["EBIT","Marge d'exploitation (EBIT)"],["RESULTAT_NET","Marge nette"]].forEach(([c,lib])=>{
+        if(!local[c])return;
+        const r=ws.addRow([null,lib]);r.font={italic:true,color:{argb:"FF808080"}};
+        A.forEach((a,j)=>{const col=String.fromCharCode(67+j);
+          r.getCell(3+j).value={formula:`IF(${col}${local["CA"]}=0,"",${col}${local[c]}/${col}${local["CA"]})`};
+          r.getCell(3+j).numFmt='0.0%;(0.0%)';});
+      });
+    }
     ws.columns=[{width:3},{width:44},...A.map(()=>({width:14})),...A.slice(1).map(()=>({width:9})),...(avecCagr?[{width:9}]:[])];
     return local;
   }

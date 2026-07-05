@@ -84,6 +84,15 @@ function construireEtatsFormules(wb){
       rc[l.code]=rn;
     });
     rP.RN=rc["RESULTAT_NET"];
+    /* bloc ratios de marge en bas de la feuille P&L */
+    wsP._rn++;
+    const rhn=wsP._rn++;
+    wsP.getCell(rhn,2).value="Ratios de marge (% du chiffre d'affaires)";
+    wsP.getRow(rhn).font={bold:true,color:{argb:"FF172554"}};
+    [["MARGE_BRUTE","Marge brute / CA"],["EBITDA","Marge d'EBITDA"],
+     ["EBIT","Marge d'exploitation (EBIT)"],["RESULTAT_NET","Marge nette"]].forEach(([c,lib])=>{
+      if(rc[c]) ligneF(wsP,lib,i=>`IF(${L(3+i)}${rc["CA"]}=0,"",${L(3+i)}${rc[c]}/${L(3+i)}${rc["CA"]})`,{pct:1});
+    });
   }
   wsP.columns=[{width:3},{width:46},...Array(n).fill({width:14}),...Array(n-1).fill({width:9}),...(avecCagr?[{width:9}]:[])];
   const refP="'"+nomOnglet("P&L").replace(/'/g,"''")+"'";
