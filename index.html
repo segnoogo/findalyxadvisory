@@ -3746,9 +3746,9 @@ function rendre(){
 /* Catégories de restitution — partagées par le mapping, le moteur et le databook */
 const GROUPES_MAP=[
  {etat:"PL",lib:"Chiffre d'affaires",agregat:"CA",codes:["CA_MARCHANDISES","CA_PRODUITS","CA_SERVICES","CA_ACCESSOIRES"]},
- {etat:"PL",lib:"Coûts directs",agregat:"COUTS_DIRECTS",codes:["ACHATS_MARCH","ACHATS_MP","AUTRES_ACHATS"]},
+ {etat:"PL",lib:"Coûts directs",agregat:"COUTS_DIRECTS",codes:["ACHATS_MARCH","ACHATS_MP","VARIATION_STOCKS"]},
  {etat:"PL",lib:"Subventions et autres produits",agregat:"AUTRES_PROD",codes:["SUBVENTIONS","PROD_STOCKEE","PROD_IMMOBILISEE","AUTRES_PRODUITS"]},
- {etat:"PL",lib:"Frais généraux",agregat:"OPEX",codes:["SOUS_TRAITANCE","LOCATIONS","ENTRETIEN","ASSURANCES","PUBLICITE","TELECOM","FRAIS_BANCAIRES","HONORAIRES","PERSONNEL_EXT","TRANSPORTS","AUTRES_SERV_EXT","IMPOTS_TAXES","AUTRES_CHARGES"]},
+ {etat:"PL",lib:"Frais généraux",agregat:"OPEX",codes:["AUTRES_ACHATS","SOUS_TRAITANCE","LOCATIONS","ENTRETIEN","ASSURANCES","PUBLICITE","TELECOM","FRAIS_BANCAIRES","HONORAIRES","PERSONNEL_EXT","TRANSPORTS","AUTRES_SERV_EXT","IMPOTS_TAXES","AUTRES_CHARGES"]},
  {etat:"PL",lib:"Charges de personnel",agregat:"CHARGES_PERSONNEL",codes:["CHARGES_PERSONNEL"]},
  {etat:"PL",lib:"Amortissements et provisions",agregat:"DA",codes:["DOTATIONS","REPRISES"]},
  {etat:"PL",lib:"Résultat financier",agregat:"RESULTAT_FIN",codes:["REVENUS_FIN","FRAIS_FIN"]},
@@ -4254,7 +4254,7 @@ function codesDe(code){
   const base=COMPOSITION[code]||[code];
   const persoL=DOSSIER&&DOSSIER.lignesPerso||[];
   const extra=persoL.filter(pp=>pp.agregat===code
-    ||(GROUPES_MAP.find(g=>g.agregat===pp.agregat)||{codes:[]}).codes.some(c=>base.includes(c))
+    ||(COMPOSITION[code]&&(GROUPES_MAP.find(g=>g.agregat===pp.agregat)||{codes:[]}).codes.some(c=>base.includes(c)))
   ).map(pp=>pp.code);
   return [...base,...extra];
 }
