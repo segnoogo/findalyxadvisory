@@ -750,6 +750,22 @@ const DEF_PL=[
   {code:"RESULTAT_NET",lib:"Résultat net",st:"total",toujours:true},
   {code:"RESULTAT_NET",lib:"Résultat net",type:"pct"},
 ];
+/* DEF_PL avec les lignes personnalisées insérées avant le sous-total de leur agrégat
+   (mêmes règles que le databook) — visibles en vue détaillée. */
+function defPL(){
+  const perso=(DOSSIER&&DOSSIER.lignesPerso||[]).filter(x=>x.etat==="PL");
+  if(!perso.length) return DEF_PL;
+  const CIBLE={CA:"CA",COUTS_DIRECTS:"COUTS_DIRECTS",AUTRES_PROD:"EBITDA",OPEX:"FRAIS_GENERAUX",
+    CHARGES_PERSONNEL:"FRAIS_GENERAUX",DA:"EBIT",RESULTAT_FIN:"RESULTAT_FIN",
+    RESULTAT_HAO:"RESULTAT_HAO",IMPOTS:"RESULTAT_NET"};
+  const out=DEF_PL.slice();
+  perso.forEach(pp=>{
+    const cible=CIBLE[pp.agregat]||"EBITDA";
+    const i=out.findIndex(d=>d.code===cible&&d.st);
+    if(i>=0) out.splice(i,0,{code:pp.code,lib:pp.lib,detail:true});
+  });
+  return out;
+}
 const DEF_BS=[
   {code:"ACTIFS_IMMOBILISES",lib:"Actifs immobilisés",st:"total"},
   {code:"STOCKS",lib:"Stocks"},
@@ -840,7 +856,7 @@ function vueEtats(){
   const tabs=[["pl","Compte de résultat"],["bs","Bilan (actif net)"],["tft","Flux de trésorerie"],["adj","EBITDA ajusté & BFR normatif"]]
     .map(([id,lab])=>`<button class="btn ${SOUS_ETAT===id?"primary":""}" onclick="SOUS_ETAT='${id}';rendre()">${lab}</button>`).join(" ");
   let corps="";
-  if(SOUS_ETAT==="pl") corps=tableEtat(DEF_PL,"Compte de résultat analytique");
+  if(SOUS_ETAT==="pl") corps=tableEtat(defPL(),"Compte de résultat analytique");
   else if(SOUS_ETAT==="bs") corps=tableEtat(DEF_BS,"Bilan — présentation actif net");
   else if(SOUS_ETAT==="tft") corps=tableTFT();
   else corps=vueAjustements();
