@@ -87,15 +87,18 @@ function construireEtatsFormules(wb){
     /* bloc ratios de marge en bas de la feuille P&L */
     wsP._rn++;
     const rhn=wsP._rn++;
-    wsP.getCell(rhn,2).value="Ratios de marge (% du chiffre d'affaires)";
+    wsP.getCell(rhn,2).value="Ratios du compte de résultat";
     wsP.getRow(rhn).font={bold:true,color:{argb:"FF172554"}};
-    [["MARGE_BRUTE","Marge brute / CA"],["EBITDA","Marge d'EBITDA"],
-     ["EBIT","Marge d'exploitation (EBIT)"],["RESULTAT_NET","Marge nette"]].forEach(([c,lib])=>{
-      if(!rc[c])return;
+    [["Marge brute / CA","MARGE_BRUTE","CA",""],["Marge d'EBITDA","EBITDA","CA",""],
+     ["Marge d'exploitation (EBIT)","EBIT","CA",""],["Marge nette","RESULTAT_NET","CA",""],
+     ["Frais généraux (overhead) / CA","FRAIS_GENERAUX","CA","-"],
+     ["Charges de personnel / CA","CHARGES_PERSONNEL","CA","-"],
+     ["Taux d'impôt effectif","IS","RESULTAT_AVANT_IMPOT","-"]].forEach(([lib,num,den,sg])=>{
+      if(!rc[num]||!rc[den])return;
       const rn=wsP._rn++;
       wsP.getCell(rn,2).value=lib;wsP.getRow(rn).font={italic:true,color:{argb:"FF808080"}};
       A.forEach((a,i)=>{const cl=wsP.getCell(rn,3+i);
-        cl.value={formula:`IF(${L(3+i)}${rc["CA"]}=0,"",${L(3+i)}${rc[c]}/${L(3+i)}${rc["CA"]})`};
+        cl.value={formula:`IF(${L(3+i)}${rc[den]}=0,"",${sg}${L(3+i)}${rc[num]}/${L(3+i)}${rc[den]})`};
         cl.numFmt='0.0%;(0.0%)';});
       A.slice(1).forEach((a,i)=>{const cd=wsP.getCell(rn,3+n+i);
         cd.value={formula:`IFERROR((${L(4+i)}${rn}-${L(3+i)}${rn})*10000,"")`};

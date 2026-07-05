@@ -883,13 +883,17 @@ function blocRatios(titre,items,annees){
     <div class="tscroll"><table class="tb etat"><tr><th>${uni().lib}</th>${th}</tr>${lignes}</table></div></div>`;
 }
 function blocRatiosMarge(){
-  const A=ETATS.annees;
-  const mk=code=>{const o={};A.forEach(a=>{const ca=ETATS.v.CA[a];o[a]=ca?ETATS.v[code][a]/ca*100:null;});return o;};
-  return blocRatios("Ratios de marge (% du chiffre d'affaires)",[
-    {lab:"Marge brute / CA",unit:"%",vals:mk("MARGE_BRUTE")},
-    {lab:"Marge d'EBITDA",unit:"%",vals:mk("EBITDA")},
-    {lab:"Marge d'exploitation (EBIT)",unit:"%",vals:mk("EBIT")},
-    {lab:"Marge nette",unit:"%",vals:mk("RESULTAT_NET")}]);
+  const A=ETATS.annees, v=ETATS.v;
+  const px=fn=>{const o={};A.forEach(a=>{const x=fn(a);o[a]=(x===null||x===undefined||!isFinite(x))?null:x;});return o;};
+  const surCA=code=>px(a=>v.CA[a]?v[code][a]/v.CA[a]*100:null);
+  return blocRatios("Ratios du compte de résultat",[
+    {lab:"Marge brute / CA",unit:"%",vals:surCA("MARGE_BRUTE")},
+    {lab:"Marge d'EBITDA",unit:"%",vals:surCA("EBITDA")},
+    {lab:"Marge d'exploitation (EBIT)",unit:"%",vals:surCA("EBIT")},
+    {lab:"Marge nette",unit:"%",vals:surCA("RESULTAT_NET")},
+    {lab:"Frais généraux (overhead) / CA",unit:"%",vals:px(a=>v.CA[a]?-v.FRAIS_GENERAUX[a]/v.CA[a]*100:null)},
+    {lab:"Charges de personnel / CA",unit:"%",vals:px(a=>v.CA[a]?-v.CHARGES_PERSONNEL[a]/v.CA[a]*100:null)},
+    {lab:"Taux d'impôt effectif",unit:"%",vals:px(a=>v.RESULTAT_AVANT_IMPOT[a]?-v.IS[a]/v.RESULTAT_AVANT_IMPOT[a]*100:null)}]);
 }
 function blocRatiosBilan(){
   const R=calculerRatios(ETATS).ratios.filter(r=>!["margeBrute","margeEbitda","margeNette"].includes(r.k));

@@ -242,15 +242,18 @@ async function genererDatabook(){
     /* bloc ratios de marge en bas (feuille P&L uniquement) */
     if(local["CA"]){
       ws.addRow([]);
-      const rh=ws.addRow([null,"Ratios de marge (% du chiffre d'affaires)"]);
+      const rh=ws.addRow([null,"Ratios du compte de résultat"]);
       rh.getCell(2).font={bold:true,color:{argb:"FF172554"}};
-      [["MARGE_BRUTE","Marge brute / CA"],["EBITDA","Marge d'EBITDA"],
-       ["EBIT","Marge d'exploitation (EBIT)"],["RESULTAT_NET","Marge nette"]].forEach(([c,lib])=>{
-        if(!local[c])return;
+      [["Marge brute / CA","MARGE_BRUTE","CA",""],["Marge d'EBITDA","EBITDA","CA",""],
+       ["Marge d'exploitation (EBIT)","EBIT","CA",""],["Marge nette","RESULTAT_NET","CA",""],
+       ["Frais généraux (overhead) / CA","FRAIS_GENERAUX","CA","-"],
+       ["Charges de personnel / CA","CHARGES_PERSONNEL","CA","-"],
+       ["Taux d'impôt effectif","IS","RESULTAT_AVANT_IMPOT","-"]].forEach(([lib,num,den,sg])=>{
+        if(!local[num]||!local[den])return;
         const r=ws.addRow([null,lib]);r.font={italic:true,color:{argb:"FF808080"}};
         const rn=r.number;
         A.forEach((a,j)=>{const col=String.fromCharCode(67+j);
-          r.getCell(3+j).value={formula:`IF(${col}${local["CA"]}=0,"",${col}${local[c]}/${col}${local["CA"]})`};
+          r.getCell(3+j).value={formula:`IF(${col}${local[den]}=0,"",${sg}${col}${local[num]}/${col}${local[den]})`};
           r.getCell(3+j).numFmt='0.0%;(0.0%)';});
         A.slice(1).forEach((a,i)=>{const c1=String.fromCharCode(67+i),c2=String.fromCharCode(68+i);
           const cd=r.getCell(3+n+i);
