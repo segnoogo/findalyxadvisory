@@ -105,7 +105,8 @@ const LIGNES_PL = [
   {code:"CA_ACCESSOIRES", lib:"Produits accessoires", pref:["707","708"]},
   {code:"ACHATS_MARCH", lib:"Achats de marchandises", pref:["601","6031"]},
   {code:"ACHATS_MP", lib:"Achats de matières premières", pref:["602","6032"]},
-  {code:"AUTRES_ACHATS", lib:"Autres achats consommés", pref:["604","605","608","6033","6038","603"]},
+  {code:"AUTRES_ACHATS", lib:"Autres achats (eau, énergie, fournitures)", pref:["604","605","608"]},
+  {code:"VARIATION_STOCKS", lib:"Variation de stocks", pref:["603","6033","6038"]},
   {code:"SUBVENTIONS", lib:"Subventions d'exploitation", pref:["71"]},
   {code:"PROD_STOCKEE", lib:"Production stockée", pref:["73"]},
   {code:"PROD_IMMOBILISEE", lib:"Production immobilisée", pref:["72"]},
@@ -417,7 +418,7 @@ function calculerEtats(tbagr,lignesPerso){
   const li=(code,signe)=>{v[code]={};A.forEach(a=>v[code][a]=signe*S(code,a));};
   /* P&L : produits +, charges - */
   ["CA_MARCHANDISES","CA_PRODUITS","CA_SERVICES","CA_ACCESSOIRES","ACHATS_MARCH","ACHATS_MP",
-   "AUTRES_ACHATS","SUBVENTIONS","PROD_STOCKEE","PROD_IMMOBILISEE","AUTRES_PRODUITS",
+   "AUTRES_ACHATS","VARIATION_STOCKS","SUBVENTIONS","PROD_STOCKEE","PROD_IMMOBILISEE","AUTRES_PRODUITS",
    "SOUS_TRAITANCE","LOCATIONS","ENTRETIEN","ASSURANCES","PUBLICITE","TELECOM","FRAIS_BANCAIRES",
    "HONORAIRES","PERSONNEL_EXT","TRANSPORTS","AUTRES_SERV_EXT","IMPOTS_TAXES","AUTRES_CHARGES",
    "CHARGES_PERSONNEL","DOTATIONS","REPRISES","REVENUS_FIN","FRAIS_FIN","PRODUITS_HAO",
@@ -438,20 +439,26 @@ function calculerEtats(tbagr,lignesPerso){
   const P=(agg)=>perso[agg]||[];
   const somme=(codes)=>{const o={};A.forEach(a=>o[a]=codes.reduce((t,c)=>t+(v[c]?v[c][a]:0),0));return o;};
   v.CA=somme(["CA_MARCHANDISES","CA_PRODUITS","CA_SERVICES","CA_ACCESSOIRES",...P("CA")]);
-  v.COUTS_DIRECTS=somme(["ACHATS_MARCH","ACHATS_MP","AUTRES_ACHATS",...P("COUTS_DIRECTS")]);
+  v.COUTS_DIRECTS=somme(["ACHATS_MARCH","ACHATS_MP","VARIATION_STOCKS",...P("COUTS_DIRECTS")]);
   v.MARGE_BRUTE=somme(["CA","COUTS_DIRECTS"]);
   v.AUTRES_PROD=somme(["SUBVENTIONS","PROD_STOCKEE","PROD_IMMOBILISEE","AUTRES_PRODUITS",...P("AUTRES_PROD")]);
-  v.OPEX=somme(["SOUS_TRAITANCE","LOCATIONS","ENTRETIEN","ASSURANCES","PUBLICITE","TELECOM",
-                "FRAIS_BANCAIRES","HONORAIRES","PERSONNEL_EXT","TRANSPORTS","AUTRES_SERV_EXT",
-                "IMPOTS_TAXES","AUTRES_CHARGES",...P("OPEX")]);
+  /* Services extérieurs (62/63) regroupés en une seule ligne d'affichage */
+  v.SERVICES_EXT=somme(["SOUS_TRAITANCE","LOCATIONS","ENTRETIEN","ASSURANCES","PUBLICITE","TELECOM",
+                "FRAIS_BANCAIRES","HONORAIRES","PERSONNEL_EXT","AUTRES_SERV_EXT"]);
+  /* OPEX (frais généraux hors personnel) : autres achats + services + transports + impôts&taxes + autres charges */
+  v.OPEX=somme(["AUTRES_ACHATS","SERVICES_EXT","TRANSPORTS","IMPOTS_TAXES","AUTRES_CHARGES",...P("OPEX")]);
   v.CHARGES_PERSONNEL=somme(["CHARGES_PERSONNEL",...P("CHARGES_PERSONNEL")]);
-  v.EBITDA=somme(["MARGE_BRUTE","AUTRES_PROD","OPEX","CHARGES_PERSONNEL"]);
+  /* Frais généraux = OPEX + charges de personnel (le personnel fait partie des frais généraux) */
+  v.FRAIS_GENERAUX=somme(["OPEX","CHARGES_PERSONNEL"]);
+  v.EBITDA=somme(["MARGE_BRUTE","AUTRES_PROD","FRAIS_GENERAUX"]);
   v.DA=somme(["DOTATIONS","REPRISES",...P("DA")]);
   v.EBIT=somme(["EBITDA","DA"]);
   v.RESULTAT_FIN=somme(["REVENUS_FIN","FRAIS_FIN",...P("RESULTAT_FIN")]);
+  v.RAO=somme(["EBIT","RESULTAT_FIN"]);
   v.RESULTAT_HAO=somme(["PRODUITS_HAO","CHARGES_HAO",...P("RESULTAT_HAO")]);
+  v.RESULTAT_AVANT_IMPOT=somme(["RAO","RESULTAT_HAO"]);
   v.IMPOTS=somme(["IS","PARTICIPATION",...P("IMPOTS")]);
-  v.RESULTAT_NET=somme(["EBIT","RESULTAT_FIN","RESULTAT_HAO","IMPOTS"]);
+  v.RESULTAT_NET=somme(["RESULTAT_AVANT_IMPOT","IMPOTS"]);
 
   v.ACTIFS_IMMOBILISES=somme(["IMMO_INCORP","IMMO_CORP","AVANCES_IMMO","IMMO_FIN","AMORT_DEPREC",...P("ACTIFS_IMMOBILISES")]);
   v.BFR_EXPL=somme(["STOCKS","CLIENTS","CLIENTS_AVANCES","AVANCES_FRS",

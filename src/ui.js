@@ -686,7 +686,7 @@ function tableEtat(defs,titre){
   const th=A.map(a=>`<th class="num">FY${String(a).slice(-2)}</th>`).join("")
     +A.slice(1).map((a,i)=>`<th class="num delta">Δ${String(A[i]).slice(-2)}-${String(a).slice(-2)}</th>`).join("")
     +(n>2?'<th class="num delta">CAGR</th>':"");
-  const lignes=defs.map(d=>{
+  const lignes=(PL_VUE==="detail"?defs:defs.filter(d=>!d.detail)).map(d=>{
     if(d.type==="pct"){
       const cells=A.map(a=>{const ca=ETATS.v.CA[a];return `<td class="num pctl">${ca?Math.round(ETATS.v[d.code][a]/ca*100)+"%":"-"}</td>`;}).join("");
       return `<tr class="pct"><td>% ${esc(d.lib)}/CA</td>${cells}${'<td class="delta"></td>'.repeat(n-1+(n>2?1:0))}</tr>`;
@@ -695,7 +695,7 @@ function tableEtat(defs,titre){
     if(vals.every(v=>Math.abs(v)<0.5)&&!d.toujours) return "";
     const deltas=A.slice(1).map((a,i)=>vals[i]?fpct(vals[i+1]/vals[i]-1):"-");
     const cagr=n>2?(vals[0]>0&&vals[n-1]>0?fpct(Math.pow(vals[n-1]/vals[0],1/(n-1))-1):"-"):null;
-    return `<tr class="${d.st||""} cliquable" onclick="detailLigne('${d.code}','${d.lib.replace(/'/g,"\\'")}')" title="Voir les comptes">
+    return `<tr class="${d.st||""}${d.detail?" det":""} cliquable" onclick="detailLigne('${d.code}','${d.lib.replace(/'/g,"\\'")}')" title="Voir les comptes">
       <td>${esc(d.lib)}<span class="chev">›</span></td>
       ${vals.map(v=>`<td class="num">${fmt(v)}</td>`).join("")}
       ${deltas.map(x=>`<td class="num delta">${x}</td>`).join("")}
@@ -705,21 +705,48 @@ function tableEtat(defs,titre){
     <div class="bande">${esc(DOSSIER.societe.toUpperCase())} — ${titre}</div>
     <div class="tscroll"><table class="tb etat"><tr><th>${uni().lib}</th>${th}</tr>${lignes}</table></div></div>`;
 }
+let PL_VUE="synth";   /* "synth" (défaut) | "detail" — bascule d'affichage du P&L */
 const DEF_PL=[
+  /* — Chiffre d'affaires — */
+  {code:"CA_MARCHANDISES",lib:"Ventes de marchandises",detail:true},
+  {code:"CA_PRODUITS",lib:"Production vendue (biens et travaux)",detail:true},
+  {code:"CA_SERVICES",lib:"Prestations de services",detail:true},
+  {code:"CA_ACCESSOIRES",lib:"Produits accessoires",detail:true},
   {code:"CA",lib:"Chiffre d'affaires",st:"titre",toujours:true},
-  {code:"COUTS_DIRECTS",lib:"Coûts directs"},
+  /* — Coûts directs (601/602 + variation de stocks) — */
+  {code:"ACHATS_MARCH",lib:"Achats de marchandises",detail:true},
+  {code:"ACHATS_MP",lib:"Achats de matières premières",detail:true},
+  {code:"VARIATION_STOCKS",lib:"Variation de stocks",detail:true},
+  {code:"COUTS_DIRECTS",lib:"Coûts directs",st:"stot",toujours:true},
   {code:"MARGE_BRUTE",lib:"Marge brute",st:"total",toujours:true},
   {code:"MARGE_BRUTE",lib:"Marge brute",type:"pct"},
-  {code:"AUTRES_PROD",lib:"Subventions et autres produits"},
-  {code:"OPEX",lib:"Frais généraux"},
-  {code:"CHARGES_PERSONNEL",lib:"Charges de personnel"},
+  /* — Autres produits (repliés en une ligne) — */
+  {code:"AUTRES_PROD",lib:"Autres produits",toujours:true},
+  /* — Frais généraux (personnel inclus) — */
+  {code:"AUTRES_ACHATS",lib:"Autres achats (604/605/608)",detail:true},
+  {code:"TRANSPORTS",lib:"Transports",detail:true},
+  {code:"SERVICES_EXT",lib:"Services extérieurs (62/63)",detail:true},
+  {code:"IMPOTS_TAXES",lib:"Impôts et taxes",detail:true},
+  {code:"AUTRES_CHARGES",lib:"Autres charges",detail:true},
+  {code:"CHARGES_PERSONNEL",lib:"Charges de personnel",detail:true},
+  {code:"FRAIS_GENERAUX",lib:"Frais généraux",st:"stot",toujours:true},
+  /* — EBITDA — */
   {code:"EBITDA",lib:"EBITDA",st:"total",toujours:true},
   {code:"EBITDA",lib:"EBITDA",type:"pct"},
-  {code:"DA",lib:"Amortissements et provisions (nets)"},
+  {code:"DA",lib:"Dotations et reprises (nettes)",toujours:true},
   {code:"EBIT",lib:"EBIT",st:"total",toujours:true},
-  {code:"RESULTAT_FIN",lib:"Résultat financier"},
-  {code:"RESULTAT_HAO",lib:"Résultat HAO"},
-  {code:"IMPOTS",lib:"Impôt sur le résultat"},
+  {code:"EBIT",lib:"EBIT",type:"pct"},
+  /* — Résultat financier — */
+  {code:"REVENUS_FIN",lib:"Produits financiers",detail:true},
+  {code:"FRAIS_FIN",lib:"Charges financières",detail:true},
+  {code:"RESULTAT_FIN",lib:"Résultat financier",st:"stot",toujours:true},
+  {code:"RAO",lib:"Résultat des activités ordinaires",st:"total",toujours:true},
+  /* — HAO — */
+  {code:"PRODUITS_HAO",lib:"Produits HAO",detail:true},
+  {code:"CHARGES_HAO",lib:"Charges HAO",detail:true},
+  {code:"RESULTAT_HAO",lib:"Résultat HAO",st:"stot",toujours:true},
+  {code:"RESULTAT_AVANT_IMPOT",lib:"Résultat avant impôt",st:"total",toujours:true},
+  {code:"IMPOTS",lib:"Impôt sur le résultat",toujours:true},
   {code:"RESULTAT_NET",lib:"Résultat net",st:"total",toujours:true},
   {code:"RESULTAT_NET",lib:"Résultat net",type:"pct"},
 ];
@@ -817,8 +844,11 @@ function vueEtats(){
   else if(SOUS_ETAT==="bs") corps=tableEtat(DEF_BS,"Bilan — présentation actif net");
   else if(SOUS_ETAT==="tft") corps=tableTFT();
   else corps=vueAjustements();
+  const vueBtn=SOUS_ETAT==="pl"?`<div class="segvue">
+    <button class="${PL_VUE==="synth"?"on":""}" onclick="PL_VUE='synth';rendre()">Synthétique</button>
+    <button class="${PL_VUE==="detail"?"on":""}" onclick="PL_VUE='detail';rendre()">Détaillée</button></div>`:"";
   return `<h1>États financiers</h1>
-  <div class="row" style="margin-bottom:12px">${tabs}</div>${corps}${blocCommentaires()}`;
+  <div class="row" style="margin-bottom:12px;align-items:center">${tabs}${vueBtn}</div>${corps}${blocCommentaires()}`;
 }
 
 /* --- cartes KPI (style liasses fiscales) --- */

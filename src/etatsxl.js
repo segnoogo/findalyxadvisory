@@ -64,8 +64,8 @@ function construireEtatsFormules(wb){
   const rP={};
   {
     /* lignes personnalisées insérées avant le sous-total de leur agrégat (comme le databook) */
-    const AG_ST_PL={CA:"CA",COUTS_DIRECTS:"MARGE_BRUTE",AUTRES_PROD:"EBITDA",OPEX:"EBITDA",
-      CHARGES_PERSONNEL:"EBITDA",DA:"EBIT",RESULTAT_FIN:"RESULTAT_FINANCIER",
+    const AG_ST_PL={CA:"CA",COUTS_DIRECTS:"COUTS_DIRECTS",AUTRES_PROD:"EBITDA",OPEX:"FRAIS_GENERAUX",
+      CHARGES_PERSONNEL:"FRAIS_GENERAUX",DA:"EBIT",RESULTAT_FIN:"RESULTAT_FINANCIER",
       RESULTAT_HAO:"RESULTAT_HAO",IMPOTS:"RESULTAT_NET"};
     const dPL=DB_PL.map(l=>Object.assign({},l,l.somme?{somme:l.somme.slice()}:{}));
     (DOSSIER.lignesPerso||[]).filter(pp=>pp.etat==="PL").forEach(pp=>{
@@ -75,7 +75,7 @@ function construireEtatsFormules(wb){
     const rc={};
     dPL.forEach(l=>{
       let rn;
-      if(!l.type) rn=ligneF(wsP,l.lib,i=>su([l.code],i,"-"));
+      if(!l.type) rn=ligneF(wsP,l.lib,i=>su(l.codes||[l.code],i,"-"));
       else if(l.type==="sous_total"){
         const parts=l.somme.filter(c=>rc[c]).map(c=>rc[c]);
         rn=ligneF(wsP,l.lib,parts.length?somme(parts):()=>"0",{st:1});

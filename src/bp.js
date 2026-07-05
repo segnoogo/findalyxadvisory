@@ -14,7 +14,7 @@ function hypothesesBP(etats, lignesPerso){
   const tcam=n>1&&v.CA[A[0]]>0&&ca1>0?Math.pow(ca1/v.CA[A[0]],1/(n-1))-1:0.05;
 
   /* frais généraux ligne par ligne (standards + personnalisées OPEX) */
-  const OPEX_STD=["SOUS_TRAITANCE","LOCATIONS","ENTRETIEN","ASSURANCES","PUBLICITE","TELECOM",
+  const OPEX_STD=["AUTRES_ACHATS","SOUS_TRAITANCE","LOCATIONS","ENTRETIEN","ASSURANCES","PUBLICITE","TELECOM",
     "FRAIS_BANCAIRES","HONORAIRES","PERSONNEL_EXT","TRANSPORTS","AUTRES_SERV_EXT","IMPOTS_TAXES","AUTRES_CHARGES"];
   const persoOpex=(lignesPerso||[]).filter(p=>p.agregat==="OPEX").map(p=>p.code);
   const libOf=c=>{

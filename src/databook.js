@@ -7,43 +7,35 @@ const DB_PL=[
  {"code": "CA", "lib": "Chiffre d'affaires", "type": "sous_total", "somme": ["CA_MARCHANDISES", "CA_PRODUITS", "CA_SERVICES", "CA_ACCESSOIRES"]},
  {"code": "ACHATS_MARCH", "lib": "Achats de marchandises"},
  {"code": "ACHATS_MP", "lib": "Achats de matières premières"},
- {"code": "AUTRES_ACHATS", "lib": "Autres achats consommés"},
- {"code": "MARGE_BRUTE", "lib": "Marge brute", "type": "sous_total", "somme": ["CA", "ACHATS_MARCH", "ACHATS_MP", "AUTRES_ACHATS"]},
+ {"code": "VARIATION_STOCKS", "lib": "Variation de stocks"},
+ {"code": "COUTS_DIRECTS", "lib": "Coûts directs", "type": "sous_total", "somme": ["ACHATS_MARCH", "ACHATS_MP", "VARIATION_STOCKS"]},
+ {"code": "MARGE_BRUTE", "lib": "Marge brute", "type": "sous_total", "somme": ["CA", "COUTS_DIRECTS"]},
  {"code": "PCT_MARGE_BRUTE", "lib": "% Marge brute / CA", "type": "pourcentage", "num": "MARGE_BRUTE"},
- {"code": "SUBVENTIONS", "lib": "Subventions d'exploitation"},
- {"code": "PROD_STOCKEE", "lib": "Production stockée"},
- {"code": "PROD_IMMOBILISEE", "lib": "Production immobilisée"},
- {"code": "AUTRES_PRODUITS", "lib": "Autres produits d'exploitation"},
- {"code": "SOUS_TRAITANCE", "lib": "Sous-traitance"},
- {"code": "LOCATIONS", "lib": "Locations et charges locatives"},
- {"code": "ENTRETIEN", "lib": "Entretien, réparations et maintenance"},
- {"code": "ASSURANCES", "lib": "Primes d'assurance"},
- {"code": "PUBLICITE", "lib": "Publicité et relations publiques"},
- {"code": "TELECOM", "lib": "Frais de télécommunications"},
- {"code": "FRAIS_BANCAIRES", "lib": "Frais bancaires"},
- {"code": "HONORAIRES", "lib": "Honoraires et intermédiaires"},
- {"code": "PERSONNEL_EXT", "lib": "Personnel extérieur"},
+ {"code": "AUTRES_PROD", "lib": "Autres produits", "codes": ["SUBVENTIONS", "PROD_STOCKEE", "PROD_IMMOBILISEE", "AUTRES_PRODUITS"]},
+ {"code": "AUTRES_ACHATS", "lib": "Autres achats (604/605/608)"},
  {"code": "TRANSPORTS", "lib": "Transports"},
- {"code": "AUTRES_SERV_EXT", "lib": "Autres services extérieurs"},
+ {"code": "SERVICES_EXT", "lib": "Services extérieurs (62/63)", "codes": ["SOUS_TRAITANCE", "LOCATIONS", "ENTRETIEN", "ASSURANCES", "PUBLICITE", "TELECOM", "FRAIS_BANCAIRES", "HONORAIRES", "PERSONNEL_EXT", "AUTRES_SERV_EXT"]},
  {"code": "IMPOTS_TAXES", "lib": "Impôts et taxes"},
- {"code": "AUTRES_CHARGES", "lib": "Autres charges d'exploitation"},
+ {"code": "AUTRES_CHARGES", "lib": "Autres charges"},
  {"code": "CHARGES_PERSONNEL", "lib": "Charges de personnel"},
- {"code": "EBITDA", "lib": "EBITDA", "type": "sous_total", "somme": ["MARGE_BRUTE", "SUBVENTIONS", "PROD_STOCKEE", "PROD_IMMOBILISEE", "AUTRES_PRODUITS", "SOUS_TRAITANCE", "LOCATIONS", "ENTRETIEN", "ASSURANCES", "PUBLICITE", "TELECOM", "FRAIS_BANCAIRES", "HONORAIRES", "PERSONNEL_EXT", "TRANSPORTS", "AUTRES_SERV_EXT", "IMPOTS_TAXES", "AUTRES_CHARGES", "CHARGES_PERSONNEL"]},
+ {"code": "FRAIS_GENERAUX", "lib": "Frais généraux", "type": "sous_total", "somme": ["AUTRES_ACHATS", "TRANSPORTS", "SERVICES_EXT", "IMPOTS_TAXES", "AUTRES_CHARGES", "CHARGES_PERSONNEL"]},
+ {"code": "EBITDA", "lib": "EBITDA", "type": "sous_total", "somme": ["MARGE_BRUTE", "AUTRES_PROD", "FRAIS_GENERAUX"]},
  {"code": "PCT_EBITDA", "lib": "% EBITDA / CA", "type": "pourcentage", "num": "EBITDA"},
  {"code": "DOTATIONS", "lib": "Dotations aux amortissements et provisions"},
- {"code": "REPRISES", "lib": "Reprises d'amortissements et provisions"},
+ {"code": "REPRISES", "lib": "Reprises de provisions"},
  {"code": "EBIT", "lib": "EBIT (résultat d'exploitation)", "type": "sous_total", "somme": ["EBITDA", "DOTATIONS", "REPRISES"]},
  {"code": "PCT_EBIT", "lib": "% EBIT / CA", "type": "pourcentage", "num": "EBIT"},
- {"code": "REVENUS_FIN", "lib": "Revenus financiers"},
- {"code": "FRAIS_FIN", "lib": "Frais financiers"},
+ {"code": "REVENUS_FIN", "lib": "Produits financiers"},
+ {"code": "FRAIS_FIN", "lib": "Charges financières"},
  {"code": "RESULTAT_FINANCIER", "lib": "Résultat financier", "type": "sous_total", "somme": ["REVENUS_FIN", "FRAIS_FIN"]},
  {"code": "RAO", "lib": "Résultat des activités ordinaires", "type": "sous_total", "somme": ["EBIT", "RESULTAT_FINANCIER"]},
  {"code": "PRODUITS_HAO", "lib": "Produits HAO"},
  {"code": "CHARGES_HAO", "lib": "Charges HAO"},
  {"code": "RESULTAT_HAO", "lib": "Résultat HAO", "type": "sous_total", "somme": ["PRODUITS_HAO", "CHARGES_HAO"]},
+ {"code": "RESULTAT_AVANT_IMPOT", "lib": "Résultat avant impôt", "type": "sous_total", "somme": ["RAO", "RESULTAT_HAO"]},
  {"code": "PARTICIPATION", "lib": "Participation des travailleurs"},
  {"code": "IS", "lib": "Impôt sur le résultat"},
- {"code": "RESULTAT_NET", "lib": "Résultat net", "type": "sous_total", "somme": ["RAO", "RESULTAT_HAO", "PARTICIPATION", "IS"]},
+ {"code": "RESULTAT_NET", "lib": "Résultat net", "type": "sous_total", "somme": ["RESULTAT_AVANT_IMPOT", "PARTICIPATION", "IS"]},
  {"code": "PCT_RESULTAT_NET", "lib": "% Résultat net / CA", "type": "pourcentage", "num": "RESULTAT_NET"}
 ];
 const DB_BS=[
@@ -106,8 +98,8 @@ async function genererDatabook(){
   const UNI=(typeof CONF_UNITE!=="undefined"&&CONF_UNITE)?CONF_UNITE:{f:1,dec:0,lib:"KFCFA"};
   DB_NUMFMT=UNI.dec?'#,##0.0;(#,##0.0);"-"':'#,##0;(#,##0);"-"';
   const persoL=DOSSIER.lignesPerso||[];
-  const AG_ST={PL:{CA:"CA",COUTS_DIRECTS:"MARGE_BRUTE",AUTRES_PROD:"EBITDA",OPEX:"EBITDA",
-      CHARGES_PERSONNEL:"EBITDA",DA:"EBIT",RESULTAT_FIN:"RESULTAT_FINANCIER",
+  const AG_ST={PL:{CA:"CA",COUTS_DIRECTS:"COUTS_DIRECTS",AUTRES_PROD:"EBITDA",OPEX:"FRAIS_GENERAUX",
+      CHARGES_PERSONNEL:"FRAIS_GENERAUX",DA:"EBIT",RESULTAT_FIN:"RESULTAT_FINANCIER",
       RESULTAT_HAO:"RESULTAT_HAO",IMPOTS:"RESULTAT_NET"},
     BS:{ACTIFS_IMMOBILISES:"ACTIFS_IMMOBILISES",BFR_ACTIF:"BFR_EXPLOITATION",
       BFR_PASSIF:"BFR_EXPLOITATION",TRESORERIE_NETTE:"TRESORERIE_NETTE",
@@ -169,8 +161,8 @@ async function genererDatabook(){
   titreLiasse(wsRef,"Nomenclature des lignes de restitution");
   dbEntete(wsRef.addRow([null,"Code","Libellé","État"]),4);
   const codesValides=[];
-  [...dPL.map(l=>[l,"P&L"]),...dBS.map(l=>[l,"BS"])].forEach(([l,e])=>{
-    if(l.type)return;
+  const refPL=(typeof LIGNES_PL!=="undefined"?LIGNES_PL:[]), refBS=(typeof LIGNES_BS!=="undefined"?LIGNES_BS:[]);
+  [...refPL.map(l=>[l,"P&L"]),...refBS.map(l=>[l,"BS"]),...persoL.map(l=>[l,l.etat==="PL"?"P&L":"BS"])].forEach(([l,e])=>{
     wsRef.addRow([null,l.code,l.lib,e]);codesValides.push(l.code);
   });
   wsRef.addRow([null,"NON_MAPPE","— Non mappé —",""]);codesValides.push("NON_MAPPE");
@@ -210,8 +202,9 @@ async function genererDatabook(){
       const idx=r.number;
       if(!l.type){
         const signe=signeDetail(l);
+        const cods=l.codes||[l.code];
         A.forEach((a,j)=>{
-          r.getCell(3+j).value={formula:`${signe}SUMIF(${q(ongT)}!$B$5:$B$${finT},"${l.code}",${q(ongT)}!${colFY(j)}$5:${colFY(j)}$${finT})`};
+          r.getCell(3+j).value={formula:`${signe}(`+cods.map(c=>`SUMIF(${q(ongT)}!$B$5:$B$${finT},"${c}",${q(ongT)}!${colFY(j)}$5:${colFY(j)}$${finT})`).join("+")+`)`};
         });
       }else if(l.type==="sous_total"){
         A.forEach((a,j)=>{
@@ -361,7 +354,8 @@ async function genererDatabook(){
     let rn=4;
     defs.forEach(l=>{
       if(l.type)return;
-      const bloc=lignesT.filter(t=>t.mapping===l.code);
+      const cods=l.codes||[l.code];
+      const bloc=lignesT.filter(t=>cods.includes(t.mapping));
       if(!bloc.length)return;
       const s=signeDetail(l)==="-"?-1:1;
       for(let i=2;i<=nbColsD+1;i++)
