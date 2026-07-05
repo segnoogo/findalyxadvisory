@@ -281,21 +281,26 @@ async function genererDatabook(){
     const bs=(code,j,d)=>`${q(ongBS)}!${String.fromCharCode(67+j-(d||0))}${localBS[code]}`;
     const delta=(code,j)=>`(${bs(code,j)}-${bs(code,j,1)})`;
     const defs=[
-      ["Résultat net",j=>pl("RESULTAT_NET",j)],
-      ["+ Var. amortissements et dépréciations (BS)",j=>`-${delta("AMORT_DEPREC",j)}`],
-      ["+ Var. provisions pour risques et charges (BS)",j=>`-${delta("PROVISIONS_RC",j)}`],
-      ["+/- Variation du BFR",j=>`-${delta("BFR_TOTAL",j)}`],
-      ["Flux opérationnels","OP"],
-      ["Investissements nets (variation immobilisations brutes)",
+      ["Capacité d'autofinancement globale (CAFG)",
+       j=>`${pl("RESULTAT_NET",j)}-${delta("AMORT_DEPREC",j)}-${delta("PROVISIONS_RC",j)}`],
+      ["Variation des créances",
+       j=>`-(${delta("CLIENTS",j)}+${delta("AUTRES_CREANCES",j)}+${delta("AVANCES_FRS",j)}+${delta("HAO_ACTIF",j)})`],
+      ["Variation des stocks",j=>`-${delta("STOCKS",j)}`],
+      ["Variation des dettes d'exploitation",
+       j=>`-(${delta("FOURNISSEURS",j)}+${delta("CLIENTS_AVANCES",j)}+${delta("DETTES_SOCIALES",j)}+${delta("DETTES_FISCALES",j)}+${delta("AUTRES_DETTES",j)}+${delta("HAO_PASSIF",j)})`],
+      ["Flux de trésorerie des activités opérationnelles","OP"],
+      ["Acquisitions d'immobilisations",
        j=>`-((${bs("ACTIFS_IMMOBILISES",j)}-${bs("AMORT_DEPREC",j)})-(${bs("ACTIFS_IMMOBILISES",j,1)}-${bs("AMORT_DEPREC",j,1)}))`],
-      ["Flux d'investissement","INV"],
-      ["Variation du capital",j=>`${bs("CAPITAL",j)}-${bs("CAPITAL",j,1)}`],
-      ["Variation des subventions et prov. réglementées",j=>`${bs("SUBV_PROV_REGL",j)}-${bs("SUBV_PROV_REGL",j,1)}`],
-      ["Variation des dettes financières",j=>`-${delta("DETTES_FINANCIERES",j)}`],
-      ["Dividendes et affectations (estimés)",
+      ["Cessions d'immobilisations",j=>`0`],
+      ["Flux de trésorerie des activités d'investissement","INV"],
+      ["Augmentation de capital",j=>`${delta("CAPITAL",j)}`],
+      ["Subvention d'investissement",j=>`${delta("SUBV_PROV_REGL",j)}`],
+      ["Dividendes versés",
        j=>`(${bs("PRIMES_RESERVES",j)}+${bs("RAN_RESULTATS_ANT",j)})-(${bs("PRIMES_RESERVES",j,1)}+${bs("RAN_RESULTATS_ANT",j,1)})-${pl("RESULTAT_NET",j-1)}`],
-      ["Flux de financement","FIN"],
-      ["Free cash flow","FCF"],
+      ["Emprunts nouveaux",j=>`MAX(0,-${delta("DETTES_FINANCIERES",j)})`],
+      ["Remboursement d'emprunts",j=>`MIN(0,-${delta("DETTES_FINANCIERES",j)})`],
+      ["Flux de trésorerie des activités de financement","FIN"],
+      ["Variation nette de trésorerie de la période","FCF"],
       ["Trésorerie nette d'ouverture (BS)",j=>bs("TRESORERIE_NETTE",j,1)],
       ["Trésorerie de clôture calculée","CLO"],
       ["Trésorerie nette de clôture (BS)",j=>bs("TRESORERIE_NETTE",j)],
@@ -309,8 +314,8 @@ async function genererDatabook(){
         let v;
         if(typeof f==="function")v=f(j);
         else if(f==="OP")v=`SUM(${cl}${num-4}:${cl}${num-1})`;
-        else if(f==="INV")v=`${cl}${num-1}`;
-        else if(f==="FIN")v=`SUM(${cl}${num-4}:${cl}${num-1})`;
+        else if(f==="INV")v=`SUM(${cl}${num-2}:${cl}${num-1})`;
+        else if(f==="FIN")v=`SUM(${cl}${num-5}:${cl}${num-1})`;
         else if(f==="FCF")v=`${cl}${idx.OP}+${cl}${idx.INV}+${cl}${idx.FIN}`;
         else if(f==="CLO")v=`${cl}${idx.FCF}+${cl}${num-1}`;
         else v=`${cl}${idx.CLO}-${cl}${num-1}`;

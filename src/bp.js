@@ -188,6 +188,9 @@ function projeterBP(etats,H,scenario){
     t.ZB=t.FA+t.FB+t.FC+t.FD+t.FE;
     t.ZF=t.ZB+t.ZC+t.ZD+t.ZE;
     t.ZG=t.ZA+t.ZF;
+    /* agrégats présentation simplifiée du TFT (le prévisionnel connaît le brut emprunt/remb.) */
+    t.VAR_CREANCES=t.FD+t.FB; t.ACQUIS_IMMO=t.FF+t.FG+t.FH; t.CESSION_IMMO=t.FI;
+    t.EMPRUNT=nouveau; t.REMBOURS=-(rembExist+rembNouv); t.ZFIN=t.ZD+t.ZE;
     t.FCF=t.ZF;t.OP=t.ZB;
     /* --- stocker --- */
     P.pl.CA[a]=caP;P.pl.COUTS_DIRECTS[a]=cd;P.pl.MARGE_BRUTE[a]=caP+cd;

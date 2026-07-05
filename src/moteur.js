@@ -492,6 +492,9 @@ function calculerEtats(tbagr,lignesPerso){
     const ZF=ZB+ZC+ZD+ZE;
     tft[a]={ZA:v.TRESORERIE_NETTE[p],FA,FB,FC,FD,FE,ZB,FF,FG,FH,FI,ZC,FK,FL,FN,ZD,FO,ZE,ZF,
             ZG:v.TRESORERIE_NETTE[p]+ZF,
+            /* agrégats pour la présentation simplifiée du TFT (mêmes totaux) */
+            VAR_CREANCES:FD+FB, ACQUIS_IMMO:FF+FG+FH, CESSION_IMMO:FI,
+            EMPRUNT:FO>0?FO:0, REMBOURS:FO<0?FO:0, ZFIN:ZD+ZE,
             /* clés héritées (rapports, commentaires, databook) */
             RN:rn,AMORT:-d("AMORT_DEPREC"),PROV:-d("PROVISIONS_RC"),DBFR:-d("BFR"),
             OP:ZB,CAPEX:ZC,FIN:ZD+ZE,FCF:ZF,

@@ -392,10 +392,12 @@ function construireDD(pptx){
     rpEnTete(sl,B.societe,"Due diligence financière");
     rpTitre(sl,"Analyse des flux de trésorerie");
     rpAssertion(sl,"Le tableau de flux est reconstruit par variations bilancielles et se réconcilie exactement avec la trésorerie du bilan.");
-    const defs=[["RN","Résultat net","detail"],["AMORT","+ Var. amortissements et dépréciations","detail"],
-      ["PROV","+ Var. provisions","detail"],["DBFR","+/- Variation du BFR","detail"],
-      ["OP","Flux opérationnels","sous_total"],["CAPEX","Investissements nets","detail"],
-      ["FIN","Flux de financement","detail"],["FCF","Free cash flow","sous_total"],
+    const defs=[["FA","Capacité d'autofinancement (CAFG)","detail"],
+      ["VAR_CREANCES","Variation des créances","detail"],["FC","Variation des stocks","detail"],
+      ["FE","Variation des dettes d'exploitation","detail"],["ZB","Flux opérationnels","sous_total"],
+      ["ACQUIS_IMMO","Acquisitions d'immobilisations","detail"],["CESSION_IMMO","Cessions d'immobilisations","detail"],
+      ["ZC","Flux d'investissement","sous_total"],["ZFIN","Flux de financement","sous_total"],
+      ["ZF","Variation nette de trésorerie","sous_total"],
       ["OUVERTURE","Trésorerie d'ouverture","detail"],["CLOTURE","Trésorerie de clôture","sous_total"]];
     const lignes=defs.map(([c,lib])=>[lib,...A.slice(1).map(a=>rpFmt(ETATS.tft[a][c]))]);
     rpTable(sl,0.55,1.95,6.9,B.societe.toUpperCase()+" - TFT",

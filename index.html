@@ -1390,6 +1390,9 @@ function calculerEtats(tbagr,lignesPerso){
     const ZF=ZB+ZC+ZD+ZE;
     tft[a]={ZA:v.TRESORERIE_NETTE[p],FA,FB,FC,FD,FE,ZB,FF,FG,FH,FI,ZC,FK,FL,FN,ZD,FO,ZE,ZF,
             ZG:v.TRESORERIE_NETTE[p]+ZF,
+            /* agrégats pour la présentation simplifiée du TFT (mêmes totaux) */
+            VAR_CREANCES:FD+FB, ACQUIS_IMMO:FF+FG+FH, CESSION_IMMO:FI,
+            EMPRUNT:FO>0?FO:0, REMBOURS:FO<0?FO:0, ZFIN:ZD+ZE,
             /* clés héritées (rapports, commentaires, databook) */
             RN:rn,AMORT:-d("AMORT_DEPREC"),PROV:-d("PROVISIONS_RC"),DBFR:-d("BFR"),
             OP:ZB,CAPEX:ZC,FIN:ZD+ZE,FCF:ZF,
@@ -2252,6 +2255,9 @@ function projeterBP(etats,H,scenario){
     t.ZB=t.FA+t.FB+t.FC+t.FD+t.FE;
     t.ZF=t.ZB+t.ZC+t.ZD+t.ZE;
     t.ZG=t.ZA+t.ZF;
+    /* agrégats présentation simplifiée du TFT (le prévisionnel connaît le brut emprunt/remb.) */
+    t.VAR_CREANCES=t.FD+t.FB; t.ACQUIS_IMMO=t.FF+t.FG+t.FH; t.CESSION_IMMO=t.FI;
+    t.EMPRUNT=nouveau; t.REMBOURS=-(rembExist+rembNouv); t.ZFIN=t.ZD+t.ZE;
     t.FCF=t.ZF;t.OP=t.ZB;
     /* --- stocker --- */
     P.pl.CA[a]=caP;P.pl.COUTS_DIRECTS[a]=cd;P.pl.MARGE_BRUTE[a]=caP+cd;
@@ -2625,21 +2631,26 @@ async function genererDatabook(){
     const bs=(code,j,d)=>`${q(ongBS)}!${String.fromCharCode(67+j-(d||0))}${localBS[code]}`;
     const delta=(code,j)=>`(${bs(code,j)}-${bs(code,j,1)})`;
     const defs=[
-      ["Résultat net",j=>pl("RESULTAT_NET",j)],
-      ["+ Var. amortissements et dépréciations (BS)",j=>`-${delta("AMORT_DEPREC",j)}`],
-      ["+ Var. provisions pour risques et charges (BS)",j=>`-${delta("PROVISIONS_RC",j)}`],
-      ["+/- Variation du BFR",j=>`-${delta("BFR_TOTAL",j)}`],
-      ["Flux opérationnels","OP"],
-      ["Investissements nets (variation immobilisations brutes)",
+      ["Capacité d'autofinancement globale (CAFG)",
+       j=>`${pl("RESULTAT_NET",j)}-${delta("AMORT_DEPREC",j)}-${delta("PROVISIONS_RC",j)}`],
+      ["Variation des créances",
+       j=>`-(${delta("CLIENTS",j)}+${delta("AUTRES_CREANCES",j)}+${delta("AVANCES_FRS",j)}+${delta("HAO_ACTIF",j)})`],
+      ["Variation des stocks",j=>`-${delta("STOCKS",j)}`],
+      ["Variation des dettes d'exploitation",
+       j=>`-(${delta("FOURNISSEURS",j)}+${delta("CLIENTS_AVANCES",j)}+${delta("DETTES_SOCIALES",j)}+${delta("DETTES_FISCALES",j)}+${delta("AUTRES_DETTES",j)}+${delta("HAO_PASSIF",j)})`],
+      ["Flux de trésorerie des activités opérationnelles","OP"],
+      ["Acquisitions d'immobilisations",
        j=>`-((${bs("ACTIFS_IMMOBILISES",j)}-${bs("AMORT_DEPREC",j)})-(${bs("ACTIFS_IMMOBILISES",j,1)}-${bs("AMORT_DEPREC",j,1)}))`],
-      ["Flux d'investissement","INV"],
-      ["Variation du capital",j=>`${bs("CAPITAL",j)}-${bs("CAPITAL",j,1)}`],
-      ["Variation des subventions et prov. réglementées",j=>`${bs("SUBV_PROV_REGL",j)}-${bs("SUBV_PROV_REGL",j,1)}`],
-      ["Variation des dettes financières",j=>`-${delta("DETTES_FINANCIERES",j)}`],
-      ["Dividendes et affectations (estimés)",
+      ["Cessions d'immobilisations",j=>`0`],
+      ["Flux de trésorerie des activités d'investissement","INV"],
+      ["Augmentation de capital",j=>`${delta("CAPITAL",j)}`],
+      ["Subvention d'investissement",j=>`${delta("SUBV_PROV_REGL",j)}`],
+      ["Dividendes versés",
        j=>`(${bs("PRIMES_RESERVES",j)}+${bs("RAN_RESULTATS_ANT",j)})-(${bs("PRIMES_RESERVES",j,1)}+${bs("RAN_RESULTATS_ANT",j,1)})-${pl("RESULTAT_NET",j-1)}`],
-      ["Flux de financement","FIN"],
-      ["Free cash flow","FCF"],
+      ["Emprunts nouveaux",j=>`MAX(0,-${delta("DETTES_FINANCIERES",j)})`],
+      ["Remboursement d'emprunts",j=>`MIN(0,-${delta("DETTES_FINANCIERES",j)})`],
+      ["Flux de trésorerie des activités de financement","FIN"],
+      ["Variation nette de trésorerie de la période","FCF"],
       ["Trésorerie nette d'ouverture (BS)",j=>bs("TRESORERIE_NETTE",j,1)],
       ["Trésorerie de clôture calculée","CLO"],
       ["Trésorerie nette de clôture (BS)",j=>bs("TRESORERIE_NETTE",j)],
@@ -2653,8 +2664,8 @@ async function genererDatabook(){
         let v;
         if(typeof f==="function")v=f(j);
         else if(f==="OP")v=`SUM(${cl}${num-4}:${cl}${num-1})`;
-        else if(f==="INV")v=`${cl}${num-1}`;
-        else if(f==="FIN")v=`SUM(${cl}${num-4}:${cl}${num-1})`;
+        else if(f==="INV")v=`SUM(${cl}${num-2}:${cl}${num-1})`;
+        else if(f==="FIN")v=`SUM(${cl}${num-5}:${cl}${num-1})`;
         else if(f==="FCF")v=`${cl}${idx.OP}+${cl}${idx.INV}+${cl}${idx.FIN}`;
         else if(f==="CLO")v=`${cl}${idx.FCF}+${cl}${num-1}`;
         else v=`${cl}${idx.CLO}-${cl}${num-1}`;
@@ -3189,10 +3200,12 @@ function construireDD(pptx){
     rpEnTete(sl,B.societe,"Due diligence financière");
     rpTitre(sl,"Analyse des flux de trésorerie");
     rpAssertion(sl,"Le tableau de flux est reconstruit par variations bilancielles et se réconcilie exactement avec la trésorerie du bilan.");
-    const defs=[["RN","Résultat net","detail"],["AMORT","+ Var. amortissements et dépréciations","detail"],
-      ["PROV","+ Var. provisions","detail"],["DBFR","+/- Variation du BFR","detail"],
-      ["OP","Flux opérationnels","sous_total"],["CAPEX","Investissements nets","detail"],
-      ["FIN","Flux de financement","detail"],["FCF","Free cash flow","sous_total"],
+    const defs=[["FA","Capacité d'autofinancement (CAFG)","detail"],
+      ["VAR_CREANCES","Variation des créances","detail"],["FC","Variation des stocks","detail"],
+      ["FE","Variation des dettes d'exploitation","detail"],["ZB","Flux opérationnels","sous_total"],
+      ["ACQUIS_IMMO","Acquisitions d'immobilisations","detail"],["CESSION_IMMO","Cessions d'immobilisations","detail"],
+      ["ZC","Flux d'investissement","sous_total"],["ZFIN","Flux de financement","sous_total"],
+      ["ZF","Variation nette de trésorerie","sous_total"],
       ["OUVERTURE","Trésorerie d'ouverture","detail"],["CLOTURE","Trésorerie de clôture","sous_total"]];
     const lignes=defs.map(([c,lib])=>[lib,...A.slice(1).map(a=>rpFmt(ETATS.tft[a][c]))]);
     rpTable(sl,0.55,1.95,6.9,B.societe.toUpperCase()+" - TFT",
@@ -4347,30 +4360,26 @@ const DEF_BS=[
   {code:"CAPITAUX_PROPRES",lib:"Capitaux propres",st:"titre",toujours:true},
 ];
 const TFT_DEF=[
-  ["ZA","Trésorerie nette au 1er janvier","total"],
+  ["ZA","Trésorerie nette à l'ouverture","total"],
   [null,"Flux de trésorerie des activités opérationnelles"],
   ["FA","Capacité d'autofinancement globale (CAFG)"],
-  ["FB","Variation de l'actif circulant HAO"],
+  ["VAR_CREANCES","Variation des créances"],
   ["FC","Variation des stocks"],
-  ["FD","Variation des créances et emplois assimilés"],
-  ["FE","Variation du passif circulant"],
-  ["ZB","Flux de trésorerie provenant des activités opérationnelles","total"],
+  ["FE","Variation des dettes d'exploitation"],
+  ["ZB","Flux de trésorerie des activités opérationnelles","total"],
   [null,"Flux de trésorerie des activités d'investissement"],
-  ["FF","Décaissements liés aux acquisitions d'immobilisations incorporelles"],
-  ["FG","Décaissements liés aux acquisitions d'immobilisations corporelles"],
-  ["FH","Décaissements liés aux acquisitions d'immobilisations financières"],
-  ["FI","Encaissements liés aux cessions d'immobilisations"],
-  ["ZC","Flux de trésorerie provenant des activités d'investissement","total"],
-  [null,"Flux de trésorerie provenant des capitaux propres"],
-  ["FK","Augmentations de capital par apports nouveaux"],
-  ["FL","Subventions d'investissement reçues"],
+  ["ACQUIS_IMMO","Acquisitions d'immobilisations"],
+  ["CESSION_IMMO","Cessions d'immobilisations"],
+  ["ZC","Flux de trésorerie des activités d'investissement","total"],
+  [null,"Flux de trésorerie des activités de financement"],
+  ["FK","Augmentation de capital"],
+  ["FL","Subvention d'investissement"],
   ["FN","Dividendes versés"],
-  ["ZD","Flux de trésorerie provenant des capitaux propres","total"],
-  [null,"Flux de trésorerie provenant des capitaux étrangers"],
-  ["FO","Emprunts et dettes financières (nets des remboursements)"],
-  ["ZE","Flux de trésorerie provenant des capitaux étrangers","total"],
+  ["EMPRUNT","Emprunts nouveaux"],
+  ["REMBOURS","Remboursement d'emprunts"],
+  ["ZFIN","Flux de trésorerie des activités de financement","total"],
   ["ZF","VARIATION DE LA TRÉSORERIE NETTE DE LA PÉRIODE","total"],
-  ["ZG","Trésorerie nette au 31 décembre","total"]];
+  ["ZG","Trésorerie nette à la clôture","total"]];
 function tableTFT(){
   const A=ETATS.annees;
   if(A.length<2) return '<div class="mut">Il faut au moins deux exercices pour le tableau de flux.</div>';
@@ -4391,8 +4400,9 @@ function tableTFT(){
     ${cols.map(a=>`<th class="num">FY${String(a).slice(-2)}</th>`).join("")}
     ${cols.slice(1).map((a,i)=>`<th class="num delta">Δ${String(cols[i]).slice(-2)}-${String(a).slice(-2)}</th>`).join("")}</tr>${lignes}</table></div></div>
   <div class="mut" style="margin-top:8px">CAFG approchée (résultat net + dotations nettes) ; flux reconstruits par
-  variations bilancielles — réconciliés exactement avec la trésorerie du bilan. Les cessions (FI) ne sont pas
-  isolables depuis une balance seule et sont comprises dans les décaissements nets.</div>`;
+  variations bilancielles — réconciliés exactement avec la trésorerie du bilan. Reconstruits en <b>net</b> depuis les
+  bilans : les cessions d'immobilisations et les remboursements d'emprunts ne sont pas isolables des acquisitions /
+  emprunts nouveaux (l'une des deux lignes de chaque couple ressort à 0 selon le sens de la variation).</div>`;
 }
 function blocCommentaires(){
   const C=genererCommentaires(ETATS)[SOUS_ETAT]||[];
@@ -5733,18 +5743,16 @@ function construireFeuillesBP(wb){
     const pc=r=>`${L(c-1)}${r}`;
     F(rt.ZA,i===0?`${rB}!${L(cHL)}${rb.TRES}`:pc(rt.ZG));
     F(rt.FA,`${P(rp.RN,i)}-${P(rp.DA,i)}`);
-    F(rt.FB,`0`);
+    F(rt.VAR_CREANCES,`-((${B(rb.CLI,i)}+${B(rb.ACR,i)})-(${Bp(rb.CLI,i)}+${Bp(rb.ACR,i)}))`);
     F(rt.FC,`-(${B(rb.STK,i)}-${Bp(rb.STK,i)})`);
-    F(rt.FD,`-((${B(rb.CLI,i)}+${B(rb.ACR,i)})-(${Bp(rb.CLI,i)}+${Bp(rb.ACR,i)}))`);
     F(rt.FE,`-((${B(rb.FRN,i)}+${B(rb.ADT,i)})-(${Bp(rb.FRN,i)}+${Bp(rb.ADT,i)}))`);
     F(rt.ZB,`SUM(${Lc}${rt.FA}:${Lc}${rt.FE})`);
-    F(rt.FF,`0`);F(rt.FG,`-${hp(hy.capex,i)}`);F(rt.FH,`0`);F(rt.FI,`0`);
-    F(rt.ZC,`SUM(${Lc}${rt.FF}:${Lc}${rt.FI})`);
+    F(rt.ACQUIS_IMMO,`-${hp(hy.capex,i)}`);F(rt.CESSION_IMMO,`0`);
+    F(rt.ZC,`SUM(${Lc}${rt.ACQUIS_IMMO}:${Lc}${rt.CESSION_IMMO})`);
     F(rt.FK,`0`);F(rt.FL,`0`);F(rt.FN,`-${B(rb.DIV,i)}`);
-    F(rt.ZD,`SUM(${Lc}${rt.FK}:${Lc}${rt.FN})`);
-    F(rt.FO,`${D(rd.TIR,i)}-${D(rd.REMB,i)}`);
-    F(rt.ZE,`${Lc}${rt.FO}`);
-    F(rt.ZF,`${Lc}${rt.ZB}+${Lc}${rt.ZC}+${Lc}${rt.ZD}+${Lc}${rt.ZE}`);
+    F(rt.EMPRUNT,`${D(rd.TIR,i)}`);F(rt.REMBOURS,`-${D(rd.REMB,i)}`);
+    F(rt.ZFIN,`SUM(${Lc}${rt.FK}:${Lc}${rt.REMBOURS})`);
+    F(rt.ZF,`${Lc}${rt.ZB}+${Lc}${rt.ZC}+${Lc}${rt.ZFIN}`);
     F(rt.ZG,`${Lc}${rt.ZA}+${Lc}${rt.ZF}`);
     F(rtE,`${Lc}${rt.ZG}-${B(rb.TRES,i)}`);
   });
@@ -5999,23 +6007,20 @@ function construireEtatsFormules(wb){
       const F=(row,f)=>{const cl=ws.getCell(row,c);cl.value={formula:f};cl.numFmt=NF;};
       F(rt.ZA,i===0?`${refB}!${L(3)}${rB.TN}`:`${L(c-1)}${rt.ZG}`);
       F(rt.FA,`${P_(rP.RN,i)}-${dR(rB.AMC,i)}-${dR(rB.PRV,i)}`);
-      F(rt.FB,`-${dR(rB.HAA,i)}`);
+      F(rt.VAR_CREANCES,`-(${dR(rB.CLI,i)}+${dR(rB.ACR,i)}+${dR(rB.AVF,i)}+${dR(rB.HAA,i)}${persoBA.map((x,k)=>"+"+dR(rB["PBA"+k],i)).join("")})`);
       F(rt.FC,`-${dR(rB.STK,i)}`);
-      F(rt.FD,`-(${dR(rB.CLI,i)}+${dR(rB.ACR,i)}+${dR(rB.AVF,i)}${persoBA.map((x,k)=>"+"+dR(rB["PBA"+k],i)).join("")})`);
       F(rt.FE,`-(${dR(rB.FRN,i)}+${dR(rB.CAV,i)}+${dR(rB.DSO,i)}+${dR(rB.DFI,i)}+${dR(rB.ADT,i)}+${dR(rB.HAP,i)}${persoBP.map((x,k)=>"+"+dR(rB["PBP"+k],i)).join("")})`);
       F(rt.ZB,`SUM(${Lc}${rt.FA}:${Lc}${rt.FE})`);
-      F(rt.FF,`-${dR(rB.BRI,i)}`);
-      F(rt.FG,`-${dR(rB.BRC,i)}`);
-      F(rt.FH,`-${dR(rB.BRF,i)}`);
-      F(rt.FI,`0`);
-      F(rt.ZC,`SUM(${Lc}${rt.FF}:${Lc}${rt.FI})`);
+      F(rt.ACQUIS_IMMO,`-(${dR(rB.BRI,i)}+${dR(rB.BRC,i)}+${dR(rB.BRF,i)})`);
+      F(rt.CESSION_IMMO,`0`);
+      F(rt.ZC,`SUM(${Lc}${rt.ACQUIS_IMMO}:${Lc}${rt.CESSION_IMMO})`);
       F(rt.FK,`${dR(rB.CAP,i)}${persoCP.map((x,k)=>"+"+dR(rB["PCP"+k],i)).join("")}`);
       F(rt.FL,`${dR(rB.SUB,i)}`);
       F(rt.FN,`(${B_(rB.PRI,i)}+${B_(rB.RAN,i)})-(${Bp_(rB.PRI,i)}+${Bp_(rB.RAN,i)})-${Pp_(rP.RN,i)}`);
-      F(rt.ZD,`SUM(${Lc}${rt.FK}:${Lc}${rt.FN})`);
-      F(rt.FO,`-${dR(rB.DET,i)}`);
-      F(rt.ZE,`${Lc}${rt.FO}`);
-      F(rt.ZF,`${Lc}${rt.ZB}+${Lc}${rt.ZC}+${Lc}${rt.ZD}+${Lc}${rt.ZE}`);
+      F(rt.EMPRUNT,`MAX(0,-${dR(rB.DET,i)})`);
+      F(rt.REMBOURS,`MIN(0,-${dR(rB.DET,i)})`);
+      F(rt.ZFIN,`SUM(${Lc}${rt.FK}:${Lc}${rt.REMBOURS})`);
+      F(rt.ZF,`${Lc}${rt.ZB}+${Lc}${rt.ZC}+${Lc}${rt.ZFIN}`);
       F(rt.ZG,`${Lc}${rt.ZA}+${Lc}${rt.ZF}`);
       F(rtE,`${Lc}${rt.ZG}-${B_(rB.TN,i)}`);
       /* variations */

@@ -750,30 +750,26 @@ const DEF_BS=[
   {code:"CAPITAUX_PROPRES",lib:"Capitaux propres",st:"titre",toujours:true},
 ];
 const TFT_DEF=[
-  ["ZA","Trésorerie nette au 1er janvier","total"],
+  ["ZA","Trésorerie nette à l'ouverture","total"],
   [null,"Flux de trésorerie des activités opérationnelles"],
   ["FA","Capacité d'autofinancement globale (CAFG)"],
-  ["FB","Variation de l'actif circulant HAO"],
+  ["VAR_CREANCES","Variation des créances"],
   ["FC","Variation des stocks"],
-  ["FD","Variation des créances et emplois assimilés"],
-  ["FE","Variation du passif circulant"],
-  ["ZB","Flux de trésorerie provenant des activités opérationnelles","total"],
+  ["FE","Variation des dettes d'exploitation"],
+  ["ZB","Flux de trésorerie des activités opérationnelles","total"],
   [null,"Flux de trésorerie des activités d'investissement"],
-  ["FF","Décaissements liés aux acquisitions d'immobilisations incorporelles"],
-  ["FG","Décaissements liés aux acquisitions d'immobilisations corporelles"],
-  ["FH","Décaissements liés aux acquisitions d'immobilisations financières"],
-  ["FI","Encaissements liés aux cessions d'immobilisations"],
-  ["ZC","Flux de trésorerie provenant des activités d'investissement","total"],
-  [null,"Flux de trésorerie provenant des capitaux propres"],
-  ["FK","Augmentations de capital par apports nouveaux"],
-  ["FL","Subventions d'investissement reçues"],
+  ["ACQUIS_IMMO","Acquisitions d'immobilisations"],
+  ["CESSION_IMMO","Cessions d'immobilisations"],
+  ["ZC","Flux de trésorerie des activités d'investissement","total"],
+  [null,"Flux de trésorerie des activités de financement"],
+  ["FK","Augmentation de capital"],
+  ["FL","Subvention d'investissement"],
   ["FN","Dividendes versés"],
-  ["ZD","Flux de trésorerie provenant des capitaux propres","total"],
-  [null,"Flux de trésorerie provenant des capitaux étrangers"],
-  ["FO","Emprunts et dettes financières (nets des remboursements)"],
-  ["ZE","Flux de trésorerie provenant des capitaux étrangers","total"],
+  ["EMPRUNT","Emprunts nouveaux"],
+  ["REMBOURS","Remboursement d'emprunts"],
+  ["ZFIN","Flux de trésorerie des activités de financement","total"],
   ["ZF","VARIATION DE LA TRÉSORERIE NETTE DE LA PÉRIODE","total"],
-  ["ZG","Trésorerie nette au 31 décembre","total"]];
+  ["ZG","Trésorerie nette à la clôture","total"]];
 function tableTFT(){
   const A=ETATS.annees;
   if(A.length<2) return '<div class="mut">Il faut au moins deux exercices pour le tableau de flux.</div>';
@@ -794,8 +790,9 @@ function tableTFT(){
     ${cols.map(a=>`<th class="num">FY${String(a).slice(-2)}</th>`).join("")}
     ${cols.slice(1).map((a,i)=>`<th class="num delta">Δ${String(cols[i]).slice(-2)}-${String(a).slice(-2)}</th>`).join("")}</tr>${lignes}</table></div></div>
   <div class="mut" style="margin-top:8px">CAFG approchée (résultat net + dotations nettes) ; flux reconstruits par
-  variations bilancielles — réconciliés exactement avec la trésorerie du bilan. Les cessions (FI) ne sont pas
-  isolables depuis une balance seule et sont comprises dans les décaissements nets.</div>`;
+  variations bilancielles — réconciliés exactement avec la trésorerie du bilan. Reconstruits en <b>net</b> depuis les
+  bilans : les cessions d'immobilisations et les remboursements d'emprunts ne sont pas isolables des acquisitions /
+  emprunts nouveaux (l'une des deux lignes de chaque couple ressort à 0 selon le sens de la variation).</div>`;
 }
 function blocCommentaires(){
   const C=genererCommentaires(ETATS)[SOUS_ETAT]||[];
