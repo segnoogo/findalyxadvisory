@@ -91,7 +91,15 @@ function construireEtatsFormules(wb){
     wsP.getRow(rhn).font={bold:true,color:{argb:"FF172554"}};
     [["MARGE_BRUTE","Marge brute / CA"],["EBITDA","Marge d'EBITDA"],
      ["EBIT","Marge d'exploitation (EBIT)"],["RESULTAT_NET","Marge nette"]].forEach(([c,lib])=>{
-      if(rc[c]) ligneF(wsP,lib,i=>`IF(${L(3+i)}${rc["CA"]}=0,"",${L(3+i)}${rc[c]}/${L(3+i)}${rc["CA"]})`,{pct:1});
+      if(!rc[c])return;
+      const rn=wsP._rn++;
+      wsP.getCell(rn,2).value=lib;wsP.getRow(rn).font={italic:true,color:{argb:"FF808080"}};
+      A.forEach((a,i)=>{const cl=wsP.getCell(rn,3+i);
+        cl.value={formula:`IF(${L(3+i)}${rc["CA"]}=0,"",${L(3+i)}${rc[c]}/${L(3+i)}${rc["CA"]})`};
+        cl.numFmt='0.0%;(0.0%)';});
+      A.slice(1).forEach((a,i)=>{const cd=wsP.getCell(rn,3+n+i);
+        cd.value={formula:`IFERROR((${L(4+i)}${rn}-${L(3+i)}${rn})*10000,"")`};
+        cd.numFmt='+#,##0" pb";-#,##0" pb";0" pb"';cd.alignment={horizontal:"right"};});
     });
   }
   wsP.columns=[{width:3},{width:46},...Array(n).fill({width:14}),...Array(n-1).fill({width:9}),...(avecCagr?[{width:9}]:[])];

@@ -853,14 +853,25 @@ function blocCommentaires(){
   </div>`;
 }
 function blocRatiosMarge(){
-  const A=ETATS.annees;
+  const A=ETATS.annees, n=A.length;
+  const th=A.map(a=>`<th class="num">FY${String(a).slice(-2)}</th>`).join("")
+    +A.slice(1).map((a,i)=>`<th class="num delta">Δ${String(A[i]).slice(-2)}-${String(a).slice(-2)}</th>`).join("")
+    +(n>2?'<th class="num delta">CAGR</th>':"");
   const rats=[["MARGE_BRUTE","Marge brute / CA"],["EBITDA","Marge d'EBITDA"],
     ["EBIT","Marge d'exploitation (EBIT)"],["RESULTAT_NET","Marge nette"]];
-  const lignes=rats.map(([code,lib])=>`<tr class="pct"><td>${lib}</td>${A.map(a=>{
-    const ca=ETATS.v.CA[a];return `<td class="num">${ca?Math.round(ETATS.v[code][a]/ca*1000)/10+" %":"-"}</td>`;}).join("")}</tr>`).join("");
+  const mg=(code,a)=>{const ca=ETATS.v.CA[a];return ca?ETATS.v[code][a]/ca:null;};
+  const lignes=rats.map(([code,lib])=>{
+    const m=A.map(a=>mg(code,a));
+    const fy=m.map(v=>`<td class="num">${v!==null?(Math.round(v*1000)/10)+" %":"-"}</td>`).join("");
+    const dl=A.slice(1).map((a,i)=>{
+      const d=(m[i]!==null&&m[i+1]!==null)?Math.round((m[i+1]-m[i])*10000):null;
+      return `<td class="num delta">${d!==null?(d>0?"+":"")+d+" pb":"-"}</td>`;
+    }).join("");
+    return `<tr class="pct"><td>${lib}</td>${fy}${dl}${n>2?'<td class="num delta"></td>':""}</tr>`;
+  }).join("");
   return `<div class="card" style="padding:0;margin-top:12px">
     <div class="bande">Ratios de marge (% du chiffre d'affaires)</div>
-    <div class="tscroll"><table class="tb etat"><tr><th>${uni().lib}</th>${A.map(a=>`<th class="num">FY${String(a).slice(-2)}</th>`).join("")}</tr>${lignes}</table></div></div>`;
+    <div class="tscroll"><table class="tb etat"><tr><th>${uni().lib}</th>${th}</tr>${lignes}</table></div></div>`;
 }
 function vueEtats(){
   if(!ETATS) return '<div class="mut">Importez d\'abord des balances.</div>';

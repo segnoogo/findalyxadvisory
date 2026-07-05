@@ -248,9 +248,14 @@ async function genererDatabook(){
        ["EBIT","Marge d'exploitation (EBIT)"],["RESULTAT_NET","Marge nette"]].forEach(([c,lib])=>{
         if(!local[c])return;
         const r=ws.addRow([null,lib]);r.font={italic:true,color:{argb:"FF808080"}};
+        const rn=r.number;
         A.forEach((a,j)=>{const col=String.fromCharCode(67+j);
           r.getCell(3+j).value={formula:`IF(${col}${local["CA"]}=0,"",${col}${local[c]}/${col}${local["CA"]})`};
           r.getCell(3+j).numFmt='0.0%;(0.0%)';});
+        A.slice(1).forEach((a,i)=>{const c1=String.fromCharCode(67+i),c2=String.fromCharCode(68+i);
+          const cd=r.getCell(3+n+i);
+          cd.value={formula:`IFERROR((${c2}${rn}-${c1}${rn})*10000,"")`};
+          cd.numFmt='+#,##0" pb";-#,##0" pb";0" pb"';cd.alignment={horizontal:"right"};});
       });
     }
     ws.columns=[{width:3},{width:44},...A.map(()=>({width:14})),...A.slice(1).map(()=>({width:9})),...(avecCagr?[{width:9}]:[])];
