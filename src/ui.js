@@ -852,26 +852,60 @@ function blocCommentaires(){
       oninput="DOSSIER.notes['${SOUS_ETAT}']=this.value;sauverDossier()">${esc(note)}</textarea>
   </div>`;
 }
-function blocRatiosMarge(){
-  const A=ETATS.annees, n=A.length;
+/* --- blocs de ratios (même style que le P&L : FY + Δ, sous chaque état) --- */
+function fmtRatioV(v,unit){
+  if(v===null||v===undefined||!isFinite(v)) return "-";
+  if(unit==="j") return Math.round(v)+" j";
+  const dec=unit==="%"?1:2;
+  return (Math.round(v*Math.pow(10,dec))/Math.pow(10,dec)).toString().replace(".",",")+(unit==="%"?" %":" ×");
+}
+function fmtRatioD(prev,next,unit){
+  if(prev===null||next===null||prev===undefined||next===undefined||!isFinite(prev)||!isFinite(next)) return "-";
+  const d=next-prev;
+  if(unit==="%"){const pb=Math.round(d*100);return (pb>0?"+":"")+pb+" pb";}
+  if(unit==="j"){const j=Math.round(d);return (j>0?"+":"")+j+" j";}
+  const x=Math.round(d*100)/100;return (x>0?"+":"")+x.toString().replace(".",",")+" ×";
+}
+function blocRatios(titre,items,annees){
+  const A=annees||ETATS.annees, n=A.length;
+  if(!items.length||n<1) return "";
   const th=A.map(a=>`<th class="num">FY${String(a).slice(-2)}</th>`).join("")
     +A.slice(1).map((a,i)=>`<th class="num delta">Δ${String(A[i]).slice(-2)}-${String(a).slice(-2)}</th>`).join("")
     +(n>2?'<th class="num delta">CAGR</th>':"");
-  const rats=[["MARGE_BRUTE","Marge brute / CA"],["EBITDA","Marge d'EBITDA"],
-    ["EBIT","Marge d'exploitation (EBIT)"],["RESULTAT_NET","Marge nette"]];
-  const mg=(code,a)=>{const ca=ETATS.v.CA[a];return ca?ETATS.v[code][a]/ca:null;};
-  const lignes=rats.map(([code,lib])=>{
-    const m=A.map(a=>mg(code,a));
-    const fy=m.map(v=>`<td class="num">${v!==null?(Math.round(v*1000)/10)+" %":"-"}</td>`).join("");
-    const dl=A.slice(1).map((a,i)=>{
-      const d=(m[i]!==null&&m[i+1]!==null)?Math.round((m[i+1]-m[i])*10000):null;
-      return `<td class="num delta">${d!==null?(d>0?"+":"")+d+" pb":"-"}</td>`;
-    }).join("");
-    return `<tr class="pct"><td>${lib}</td>${fy}${dl}${n>2?'<td class="num delta"></td>':""}</tr>`;
+  const lignes=items.map(it=>{
+    const m=A.map(a=>it.vals[a]===undefined?null:it.vals[a]);
+    const fy=m.map(v=>`<td class="num">${fmtRatioV(v,it.unit)}</td>`).join("");
+    const dl=A.slice(1).map((a,i)=>`<td class="num delta">${fmtRatioD(m[i],m[i+1],it.unit)}</td>`).join("");
+    return `<tr class="pct"><td>${esc(it.lab)}</td>${fy}${dl}${n>2?'<td class="num delta"></td>':""}</tr>`;
   }).join("");
   return `<div class="card" style="padding:0;margin-top:12px">
-    <div class="bande">Ratios de marge (% du chiffre d'affaires)</div>
+    <div class="bande">${esc(titre)}</div>
     <div class="tscroll"><table class="tb etat"><tr><th>${uni().lib}</th>${th}</tr>${lignes}</table></div></div>`;
+}
+function blocRatiosMarge(){
+  const A=ETATS.annees;
+  const mk=code=>{const o={};A.forEach(a=>{const ca=ETATS.v.CA[a];o[a]=ca?ETATS.v[code][a]/ca*100:null;});return o;};
+  return blocRatios("Ratios de marge (% du chiffre d'affaires)",[
+    {lab:"Marge brute / CA",unit:"%",vals:mk("MARGE_BRUTE")},
+    {lab:"Marge d'EBITDA",unit:"%",vals:mk("EBITDA")},
+    {lab:"Marge d'exploitation (EBIT)",unit:"%",vals:mk("EBIT")},
+    {lab:"Marge nette",unit:"%",vals:mk("RESULTAT_NET")}]);
+}
+function blocRatiosBilan(){
+  const R=calculerRatios(ETATS).ratios.filter(r=>!["margeBrute","margeEbitda","margeNette"].includes(r.k));
+  return blocRatios("Ratios de structure, rentabilité et liquidité",
+    R.map(r=>({lab:r.lab,unit:r.unit,vals:r.vals})));
+}
+function blocRatiosTFT(){
+  const A=ETATS.annees; if(A.length<2) return "";
+  const cols=A.slice(1), v=ETATS.v, t=ETATS.tft;
+  const mk=fn=>{const o={};cols.forEach(a=>{const x=fn(a);o[a]=(x===null||x===undefined||!isFinite(x))?null:x;});return o;};
+  return blocRatios("Ratios de flux et de trésorerie",[
+    {lab:"Capacité d'autofinancement (CAFG) / CA",unit:"%",vals:mk(a=>v.CA[a]?t[a].FA/v.CA[a]*100:null)},
+    {lab:"Conversion en cash (flux d'exploitation / EBITDA)",unit:"%",vals:mk(a=>v.EBITDA[a]?t[a].ZB/v.EBITDA[a]*100:null)},
+    {lab:"Free cash flow / CA (exploitation + investissement)",unit:"%",vals:mk(a=>v.CA[a]?(t[a].ZB+t[a].ZC)/v.CA[a]*100:null)},
+    {lab:"Capacité de remboursement (dette financière / CAFG)",unit:"x",vals:mk(a=>t[a].FA>0?-v.DETTES_FINANCIERES[a]/t[a].FA:null)},
+    {lab:"Couverture des investissements (flux d'exploitation / investissements)",unit:"x",vals:mk(a=>t[a].ZC?t[a].ZB/Math.abs(t[a].ZC):null)}],cols);
 }
 function vueEtats(){
   if(!ETATS) return '<div class="mut">Importez d\'abord des balances.</div>';
@@ -886,7 +920,7 @@ function vueEtats(){
     <button class="${PL_VUE==="synth"?"on":""}" onclick="PL_VUE='synth';rendre()">Synthétique</button>
     <button class="${PL_VUE==="detail"?"on":""}" onclick="PL_VUE='detail';rendre()">Détaillée</button></div>`:"";
   return `<h1>États financiers</h1>
-  <div class="row" style="margin-bottom:12px;align-items:center">${tabs}${vueBtn}</div>${corps}${SOUS_ETAT==="pl"?blocRatiosMarge():""}${blocCommentaires()}`;
+  <div class="row" style="margin-bottom:12px;align-items:center">${tabs}${vueBtn}</div>${corps}${SOUS_ETAT==="pl"?blocRatiosMarge():SOUS_ETAT==="bs"?blocRatiosBilan():SOUS_ETAT==="tft"?blocRatiosTFT():""}${blocCommentaires()}`;
 }
 
 /* --- cartes KPI (style liasses fiscales) --- */
