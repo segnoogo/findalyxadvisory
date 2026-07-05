@@ -369,11 +369,12 @@ function construireFeuillesBP(wb){
   const rs=rv.EQ+2;
   cellV(wsV,rs,2,"Sensibilité (fonds propres)").font={bold:true,color:{argb:"FF172554"}};
   [-0.01,-0.005,0,0.005,0.01].forEach((dg,jx)=>{
-    cellF(wsV,rs,3+jx,`"g "&TEXT(${G}+${dg},"0.0%")`,undefined);
+    const c=cellF(wsV,rs,3+jx,`"g "&TEXT(${G}+${dg},"0.0%")`,undefined);
+    c.font={bold:true,color:{argb:"FF172554"}};c.alignment={horizontal:"right"};
   });
   [-0.01,-0.005,0,0.005,0.01].forEach((dw,ix)=>{
     const rn=rs+1+ix;
-    cellF(wsV,rn,2,`"WACC "&TEXT(${W}+${dw},"0.0%")`);
+    cellF(wsV,rn,2,`"WACC "&TEXT(${W}+${dw},"0.0%")`).font={bold:true,color:{argb:"FF172554"}};
     [-0.01,-0.005,0,0.005,0.01].forEach((dg,jx)=>{
       const w=`(${W}+${dw})`,g=`(${G}+${dg})`;
       cellF(wsV,rn,3+jx,
@@ -384,7 +385,8 @@ function construireFeuillesBP(wb){
   /* méthodes */
   const rm=rs+7;
   cellV(wsV,rm,2,"Méthode").font={bold:true,color:{argb:"FF172554"}};
-  ["Bas","Central","Haut"].forEach((t,i)=>cellV(wsV,rm,3+i,t).font={bold:true,color:{argb:"FF172554"}});
+  ["Bas","Central","Haut"].forEach((t,i)=>{const c=cellV(wsV,rm,3+i,t);
+    c.font={bold:true,color:{argb:"FF172554"}};c.alignment={horizontal:"right"};});
   const ebR=`(${rP}!${L(cHL)}$${rp.EBITDA}+${h1(hy.adjE)})`;
   cellV(wsV,rm+1,2,"DCF (sensibilité min / central / max)");
   cellF(wsV,rm+1,3,`MIN(${L(3)}${rs+1}:${L(7)}${rs+5})`,NF);

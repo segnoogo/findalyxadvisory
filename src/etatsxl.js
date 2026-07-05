@@ -59,29 +59,33 @@ function construireEtatsFormules(wb){
   }
   const somme=(rows)=>(i)=>rows.map(r=>`${L(3+i)}${r}`).join("+");
 
-  /* ================= P&L ================= */
+  /* ================= P&L (détaillé SYSCOHADA — même nomenclature que le databook) ================= */
   const wsP=feuilleEtat("P&L","Compte de résultat analytique — FORMULES (recalculé depuis la TBAGR) — "+u.lib);
   const rP={};
-  const pl=(k,lib,codes,opt)=>{rP[k]=ligneF(wsP,lib,i=>su(codes,i,"-"),opt);};
-  pl("CA","Chiffre d'affaires",["CA_MARCHANDISES","CA_PRODUITS","CA_SERVICES","CA_ACCESSOIRES",...persoDe2("CA").map(x=>x.code)],{st:1});
-  pl("CD","Coûts directs",["ACHATS_MARCH","ACHATS_MP","AUTRES_ACHATS",...persoDe2("COUTS_DIRECTS").map(x=>x.code)]);
-  rP.MB=ligneF(wsP,"Marge brute",somme([rP.CA,rP.CD]),{st:1});
-  ligneF(wsP,"% Marge brute / CA",i=>`IF(${L(3+i)}${rP.CA}=0,"",${L(3+i)}${rP.MB}/${L(3+i)}${rP.CA})`,{pct:1});
-  pl("AP","Subventions et autres produits",["SUBVENTIONS","PROD_STOCKEE","PROD_IMMOBILISEE","AUTRES_PRODUITS",...persoDe2("AUTRES_PROD").map(x=>x.code)]);
-  pl("OPEX","Frais généraux",["SOUS_TRAITANCE","LOCATIONS","ENTRETIEN","ASSURANCES","PUBLICITE","TELECOM",
-    "FRAIS_BANCAIRES","HONORAIRES","PERSONNEL_EXT","TRANSPORTS","AUTRES_SERV_EXT","IMPOTS_TAXES","AUTRES_CHARGES",
-    ...persoDe2("OPEX").map(x=>x.code)]);
-  pl("PERS","Charges de personnel",["CHARGES_PERSONNEL",...persoDe2("CHARGES_PERSONNEL").map(x=>x.code)]);
-  rP.EBITDA=ligneF(wsP,"EBITDA",somme([rP.MB,rP.AP,rP.OPEX,rP.PERS]),{st:1});
-  ligneF(wsP,"% EBITDA / CA",i=>`IF(${L(3+i)}${rP.CA}=0,"",${L(3+i)}${rP.EBITDA}/${L(3+i)}${rP.CA})`,{pct:1});
-  pl("DA","Amortissements et provisions (nets)",["DOTATIONS","REPRISES",...persoDe2("DA").map(x=>x.code)]);
-  rP.EBIT=ligneF(wsP,"EBIT",somme([rP.EBITDA,rP.DA]),{st:1});
-  pl("RF","Résultat financier",["REVENUS_FIN","FRAIS_FIN",...persoDe2("RESULTAT_FIN").map(x=>x.code)]);
-  pl("HAO","Résultat HAO",["PRODUITS_HAO","CHARGES_HAO",...persoDe2("RESULTAT_HAO").map(x=>x.code)]);
-  pl("IS","Impôt sur le résultat",["IS","PARTICIPATION",...persoDe2("IMPOTS").map(x=>x.code)]);
-  rP.RN=ligneF(wsP,"Résultat net",somme([rP.EBIT,rP.RF,rP.HAO,rP.IS]),{st:1});
-  ligneF(wsP,"% Résultat net / CA",i=>`IF(${L(3+i)}${rP.CA}=0,"",${L(3+i)}${rP.RN}/${L(3+i)}${rP.CA})`,{pct:1});
-  wsP.columns=[{width:3},{width:42},...Array(n).fill({width:14}),...Array(n-1).fill({width:9}),...(avecCagr?[{width:9}]:[])];
+  {
+    /* lignes personnalisées insérées avant le sous-total de leur agrégat (comme le databook) */
+    const AG_ST_PL={CA:"CA",COUTS_DIRECTS:"MARGE_BRUTE",AUTRES_PROD:"EBITDA",OPEX:"EBITDA",
+      CHARGES_PERSONNEL:"EBITDA",DA:"EBIT",RESULTAT_FIN:"RESULTAT_FINANCIER",
+      RESULTAT_HAO:"RESULTAT_HAO",IMPOTS:"RESULTAT_NET"};
+    const dPL=DB_PL.map(l=>Object.assign({},l,l.somme?{somme:l.somme.slice()}:{}));
+    (DOSSIER.lignesPerso||[]).filter(pp=>pp.etat==="PL").forEach(pp=>{
+      const st=AG_ST_PL[pp.agregat], i=dPL.findIndex(l=>l.code===st&&l.type==="sous_total");
+      if(i>=0){dPL[i].somme.push(pp.code);dPL.splice(i,0,{code:pp.code,lib:pp.lib});}
+    });
+    const rc={};
+    dPL.forEach(l=>{
+      let rn;
+      if(!l.type) rn=ligneF(wsP,l.lib,i=>su([l.code],i,"-"));
+      else if(l.type==="sous_total"){
+        const parts=l.somme.filter(c=>rc[c]).map(c=>rc[c]);
+        rn=ligneF(wsP,l.lib,parts.length?somme(parts):()=>"0",{st:1});
+      }else if(l.type==="pourcentage")
+        rn=ligneF(wsP,l.lib,i=>`IF(${L(3+i)}${rc["CA"]}=0,"",${L(3+i)}${rc[l.num]}/${L(3+i)}${rc["CA"]})`,{pct:1});
+      rc[l.code]=rn;
+    });
+    rP.RN=rc["RESULTAT_NET"];
+  }
+  wsP.columns=[{width:3},{width:46},...Array(n).fill({width:14}),...Array(n-1).fill({width:9}),...(avecCagr?[{width:9}]:[])];
   const refP="'"+nomOnglet("P&L").replace(/'/g,"''")+"'";
 
   /* ================= Bilan ================= */

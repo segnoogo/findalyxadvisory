@@ -1101,6 +1101,55 @@ function finaliserClasseur(wb){
     }));
   });
 }
+/* Page d'accueil du classeur (cartouche + navigation) — même style que le databook. */
+function construireAccueilClasseur(ws,wb){
+  ws.views=[{showGridLines:false}];
+  const u=uni();
+  const fy=ETATS.annees.map(a=>"FY"+String(a).slice(-2));
+  const dateGen=new Date().toLocaleDateString("fr-FR",{day:"numeric",month:"long",year:"numeric"});
+  let lt=6;
+  if(DOSSIER.logo){
+    try{
+      const ext=(DOSSIER.logo.match(/image\/(png|jpeg|jpg|gif)/)||[,"png"])[1].replace("jpg","jpeg");
+      const img=wb.addImage({base64:DOSSIER.logo.split(",")[1],extension:ext});
+      ws.addImage(img,{tl:{col:1.1,row:2},ext:{width:170,height:170}});
+      lt=14;
+    }catch(e){}
+  }
+  const met=(rn,txt,taille,couleur,gras)=>{const c=ws.getCell(rn,2);c.value=txt;
+    c.font={name:"Arial Narrow",size:taille,bold:!!gras,color:{argb:couleur}};};
+  met(lt,DOSSIER.societe,30,"FF172554",true);
+  met(lt+1,"Modèle financier — états, plan d'affaires et valorisation",16,"FF6B7280");
+  met(lt+3,"Exercices "+fy.join(" · ")+"   —   montants en "+u.lib,12,"FF172554");
+  const infosG=[(DOSSIER.infos||{}).secteur,(DOSSIER.infos||{}).adresse].filter(Boolean).join(" — ");
+  met(lt+4,infosG||"États en formules vivantes reliés à la balance agrégée (TBAGR)",11,"FF6B7280");
+  met(lt+6,"Généré le "+dateGen+" par Findalyx Advisory",11,"FF6B7280");
+  /* navigation cliquable vers les onglets */
+  const ln=lt+9;
+  met(ln,"NAVIGATION",12,"FF172554",true);
+  let r=ln+1;
+  wb.worksheets.forEach(sh=>{
+    if(sh===ws||sh.name==="Accueil")return;
+    const c=ws.getCell(r,2);
+    c.value={text:"▸  "+sh.name,hyperlink:"#'"+sh.name.replace(/'/g,"''")+"'!A1"};
+    c.font={name:"Arial Narrow",size:11,color:{argb:"FF0563C1"},underline:true};
+    r++;
+  });
+  /* mode d'emploi */
+  const lm=r+1;
+  met(lm,"MODE D'EMPLOI",12,"FF172554",true);
+  [["1. La colonne Mapping de l'onglet TBAGR (jaune) est modifiable : toute correction recalcule les états."],
+   ["2. P&L, Bilan et TFT sont en FORMULES vivantes reliées à la TBAGR."],
+   ["3. Les cellules jaunes des Hypothèses BP pilotent le plan d'affaires et la valorisation."],
+   ["4. Cliquez sur une ligne de la navigation ci-dessus pour ouvrir l'onglet correspondant."]]
+    .forEach((x,k)=>met(lm+1+k,x[0],11,"FF404040"));
+  try{
+    const lf=wb.addImage({base64:LOGO_FINDALYX_CLAIR.split(",")[1],extension:"png"});
+    ws.addImage(lf,{tl:{col:1.1,row:lm+7},ext:{width:150,height:44}});
+  }catch(e){}
+  ws.columns=[{width:3},{width:110}];
+  ws.getRow(lt).height=36;
+}
 function titreLiasse(ws,sousTitre){
   const r1=ws.addRow([null,DOSSIER.societe]);
   r1.getCell(2).font={bold:true,size:13,color:{argb:"FF172554"}};
@@ -1115,6 +1164,7 @@ async function exporterExcel(seulementTbagr){
   const mnt=x=>(x===null||x===undefined)?null:(u.dec?Math.round(x*UF*10)/10:Math.round(x*UF));
   const wb=new ExcelJS.Workbook();
   const A=ETATS.annees;
+  const wsAccueil=seulementTbagr?null:wb.addWorksheet("Accueil");  /* 1er onglet — rempli en fin de génération */
   const entTb=[null,"Mapping","BS/PL","Compte","Libellé",...A.map(a=>"FY"+String(a).slice(-2))];
   const wsT=wb.addWorksheet(nomOnglet("TBAGR"));
   titreLiasse(wsT,"Balance générale agrégée (TBAGR) — "+u.lib);
@@ -1190,6 +1240,7 @@ async function exporterExcel(seulementTbagr){
     }
     wsC.columns=[{width:3},{width:20},{width:26},{width:110}];
   }
+  if(wsAccueil)construireAccueilClasseur(wsAccueil,wb);
   finaliserClasseur(wb);
   const buf=await wb.xlsx.writeBuffer();
   const blob=new Blob([buf],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
