@@ -5314,7 +5314,7 @@ function vueValo(){
        ["Valeur terminale actualisée",V.vtPv],["Valeur d'entreprise (EV)",V.ev],
        ["(–) Dette nette au "+ETATS.annees[ETATS.annees.length-1],-V.detteNette],
        ["Valeur des fonds propres (DCF)",V.equityDcf]].map(([l,x],i)=>
-      `<tr class="${i===3||i===5?"total":""}"><td>${l}</td><td class="num">${fmt(x)}</td></tr>`).join("")}
+      `<tr class="${i===3||i===5?"total":""}"${i===5?' style="font-weight:700"':""}><td>${l}</td><td class="num">${fmt(x)}</td></tr>`).join("")}
     </table></div>
     <div class="card"><div class="sec-titre" style="margin-top:0">Sensibilité — WACC × croissance g</div>
     <table class="tb"><tr><th>${u.lib}</th>${[-0.01,-0.005,0,0.005,0.01].map(dg=>`<th class="num">g ${pc(V.g+dg)}</th>`).join("")}</tr>
@@ -5343,19 +5343,27 @@ function dessinerFootball(){
     const meta=chart.getDatasetMeta(0);
     ctx.save();
     ctx.font="600 11px Calibri, Arial";
+    ctx.textBaseline="middle";
     meta.data.forEach((barre,i)=>{
-      const m=V.methodes[i];
-      const y=barre.y;
+      const m=V.methodes[i], y=barre.y;
+      const largeur=barre.x-barre.base;
+      const memeVal=Math.abs(m.max-m.min)<=Math.max(1,Math.abs(m.max)*0.005);
       ctx.fillStyle="#172554";
-      ctx.textAlign="right";
-      ctx.fillText(fmtFF(m.min*u.f),barre.base-6,y+4);
-      ctx.textAlign="left";
-      ctx.fillText(fmtFF(m.max*u.f),barre.x+6,y+4);
-      /* central au-dessus du marqueur orange */
-      const xC=chart.scales.x.getPixelForValue(m.central*u.f);
-      ctx.fillStyle="#FA6706";
-      ctx.textAlign="center";
-      ctx.fillText(fmtFF(m.central*u.f),xC,y-barre.height/2-5);
+      if(largeur>=60){
+        /* barre large : min à gauche, max à droite */
+        ctx.textAlign="right"; ctx.fillText(fmtFF(m.min*u.f),barre.base-6,y);
+        ctx.textAlign="left";  ctx.fillText(fmtFF(m.max*u.f),barre.x+6,y);
+      }else{
+        /* barre étroite : fourchette regroupée à droite (évite le chevauchement avec l'axe) */
+        ctx.textAlign="left";
+        ctx.fillText(memeVal?fmtFF(m.max*u.f):fmtFF(m.min*u.f)+" – "+fmtFF(m.max*u.f),barre.x+6,y);
+      }
+      /* valeur centrale (orange) au-dessus — sauf doublon quand la barre est réduite à un point */
+      if(!(largeur<60&&memeVal)){
+        const xC=chart.scales.x.getPixelForValue(m.central*u.f);
+        ctx.fillStyle="#FA6706"; ctx.textAlign="center";
+        ctx.fillText(fmtFF(m.central*u.f),xC,y-barre.height/2-6);
+      }
     });
     ctx.restore();
   }};
