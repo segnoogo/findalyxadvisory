@@ -512,6 +512,9 @@ function construireDD(pptx){
   rpPlaceholder(pptx,B.societe,"Business overview","Présentation de la société",
     ["Historique et actionnariat","Activités et offre","Organisation et effectifs",
      "Marché et positionnement","Faits marquants de la période"],mention,++page);
+  rpPlaceholder(pptx,B.societe,"Business overview","Structure organisationnelle",
+    ["Organigramme et instances de gouvernance","Équipe dirigeante et management",
+     "Structure du groupe, filiales et participations","Effectifs par fonction et implantations"],mention,++page);
   /* performances historiques */
   rpSection(pptx,3,"Analyse financière",
     ["Compte de résultat","Situation nette","BFR et délais","Flux de trésorerie","Ratios clés"],mention,++page);
@@ -654,6 +657,9 @@ function construireBP(pptx){
   rpPlaceholder(pptx,B.societe,"Présentation du projet","Projet, structure et motivations",
     ["Description du projet et du promoteur","Structure juridique et actionnariat",
      "Motivations et objectifs du financement","Points d'attention"],mention,++page);
+  rpPlaceholder(pptx,B.societe,"Étude de marché","Étude de marché et positionnement",
+    ["Marché et positionnement","Taille du marché et dynamique de croissance",
+     "Concurrence et acteurs clés","Clientèle cible, canaux et différenciation"],mention,++page);
   /* hypothèses */
   rpSection(pptx,3,"Hypothèses",["Hypothèses opérationnelles et financières"],mention,++page);
   sl=pptx.addSlide();
