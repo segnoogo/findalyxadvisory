@@ -142,12 +142,31 @@ function deconnexion(){
 }
 /* ---------- cabinet : coordonnées de l'analyste, reprises dans les exports ---------- */
 function chargerCabinet(){try{return JSON.parse(localStorage.getItem("fxc_cabinet")||"{}")||{};}catch(e){return {};}}
-function majCabinet(k,val){const c=chargerCabinet();c[k]=(val||"").trim();try{localStorage.setItem("fxc_cabinet",JSON.stringify(c));}catch(e){}}
+function majCabinet(k,val){const c=chargerCabinet();c[k]=typeof val==="string"?val.trim():val;try{localStorage.setItem("fxc_cabinet",JSON.stringify(c));}catch(e){}}
 function nomCabinet(){return chargerCabinet().cabinet||"";}
 /* nom à afficher dans les exports : cabinet configuré, sinon titulaire de la licence */
 function cabinetExport(){return nomCabinet()||((typeof LIC_ETAT!=="undefined"&&LIC_ETAT&&LIC_ETAT.customer)||"");}
+/* logo du cabinet pour les exports : {data (PNG), ratio largeur/hauteur} ou null */
+function logoCab(){const c=chargerCabinet();return c.logo?{data:c.logo,ratio:c.logoRatio||3.4}:null;}
+function chargerLogoCabinet(inp){
+  const f=inp.files&&inp.files[0];if(!f)return;
+  const r=new FileReader();
+  r.onload=()=>{const img=new Image();img.onload=()=>{
+    const k=Math.min(1,400/Math.max(img.width,img.height));
+    const cv=document.createElement("canvas");
+    cv.width=Math.round(img.width*k);cv.height=Math.round(img.height*k);
+    cv.getContext("2d").drawImage(img,0,0,cv.width,cv.height);
+    majCabinet("logo",cv.toDataURL("image/png"));majCabinet("logoRatio",cv.width/cv.height);
+    rendre();toast("Logo du cabinet enregistré — repris dans les exports");
+  };img.src=r.result;};
+  r.readAsDataURL(f);
+}
 function carteCabinet(){
   const c=chargerCabinet();
+  const logoCtl=`<div class="row" style="margin-bottom:14px">
+    ${c.logo?`<img src="${c.logo}" style="height:46px;border:1px solid #eceff3;border-radius:6px;padding:3px;background:#fff">`:'<span class="mut">Aucun logo de cabinet.</span>'}
+    <label class="btn sm">${c.logo?"Changer le logo":"Charger un logo"}<input type="file" accept="image/*" style="display:none" onchange="chargerLogoCabinet(this)"></label>
+    ${c.logo?`<button class="btn sm" onclick="majCabinet('logo','');majCabinet('logoRatio','');rendre()">Retirer</button>`:""}</div>`;
   const champs=[["cabinet","Cabinet / raison sociale","ex. Cabinet Sawadogo & Associés"],
     ["analyste","Analyste / signataire","ex. Salif Sawadogo"],
     ["adresse","Adresse","ex. Dakar, Sénégal"],
@@ -156,15 +175,34 @@ function carteCabinet(){
   const lignes=champs.map(([k,lab,ph])=>`<div class="hyp-l"><span>${lab}</span>
     <input class="sel" style="width:52%" placeholder="${esc(ph)}" value="${esc(c[k]||"")}"
       onchange="majCabinet('${k}',this.value)"></div>`).join("");
-  return `<div class="card"><div class="sec-titre" style="margin-top:0">Mon cabinet — coordonnées dans les exports</div>
-    <div class="mut" style="margin-bottom:10px">Ces informations (cabinet, analyste, coordonnées) apparaissent sur les pages de garde et pieds de page des rapports (PDF, PowerPoint, databook), à la place de « Findalyx ». Laissez vide pour ne rien afficher.</div>
-    ${lignes}</div>`;
+  return `<div class="card"><div class="sec-titre" style="margin-top:0">Mon cabinet — logo &amp; coordonnées dans les exports</div>
+    <div class="mut" style="margin-bottom:10px">Logo, cabinet, analyste et coordonnées apparaissent sur les pages de garde et pieds de page des rapports (PDF, PowerPoint, databook), à la place de « Findalyx ». Laissez vide pour ne rien afficher.</div>
+    ${logoCtl}${lignes}</div>`;
+}
+function cleLicence(){try{return localStorage.getItem("fxc_licence")||"";}catch(e){return "";}}
+function copierCleFallback(k){
+  const t=document.createElement("textarea");t.value=k;t.style.position="fixed";t.style.opacity="0";
+  document.body.appendChild(t);t.select();
+  try{document.execCommand("copy");toast("Clé de licence copiée");}catch(e){toast("Copie impossible — sélectionnez puis copiez à la main");}
+  document.body.removeChild(t);
+}
+function copierCle(){
+  const k=cleLicence();
+  if(!k){toast("Aucune clé enregistrée");return;}
+  if(navigator.clipboard&&navigator.clipboard.writeText)
+    navigator.clipboard.writeText(k).then(()=>toast("Clé de licence copiée"),()=>copierCleFallback(k));
+  else copierCleFallback(k);
 }
 function vueLicence(){
   return `<h1>Licence &amp; cabinet</h1>
   <div class="deux">
     <div class="card"><div class="sec-titre" style="margin-top:0">Abonnement Findalyx</div>
       ${infosLicenceHTML()}
+      <div style="margin-top:12px">
+        <div class="lic-k" style="margin-bottom:5px">Clé de licence</div>
+        <div style="display:flex;gap:8px">
+          <input class="sel" style="flex:1;font-family:monospace;font-size:11px" readonly value="${esc(cleLicence())}" onclick="this.select()" title="Cliquez pour tout sélectionner">
+          <button class="btn sm" onclick="copierCle()">Copier</button></div></div>
       <div style="margin-top:12px;display:flex;gap:8px">
         <button class="btn sm" onclick="licChanger()">Renouveler / nouvelle clé</button>
         <button class="btn sm danger" onclick="deconnexion()">Déconnexion</button></div></div>
@@ -1324,8 +1362,9 @@ function construireAccueilClasseur(ws,wb){
    ["4. Cliquez sur une ligne de la navigation ci-dessus pour ouvrir l'onglet correspondant."]]
     .forEach((x,k)=>met(lm+1+k,x[0],11,"FF404040"));
   try{
-    const lf=wb.addImage({base64:LOGO_FINDALYX_CLAIR.split(",")[1],extension:"png"});
-    ws.addImage(lf,{tl:{col:1.1,row:lm+7},ext:{width:150,height:44}});
+    const _lc=logoCab();
+    const lf=wb.addImage({base64:(_lc?_lc.data:LOGO_FINDALYX_CLAIR).split(",")[1],extension:"png"});
+    ws.addImage(lf,{tl:{col:1.1,row:lm+7},ext:_lc?{width:150,height:Math.round(150/_lc.ratio)}:{width:150,height:44}});
   }catch(e){}
   ws.columns=[{width:3},{width:110}];
   ws.getRow(lt).height=36;

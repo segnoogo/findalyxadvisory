@@ -44,7 +44,9 @@ function construirePDF(doc){
   /* ---- garde ---- */
   doc.setFillColor(...PDF_NAVY);doc.rect(0,95,297,115,"F");
   doc.setFillColor(250,103,6);doc.rect(16,108,32,1.2,"F");
-  if(LOGO_FINDALYX_CLAIR)try{doc.addImage(LOGO_FINDALYX_CLAIR,"PNG",16,14,42,12.5);}catch(e){}
+  {const _lc=logoCab();
+   if(_lc){try{doc.addImage(_lc.data,"PNG",16,14,12.5*_lc.ratio,12.5);}catch(e){}}
+   else if(LOGO_FINDALYX_CLAIR)try{doc.addImage(LOGO_FINDALYX_CLAIR,"PNG",16,14,42,12.5);}catch(e){}}
   if(DOSSIER.logo)try{doc.addImage(DOSSIER.logo,"PNG",250,14,32,32);}catch(e){}
   doc.setTextColor(...PDF_GRIS);doc.setFontSize(11);doc.setFont("helvetica","bold");
   doc.text(new Date().toLocaleDateString("fr-FR",{day:"numeric",month:"long",year:"numeric"}).toUpperCase(),16,80);

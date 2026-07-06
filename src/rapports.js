@@ -32,7 +32,7 @@ function rpAssertion(sl,txt){sl.addText(txt,{x:0.55,y:1.4,w:12.2,h:0.35,fontSize
   italic:true,color:RP.G_TXT,fontFace:"Arial"});}
 function rpPied(sl,mention,page){
   sl.addShape("rect",{x:0.55,y:7.02,w:12.23,h:0.015,fill:{color:RP.FILET}});
-  sl.addImage({data:LOGO_FINDALYX_CLAIR,x:0.55,y:7.09,h:0.24,w:0.24*4.45});
+  {const _lg=logoCab();sl.addImage(_lg?{data:_lg.data,x:0.55,y:7.09,h:0.24,w:0.24*_lg.ratio}:{data:LOGO_FINDALYX_CLAIR,x:0.55,y:7.09,h:0.24,w:0.24*4.45});}
   sl.addText(mention,{x:2.6,y:7.1,w:8.2,h:0.25,align:"center",fontSize:8,
     color:RP.G_CLAIR,fontFace:"Arial"});
   sl.addText(String(page),{x:12.2,y:7.1,w:0.58,h:0.25,align:"right",fontSize:9,
@@ -40,7 +40,7 @@ function rpPied(sl,mention,page){
 }
 function rpGarde(pptx, societe, titreR, sousTitre, dateTxt, cabinet){
   const sl=pptx.addSlide();
-  sl.addImage({data:LOGO_FINDALYX_CLAIR,x:0.7,y:0.7,h:0.5,w:0.5*4.45});
+  {const _lg=logoCab();sl.addImage(_lg?{data:_lg.data,x:0.7,y:0.7,h:0.5,w:0.5*_lg.ratio}:{data:LOGO_FINDALYX_CLAIR,x:0.7,y:0.7,h:0.5,w:0.5*4.45});}
   if(typeof DOSSIER!=="undefined"&&DOSSIER&&DOSSIER.logo)
     sl.addImage({data:DOSSIER.logo,x:11.4,y:1.45,w:1.25,h:1.25,sizing:{type:"contain",w:1.25,h:1.25}});
   sl.addText("STRICTEMENT CONFIDENTIEL",{x:9.0,y:0.8,w:3.6,h:0.3,align:"right",
@@ -222,7 +222,7 @@ function rpContacts(pptx, cabinet, mention, page){
   sl.addText("Contacts",{x:0.7,y:0.85,w:8.5,h:0.65,fontSize:28,bold:true,color:RP.BLANC,fontFace:"Arial"});
   sl.addText("Vos interlocuteurs restent à votre disposition pour toute question relative à ce rapport.",
     {x:0.7,y:1.55,w:11.0,h:0.35,fontSize:11.5,italic:true,color:"9FB0D6",fontFace:"Arial"});
-  sl.addImage({data:LOGO_FINDALYX,x:10.9,y:0.72,h:0.42,w:0.42*4.45});
+  {const _lg=logoCab();sl.addImage(_lg?{data:_lg.data,x:10.9,y:0.72,h:0.42,w:0.42*_lg.ratio}:{data:LOGO_FINDALYX,x:10.9,y:0.72,h:0.42,w:0.42*4.45});}
   sl.addShape("rect",{x:0.7,y:2.9,w:3.95,h:2.5,fill:{color:RP.BLANC},line:{color:RP.FILET,width:1}});
   sl.addShape("rect",{x:0.95,y:3.18,w:0.5,h:0.04,fill:{color:RP.ORANGE}});
   const cab=chargerCabinet();

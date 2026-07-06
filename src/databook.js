@@ -141,10 +141,11 @@ async function genererDatabook(){
    ["2. P&L, BS et TFT sont en FORMULES : toute correction du mapping recalcule les états."],
    ["3. Les montants des onglets Détail sont des formules de recherche vers TBAGR ; la composition des blocs reste celle de la génération."],
    ["4. Contrôles : équilibres et cohérences ; Commentaires : projets à enrichir + vos notes."]].forEach((r,k)=>met(lm+1+k,r[0],11,"FF404040"));
-  /* logo Findalyx en bas */
+  /* logo (cabinet si configuré, sinon Findalyx) en bas */
   try{
-    const lf=wb.addImage({base64:LOGO_FINDALYX_CLAIR.split(",")[1],extension:"png"});
-    wsL.addImage(lf,{tl:{col:1.1,row:lm+7},ext:{width:150,height:44}});
+    const _lc=logoCab();
+    const lf=wb.addImage({base64:(_lc?_lc.data:LOGO_FINDALYX_CLAIR).split(",")[1],extension:"png"});
+    wsL.addImage(lf,{tl:{col:1.1,row:lm+7},ext:_lc?{width:150,height:Math.round(150/_lc.ratio)}:{width:150,height:44}});
   }catch(e){}
   wsL.columns=[{width:3},{width:110}];
   wsL.getRow(ligneT).height=36;
