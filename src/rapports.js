@@ -240,6 +240,7 @@ function rpLignesFin(vals, codes, annees, libs, cfg){
 }
 const RP_LIBS={CA:"Chiffre d'affaires",COUTS_DIRECTS:"Coûts directs",MARGE_BRUTE:"Marge brute",
   AUTRES_PROD:"Subventions et autres produits",OPEX:"Frais généraux",
+  FRAIS_GENERAUX:"Frais généraux",RAO:"Résultat des activités ordinaires",RESULTAT_AVANT_IMPOT:"Résultat avant impôt",
   CHARGES_PERSONNEL:"Charges de personnel",EBITDA:"EBITDA",DA:"Amortissements et provisions",
   EBIT:"EBIT",RESULTAT_FIN:"Résultat financier",RESULTAT_HAO:"Résultat HAO",
   IMPOTS:"Impôt sur le résultat",RESULTAT_NET:"Résultat net",
@@ -518,10 +519,11 @@ function construireDD(pptx){
   rpEnTete(sl,B.societe,"Due diligence financière");
   rpTitre(sl,"Compte de résultat");
   rpAssertionBox(sl,B.societe+" réalise un chiffre d'affaires de "+rpFmt(ca1)+" "+rpLib()+" en "+fy[fy.length-1]+(tcam!==null?" (TCAM "+rpPct(tcam)+")":"")+".");
-  const pl=rpLignesFin(v,["CA","COUTS_DIRECTS","MARGE_BRUTE","AUTRES_PROD","OPEX",
-    "CHARGES_PERSONNEL","EBITDA","DA","EBIT","RESULTAT_FIN","RESULTAT_HAO","IMPOTS","RESULTAT_NET"],
-    A,RP_LIBS,{CA:"titre",MARGE_BRUTE:"sous_total",EBITDA:"sous_total",EBIT:"sous_total",
-    RESULTAT_NET:"sous_total",pctApres:new Set(["MARGE_BRUTE","EBITDA","RESULTAT_NET"])});
+  const pl=rpLignesFin(v,["CA","COUTS_DIRECTS","MARGE_BRUTE","AUTRES_PROD","FRAIS_GENERAUX",
+    "EBITDA","DA","EBIT","RESULTAT_FIN","RAO","RESULTAT_HAO","RESULTAT_AVANT_IMPOT","IMPOTS","RESULTAT_NET"],
+    A,RP_LIBS,{CA:"titre",COUTS_DIRECTS:"sous_total",MARGE_BRUTE:"sous_total",FRAIS_GENERAUX:"sous_total",
+    EBITDA:"sous_total",EBIT:"sous_total",RESULTAT_FIN:"sous_total",RAO:"sous_total",RESULTAT_HAO:"sous_total",
+    RESULTAT_AVANT_IMPOT:"sous_total",RESULTAT_NET:"sous_total",pctApres:new Set(["MARGE_BRUTE","EBITDA","RESULTAT_NET"])});
   rpTable(sl,0.55,1.65,6.55,B.societe.toUpperCase()+" - Compte de résultat",pl.entetes,pl.lignes,pl.styles,
     pl.colsDelta,pl.largeurs,8,"Source : balances générales "+fy[0]+" - "+fy[fy.length-1]);
   rpColonnes(sl,7.4,1.65,5.4,3.05,"("+rpLib()+")",fy,[
@@ -690,15 +692,16 @@ function construireBP(pptx){
   rpTitre(sl,"Compte de résultat prévisionnel");
   rpAssertion(sl,"L'EBITDA évolue de "+rpFmt(v.EBITDA[a1])+" "+rpLib()+" en "+fy[fy.length-1]+
     " à "+rpFmt(proj.pl.EBITDA[ap[ap.length-1]])+" "+rpLib()+" en "+fyp[fyp.length-1]+".");
-  const codesP=[["CA","Chiffre d'affaires","titre"],["ACHATS","Coûts directs","detail"],
+  proj.pl.FRAIS_GENERAUX={}; ap.forEach(a=>{proj.pl.FRAIS_GENERAUX[a]=(proj.pl.OPEX_TOTAL[a]||0)+(proj.pl.CHARGES_PERSONNEL[a]||0);});
+  const codesP=[["CA","Chiffre d'affaires","titre"],["ACHATS","Coûts directs","sous_total"],
     ["MARGE_BRUTE","Marge brute","sous_total"],["AUTRES_PRODUITS","Autres produits","detail"],
-    ["PERSONNEL","Charges de personnel","detail"],["AUTRES_OPEX","Frais généraux","detail"],
-    ["EBITDA","EBITDA","sous_total"],["DOTATIONS","Dotations","detail"],
-    ["EBIT","EBIT","sous_total"],["RESULTAT_FIN","Résultat financier","detail"],
-    ["IS","Impôt sur les sociétés","detail"],["RN","Résultat net","sous_total"]];
+    ["FRAIS_GENERAUX","Frais généraux","sous_total"],
+    ["EBITDA","EBITDA","sous_total"],["DOTATIONS","Dotations et reprises","detail"],
+    ["EBIT","EBIT","sous_total"],["RESULTAT_FIN","Résultat financier","sous_total"],
+    ["EBT","Résultat avant impôt","sous_total"],["IS","Impôt sur les sociétés","detail"],["RN","Résultat net","sous_total"]];
   const histM={CA:"CA",ACHATS:"COUTS_DIRECTS",MARGE_BRUTE:"MARGE_BRUTE",AUTRES_PRODUITS:"AUTRES_PROD",
-    PERSONNEL:"CHARGES_PERSONNEL",AUTRES_OPEX:"OPEX",EBITDA:"EBITDA",DOTATIONS:"DA",EBIT:"EBIT",
-    RESULTAT_FIN:"RESULTAT_FIN",IS:"IMPOTS",RN:"RESULTAT_NET"};
+    FRAIS_GENERAUX:"FRAIS_GENERAUX",EBITDA:"EBITDA",DOTATIONS:"DA",EBIT:"EBIT",
+    RESULTAT_FIN:"RESULTAT_FIN",EBT:"RESULTAT_AVANT_IMPOT",IS:"IMPOTS",RN:"RESULTAT_NET"};
   const lignesBP=codesP.map(([c,lib])=>[lib,...A.map(a=>rpFmt(v[histM[c]][a])),
     ...ap.map(a=>rpFmt(proj.pl[c][a]))]);
   rpTable(sl,0.55,1.6,12.25,B.societe.toUpperCase()+" - P&L prévisionnel",
