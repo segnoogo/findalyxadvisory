@@ -543,12 +543,7 @@ function construireDD(pptx){
   rpTable(sl,0.55,1.65,7.0,B.societe.toUpperCase()+" - Actif net",bs.entetes,bs.lignes,bs.styles,
     bs.colsDelta,bs.largeurs,8,"Source : balances générales "+fy[0]+" - "+fy[fy.length-1]);
   const dso=ca1?Math.round(v.CLIENTS[a1]*360/(ca1*1.18)):0;
-  rpBarreStructure(sl,7.85,1.85,4.95,"Structure de l'actif "+fy[fy.length-1],[
-    {name:"Immobilisé",value:Math.max(0,v.ACTIFS_IMMOBILISES[a1]),color:"172554"},
-    {name:"Stocks",value:Math.max(0,v.STOCKS[a1]),color:"2E5AAC"},
-    {name:"Créances",value:Math.max(0,v.CLIENTS[a1]+v.AUTRES_CREANCES[a1]),color:"8FAADC"},
-    {name:"Trésorerie",value:Math.max(0,v.TRESORERIE_NETTE[a1]),color:"16904E"}]);
-  rpCadreComment(sl,7.85,3.4,4.95,3.45);
+  rpCadreComment(sl,7.85,1.65,4.95,5.2);
   rpPied(sl,mention,++page);
   /* BFR et délais */
   sl=pptx.addSlide();
@@ -572,14 +567,21 @@ function construireDD(pptx){
     rpEnTete(sl,B.societe,"Due diligence financière");
     rpTitre(sl,"Analyse des flux de trésorerie");
     rpAssertionBox(sl,"Le tableau de flux est reconstruit par variations bilancielles et se réconcilie exactement avec la trésorerie du bilan.");
-    const defs=[["FA","Capacité d'autofinancement (CAFG)","detail"],
+    const defs=[["ZA","Trésorerie nette à l'ouverture","sous_total"],
+      [null,"Activités opérationnelles","titre"],
+      ["FA","Capacité d'autofinancement globale (CAFG)","detail"],
       ["VAR_CREANCES","Variation des créances","detail"],["FC","Variation des stocks","detail"],
-      ["FE","Variation des dettes d'exploitation","detail"],["ZB","Flux opérationnels","sous_total"],
+      ["FE","Variation des dettes d'exploitation","detail"],["ZB","Flux des activités opérationnelles","sous_total"],
+      [null,"Activités d'investissement","titre"],
       ["ACQUIS_IMMO","Acquisitions d'immobilisations","detail"],["CESSION_IMMO","Cessions d'immobilisations","detail"],
-      ["ZC","Flux d'investissement","sous_total"],["ZFIN","Flux de financement","sous_total"],
-      ["ZF","Variation nette de trésorerie","sous_total"],
-      ["OUVERTURE","Trésorerie d'ouverture","detail"],["CLOTURE","Trésorerie de clôture","sous_total"]];
-    const lignes=defs.map(([c,lib])=>[lib,...A.slice(1).map(a=>rpFmt(ETATS.tft[a][c]))]);
+      ["ZC","Flux des activités d'investissement","sous_total"],
+      [null,"Activités de financement","titre"],
+      ["FK","Augmentation de capital","detail"],["FL","Subvention d'investissement","detail"],
+      ["FN","Dividendes versés","detail"],["EMPRUNT","Emprunts nouveaux","detail"],
+      ["REMBOURS","Remboursement d'emprunts","detail"],["ZFIN","Flux des activités de financement","sous_total"],
+      ["ZF","Variation de la trésorerie nette de la période","sous_total"],
+      ["ZG","Trésorerie nette à la clôture","sous_total"]];
+    const lignes=defs.map(([c,lib])=>[lib,...A.slice(1).map(a=>c?rpFmt(ETATS.tft[a][c]):"")]);
     rpTable(sl,0.55,1.65,6.9,B.societe.toUpperCase()+" - TFT",
       [rpLib(),...A.slice(1).map(a=>"FY"+String(a).slice(-2))],lignes,defs.map(d=>d[2]),
       new Set(),[3.2,...Array(A.length-1).fill(1.15)],8.5,
