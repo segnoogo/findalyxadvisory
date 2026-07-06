@@ -2962,45 +2962,22 @@ function rpTable(sl, x, y, w, bande, entetes, lignes, styles, colsDelta, largeur
 }
 function rpCartes(sl, items, y){
   y=y||1.85;
-  const x0=0.55,W=12.23,gap=0.18,n=items.length;
-  const w=(W-gap*(n-1))/n,h=1.18;
-  const icones=[["chart","224289"],["coins","FA6706"],["file","172554"],["wallet","16904E"]];
+  const x0=0.55,W=12.23,gap=0.2,n=items.length;
+  const w=(W-gap*(n-1))/n,h=1.16;
+  const couls=["224289","FA6706","172554","16904E"];
   items.forEach((it,i)=>{
     const [lab,val,sub,pilule,ton]=it;
-    const genre=it[5]||icones[i%4][0], coul=it[6]||icones[i%4][1];
+    const coul=it[6]||couls[i%4];
     const xx=x0+i*(w+gap);
-    sl.addShape("roundRect",{x:xx,y:y,w:w,h:h,rectRadius:0.045,fill:{color:RP.BLANC},
-      line:{color:"ECEFF3",width:1}});
-    sl.addText(lab,{x:xx+0.16,y:y+0.1,w:w-0.55,h:0.32,fontSize:8.5,color:RP.G_TXT,
-      fontFace:"Arial",valign:"top"});
-    /* icône */
-    const ix=xx+w-0.42,iy=y+0.12,t=0.3;
-    sl.addShape("roundRect",{x:ix,y:iy,w:t,h:t,rectRadius:0.045,
-      fill:{color:RP_TINTES[coul]||"EEF1F5"}});
-    const b=(bx,by,bw,bh,forme)=>sl.addShape(forme||"rect",
-      {x:bx,y:by,w:bw,h:bh,fill:{color:coul}});
-    if(genre==="chart"){b(ix+0.06,iy+0.16,0.045,0.09);b(ix+0.125,iy+0.11,0.045,0.14);
-      b(ix+0.19,iy+0.06,0.045,0.19);}
-    else if(genre==="coins"){b(ix+0.055,iy+0.06,0.13,0.09,"ellipse");
-      b(ix+0.105,iy+0.14,0.13,0.09,"ellipse");}
-    else if(genre==="file"){b(ix+0.08,iy+0.055,0.13,0.19);}
-    else{b(ix+0.05,iy+0.08,0.19,0.14,"roundRect");b(ix+0.185,iy+0.125,0.05,0.05,"ellipse");}
-    sl.addText(val,{x:xx+0.16,y:y+0.42,w:w-0.3,h:0.35,fontSize:15.5,bold:true,
-      color:RP.NAVY,fontFace:"Arial"});
-    let bx=xx+0.16;
-    if(pilule){
-      const fonds={up:"E7F4EE",down:"FDECEB",neutre:"EEF1F5"};
-      const encres={up:"0F6B3C",down:"A3271B",neutre:"6B7280"};
-      const pref={up:"▲ ",down:"▼ ",neutre:""}[ton||"neutre"];
-      const lp=0.3+0.09*(pref+pilule).length;
-      sl.addShape("roundRect",{x:bx,y:y+0.82,w:lp,h:0.24,rectRadius:0.12,
-        fill:{color:fonds[ton||"neutre"]}});
-      sl.addText(pref+pilule,{x:bx,y:y+0.815,w:lp,h:0.25,align:"center",fontSize:7.5,
-        bold:true,color:encres[ton||"neutre"],fontFace:"Arial",margin:0});
-      bx+=lp+0.08;
-    }
-    if(sub) sl.addText(sub,{x:bx,y:y+0.845,w:xx+w-bx-0.1,h:0.22,fontSize:8.5,
-      color:RP.G_CLAIR,fontFace:"Arial"});
+    sl.addShape("rect",{x:xx,y:y,w:w,h:0.36,fill:{color:coul}});
+    sl.addText(lab,{x:xx+0.14,y:y,w:w-0.28,h:0.36,valign:"middle",fontSize:9,bold:true,color:RP.BLANC,fontFace:"Arial"});
+    sl.addShape("rect",{x:xx,y:y+0.36,w:w,h:h-0.36,fill:{color:"F2F5FA"},line:{color:"E4E8F0",width:1}});
+    sl.addText(val,{x:xx+0.14,y:y+0.42,w:w-0.28,h:0.42,valign:"middle",fontSize:18,bold:true,color:RP.NAVY,fontFace:"Arial"});
+    const runs=[];
+    if(pilule){ const pref={up:"▲ ",down:"▼ ",neutre:""}[ton||"neutre"], col={up:"0F6B3C",down:"A3271B",neutre:"6B7280"}[ton||"neutre"];
+      runs.push({text:pref+pilule+(sub?"   ":""),options:{color:col,bold:true,fontSize:8.5}}); }
+    if(sub) runs.push({text:sub,options:{color:RP.G_CLAIR,fontSize:8.5}});
+    if(runs.length) sl.addText(runs,{x:xx+0.14,y:y+0.86,w:w-0.28,h:0.24,fontFace:"Arial",valign:"top"});
   });
   return y+h;
 }
@@ -3257,6 +3234,94 @@ function rpSlideRatios(pptx,B,mention,page){
   rpPied(sl,mention,page);
 }
 
+/* ---------- design & graphiques "cabinet" ---------- */
+const RP_PAL=["172554","2E5AAC","8FAADC","9E3A38","4E7C3A","B08D2A"];
+function rpAssertionBox(sl,txt,x,y,w,h){
+  x=(x==null?0.55:x);y=(y==null?1.36:y);w=(w==null?12.23:w);h=(h==null?0.44:h);
+  sl.addShape("roundRect",{x:x,y:y,w:w,h:h,rectRadius:0.02,fill:{color:"F7F9FC"},
+    line:{color:RP.NAVY,width:1,dashType:"dash"}});
+  sl.addText(txt,{x:x+0.18,y:y+0.03,w:w-0.36,h:h-0.06,fontSize:10.5,italic:true,
+    color:RP.G_TITRE,fontFace:"Arial",valign:"middle"});
+}
+function rpBandeau(sl,x,y,w,titre,num){
+  if(num!=null){
+    sl.addShape("rect",{x:x,y:y,w:0.52,h:0.3,fill:{color:RP.BLEU}});
+    sl.addText(String(num),{x:x,y:y,w:0.52,h:0.3,align:"center",valign:"middle",fontSize:11,bold:true,color:RP.BLANC,fontFace:"Arial"});
+  }
+  const bx=x+(num!=null?0.52:0);
+  sl.addShape("rect",{x:bx,y:y,w:w-(num!=null?0.52:0),h:0.3,fill:{color:RP.NAVY}});
+  sl.addText(titre,{x:bx+0.15,y:y,w:w-(num!=null?0.67:0.15),h:0.3,valign:"middle",fontSize:10.5,bold:true,color:RP.BLANC,fontFace:"Arial"});
+}
+/* graphique colonnes dessiné à la main (formes) — contrôle total, rendu net */
+function rpColonnes(sl,x,y,w,h,titre,labels,series,opts){
+  opts=opts||{};
+  const m=series.length;
+  const runs=[];
+  series.forEach((s,j)=>{ if(j)runs.push({text:"   ·   ",options:{color:RP.G_CLAIR,fontSize:10}});
+    runs.push({text:s.name,options:{color:s.color||RP_PAL[j%RP_PAL.length],bold:true,fontSize:10}}); });
+  if(titre)runs.push({text:"   "+titre,options:{color:RP.G_CLAIR,fontSize:9,italic:true}});
+  sl.addText(runs,{x:x,y:y,w:w,h:0.26,fontFace:"Arial"});
+  const px=x+0.12, py=y+0.42, pw=w-0.24, ph=h-0.42-0.26, base=py+ph, n=labels.length;
+  let mx=0; series.forEach(s=>s.values.forEach(v=>{v=Math.max(0,v||0);if(v>mx)mx=v;})); if(mx<=0)mx=1;
+  sl.addShape("line",{x:px,y:base,w:pw,h:0,line:{color:RP.G_CLAIR,width:1}});
+  const gW=pw/n, pad=gW*0.18, bW=(gW-2*pad)/m;
+  labels.forEach((lab,i)=>{
+    const gx=px+i*gW+pad;
+    series.forEach((s,j)=>{
+      const val=Math.max(0,s.values[i]||0), bh=val/mx*ph, bx=gx+j*bW, by=base-bh;
+      sl.addShape("rect",{x:bx+bW*0.1,y:by,w:bW*0.8,h:Math.max(0.015,bh),fill:{color:s.color||RP_PAL[j%RP_PAL.length]}});
+      if(opts.showVal!==false&&val>0) sl.addText(rpFmt(s.values[i]),{x:bx-0.38,y:by-0.18,w:bW+0.76,h:0.16,align:"center",fontSize:6,color:RP.G_TXT,fontFace:"Arial"});
+    });
+    sl.addText(lab,{x:px+i*gW,y:base+0.04,w:gW,h:0.2,align:"center",fontSize:8,color:RP.G_TXT,fontFace:"Arial"});
+  });
+}
+
+/* colonnes empilées (structures multi-périodes) */
+function rpColonnesEmpilees(sl,x,y,w,h,titre,labels,series,opts){
+  opts=opts||{};
+  const runs=[];
+  series.forEach((s,j)=>{ if(j)runs.push({text:"   ·   ",options:{color:RP.G_CLAIR,fontSize:9}});
+    runs.push({text:s.name,options:{color:s.color||RP_PAL[j%RP_PAL.length],bold:true,fontSize:9}}); });
+  if(titre)runs.push({text:"   "+titre,options:{color:RP.G_CLAIR,fontSize:8.5,italic:true}});
+  sl.addText(runs,{x:x,y:y,w:w,h:0.26,fontFace:"Arial"});
+  const px=x+0.12, py=y+0.42, pw=w-0.24, ph=h-0.42-0.26, base=py+ph, n=labels.length;
+  const tot=labels.map((_,i)=>series.reduce((t,s)=>t+Math.max(0,s.values[i]||0),0));
+  const mx=Math.max(...tot,1);
+  sl.addShape("line",{x:px,y:base,w:pw,h:0,line:{color:RP.G_CLAIR,width:1}});
+  const gW=pw/n, bW=Math.min(0.9,gW*0.55), off=(gW-bW)/2;
+  labels.forEach((lab,i)=>{
+    let yTop=base;
+    series.forEach((s,j)=>{ const val=Math.max(0,s.values[i]||0), sh=val/mx*ph;
+      if(sh>0.012){ yTop-=sh; sl.addShape("rect",{x:px+i*gW+off,y:yTop,w:bW,h:sh,fill:{color:s.color||RP_PAL[j%RP_PAL.length]}}); } });
+    sl.addText(lab,{x:px+i*gW,y:base+0.04,w:gW,h:0.2,align:"center",fontSize:8,color:RP.G_TXT,fontFace:"Arial"});
+  });
+}
+/* barre de structure 100% (mix d'une période) + légende */
+function rpBarreStructure(sl,x,y,w,titre,items){
+  if(titre) sl.addText(titre,{x:x,y:y,w:w,h:0.24,fontSize:10,bold:true,color:RP.BLEU,charSpacing:1,fontFace:"Arial"});
+  const by=y+0.34, bh=0.46, tot=items.reduce((t,it)=>t+Math.max(0,it.value),0)||1; let cx=x;
+  items.forEach((it,j)=>{ const seg=Math.max(0,it.value)/tot*w, pct=Math.round(it.value/tot*100);
+    sl.addShape("rect",{x:cx,y:by,w:Math.max(0.01,seg),h:bh,fill:{color:it.color||RP_PAL[j%RP_PAL.length]}});
+    if(seg>0.42) sl.addText(pct+"%",{x:cx,y:by,w:seg,h:bh,align:"center",valign:"middle",fontSize:9,bold:true,color:RP.BLANC,fontFace:"Arial"});
+    cx+=seg; });
+  let ly=by+bh+0.14, lx=x;
+  items.forEach((it,j)=>{ const tw=0.062*it.name.length+0.1;
+    if(lx+0.17+tw>x+w){lx=x;ly+=0.24;}
+    sl.addShape("rect",{x:lx,y:ly+0.02,w:0.12,h:0.12,fill:{color:it.color||RP_PAL[j%RP_PAL.length]}});
+    sl.addText(it.name,{x:lx+0.16,y:ly-0.02,w:tw,h:0.2,fontSize:8,color:RP.G_TXT,fontFace:"Arial"}); lx+=0.17+tw+0.14; });
+}
+/* barres horizontales (fourchette, classements) */
+function rpBarresH(sl,x,y,w,h,titre,labels,values,opts){
+  opts=opts||{};
+  if(titre) sl.addText(titre,{x:x,y:y,w:w,h:0.24,fontSize:10,bold:true,color:RP.BLEU,charSpacing:1,fontFace:"Arial"});
+  const px=x+2.0, py=y+0.38, pw=w-2.0-0.9, n=labels.length, rh=(h-0.38)/n;
+  const mx=Math.max(...values.map(v=>Math.max(0,v||0)),1);
+  labels.forEach((lab,i)=>{ const cy=py+i*rh, bw=Math.max(0,values[i]||0)/mx*pw, bh=Math.min(0.34,rh*0.6);
+    sl.addText(lab,{x:x,y:cy,w:1.9,h:rh,valign:"middle",fontSize:9,color:RP.G_TITRE,fontFace:"Arial"});
+    sl.addShape("rect",{x:px,y:cy+(rh-bh)/2,w:Math.max(0.02,bw),h:bh,fill:{color:(opts.colors&&opts.colors[i])||RP.BLEU}});
+    sl.addText(rpFmt(values[i]),{x:px+bw+0.06,y:cy,w:1.0,h:rh,valign:"middle",fontSize:9,bold:true,color:RP.NAVY,fontFace:"Arial"}); });
+}
+
 /* ---------- RAPPORT DD ---------- */
 function construireDD(pptx){
   const B=rpBase();
@@ -3295,7 +3360,11 @@ function construireDD(pptx){
   rpTable(sl,0.55,3.35,6.9,B.societe.toUpperCase()+" - Synthèse",syn.entetes,syn.lignes,
     syn.styles,syn.colsDelta,syn.largeurs,8.5,
     "Source : balances générales "+fy[0]+" - "+fy[fy.length-1]);
-  rpCadreComment(sl,7.55,3.15,5.25,3.55);
+  rpColonnes(sl,7.55,3.35,5.25,2.15,"("+rpLib()+")",fy,[
+    {name:"CA",values:A.map(a=>v.CA[a]),color:"172554"},
+    {name:"EBITDA",values:A.map(a=>v.EBITDA[a]),color:"2E5AAC"},
+    {name:"Résultat net",values:A.map(a=>v.RESULTAT_NET[a]),color:"8FAADC"}]);
+  rpCadreComment(sl,7.55,5.6,5.25,1.25);
   rpPied(sl,mention,++page);
   /* business overview */
   rpSection(pptx,2,"Business overview",["Présentation de la société","Structure organisationnelle"],mention,++page);
@@ -3308,30 +3377,38 @@ function construireDD(pptx){
   sl=pptx.addSlide();
   rpEnTete(sl,B.societe,"Due diligence financière");
   rpTitre(sl,"Compte de résultat");
-  rpAssertion(sl,B.societe+" réalise un chiffre d'affaires de "+rpFmt(ca1)+" "+rpLib()+" en "+fy[fy.length-1]+(tcam!==null?" (TCAM "+rpPct(tcam)+")":"")+".");
+  rpAssertionBox(sl,B.societe+" réalise un chiffre d'affaires de "+rpFmt(ca1)+" "+rpLib()+" en "+fy[fy.length-1]+(tcam!==null?" (TCAM "+rpPct(tcam)+")":"")+".");
   const pl=rpLignesFin(v,["CA","COUTS_DIRECTS","MARGE_BRUTE","AUTRES_PROD","OPEX",
     "CHARGES_PERSONNEL","EBITDA","DA","EBIT","RESULTAT_FIN","RESULTAT_HAO","IMPOTS","RESULTAT_NET"],
     A,RP_LIBS,{CA:"titre",MARGE_BRUTE:"sous_total",EBITDA:"sous_total",EBIT:"sous_total",
     RESULTAT_NET:"sous_total",pctApres:new Set(["MARGE_BRUTE","EBITDA","RESULTAT_NET"])});
-  rpTable(sl,0.55,1.95,6.55,B.societe.toUpperCase()+" - Compte de résultat",pl.entetes,pl.lignes,pl.styles,
+  rpTable(sl,0.55,2.15,6.55,B.societe.toUpperCase()+" - Compte de résultat",pl.entetes,pl.lignes,pl.styles,
     pl.colsDelta,pl.largeurs,8,"Source : balances générales "+fy[0]+" - "+fy[fy.length-1]);
-  rpCadreComment(sl,7.4,1.95,5.4,4.9);
+  rpColonnes(sl,7.4,2.15,5.4,2.6,"("+rpLib()+")",fy,[
+    {name:"CA",values:A.map(a=>v.CA[a]),color:"172554"},
+    {name:"EBITDA",values:A.map(a=>v.EBITDA[a]),color:"2E5AAC"},
+    {name:"Résultat net",values:A.map(a=>v.RESULTAT_NET[a]),color:"8FAADC"}]);
+  rpCadreComment(sl,7.4,4.85,5.4,1.95);
   rpPied(sl,mention,++page);
   /* situation nette */
   sl=pptx.addSlide();
   rpEnTete(sl,B.societe,"Due diligence financière");
   rpTitre(sl,"Situation nette historique");
-  rpAssertion(sl,"L'actif net s'établit à "+rpFmt(v.ACTIF_NET[a1])+" "+rpLib()+" à fin "+fy[fy.length-1]+
-    ", strictement égal aux capitaux propres reconstitués.");
+  rpAssertionBox(sl,"L'actif net s'établit à "+rpFmt(v.ACTIF_NET[a1])+" "+rpLib()+" à fin "+fy[fy.length-1]+", strictement égal aux capitaux propres reconstitués.");
   const bs=rpLignesFin(v,["ACTIFS_IMMOBILISES","STOCKS","CLIENTS","AUTRES_CREANCES","FOURNISSEURS",
     "DETTES_FISCALES","DETTES_SOCIALES","AUTRES_DETTES","BFR","TRESORERIE_NETTE","PROVISIONS_RC",
     "DETTES_FINANCIERES","ACTIF_NET","CAPITAUX_PROPRES"],A,RP_LIBS,
     {ACTIFS_IMMOBILISES:"sous_total",BFR:"sous_total",TRESORERIE_NETTE:"sous_total",
      ACTIF_NET:"titre",CAPITAUX_PROPRES:"titre"});
-  rpTable(sl,0.55,1.95,7.0,B.societe.toUpperCase()+" - Actif net",bs.entetes,bs.lignes,bs.styles,
+  rpTable(sl,0.55,2.15,7.0,B.societe.toUpperCase()+" - Actif net",bs.entetes,bs.lignes,bs.styles,
     bs.colsDelta,bs.largeurs,8,"Source : balances générales "+fy[0]+" - "+fy[fy.length-1]);
   const dso=ca1?Math.round(v.CLIENTS[a1]*360/(ca1*1.18)):0;
-  rpCadreComment(sl,7.85,1.95,4.95,4.9);
+  rpBarreStructure(sl,7.85,2.35,4.95,"Structure de l'actif "+fy[fy.length-1],[
+    {name:"Immobilisé",value:Math.max(0,v.ACTIFS_IMMOBILISES[a1]),color:"172554"},
+    {name:"Stocks",value:Math.max(0,v.STOCKS[a1]),color:"2E5AAC"},
+    {name:"Créances",value:Math.max(0,v.CLIENTS[a1]+v.AUTRES_CREANCES[a1]),color:"8FAADC"},
+    {name:"Trésorerie",value:Math.max(0,v.TRESORERIE_NETTE[a1]),color:"16904E"}]);
+  rpCadreComment(sl,7.85,3.75,4.95,3.1);
   rpPied(sl,mention,++page);
   /* BFR et délais */
   sl=pptx.addSlide();
@@ -3340,20 +3417,21 @@ function construireDD(pptx){
   const bfrJ=a=>v.CA[a]?Math.round(v.BFR[a]*360/v.CA[a]):null;
   const dpo=(-v.COUTS_DIRECTS[a1]-v.OPEX[a1])>0?Math.round(-v.FOURNISSEURS[a1]*360/((-v.COUTS_DIRECTS[a1]-v.OPEX[a1])*1.18)):0;
   const dio=(-v.COUTS_DIRECTS[a1])>0?Math.round(v.STOCKS[a1]*360/((-v.COUTS_DIRECTS[a1])*1.18)):0;
-  rpAssertion(sl,"Le BFR représente "+(bfrJ(a1)||0)+" jours de CA en "+fy[fy.length-1]+" ; DSO ≈ "+dso+" j, DPO ≈ "+dpo+" j, rotation stocks ≈ "+dio+" j.");
+  rpAssertionBox(sl,"Le BFR représente "+(bfrJ(a1)||0)+" jours de CA en "+fy[fy.length-1]+" ; DSO ≈ "+dso+" j, DPO ≈ "+dpo+" j, rotation stocks ≈ "+dio+" j.");
   rpCartes(sl,[
     ["BFR "+fy[fy.length-1],rpFmt(v.BFR[a1])+" "+rpLib(),(bfrJ(a1)||0)+" jours de CA",null,"neutre","wallet","172554"],
     ["Délai clients (DSO)",dso+" j","créances clients",null,"neutre","file","224289"],
     ["Délai fournisseurs (DPO)",dpo+" j","dettes fournisseurs",null,"neutre","coins","FA6706"],
     ["Rotation stocks (DIO)",dio+" j","stocks",null,"neutre","chart","16904E"]]);
-  rpCadreComment(sl,0.55,3.35,12.25,3.4);
+  rpColonnes(sl,0.55,3.4,6.0,3.25,"BFR ("+rpLib()+")",fy,[{name:"BFR",values:A.map(a=>v.BFR[a]),color:"172554"}]);
+  rpCadreComment(sl,6.75,3.4,6.05,3.25);
   rpPied(sl,mention,++page);
   /* cash flows */
   if(A.length>1){
     sl=pptx.addSlide();
     rpEnTete(sl,B.societe,"Due diligence financière");
     rpTitre(sl,"Analyse des flux de trésorerie");
-    rpAssertion(sl,"Le tableau de flux est reconstruit par variations bilancielles et se réconcilie exactement avec la trésorerie du bilan.");
+    rpAssertionBox(sl,"Le tableau de flux est reconstruit par variations bilancielles et se réconcilie exactement avec la trésorerie du bilan.");
     const defs=[["FA","Capacité d'autofinancement (CAFG)","detail"],
       ["VAR_CREANCES","Variation des créances","detail"],["FC","Variation des stocks","detail"],
       ["FE","Variation des dettes d'exploitation","detail"],["ZB","Flux opérationnels","sous_total"],
@@ -3362,11 +3440,11 @@ function construireDD(pptx){
       ["ZF","Variation nette de trésorerie","sous_total"],
       ["OUVERTURE","Trésorerie d'ouverture","detail"],["CLOTURE","Trésorerie de clôture","sous_total"]];
     const lignes=defs.map(([c,lib])=>[lib,...A.slice(1).map(a=>rpFmt(ETATS.tft[a][c]))]);
-    rpTable(sl,0.55,1.95,6.9,B.societe.toUpperCase()+" - TFT",
+    rpTable(sl,0.55,2.15,6.9,B.societe.toUpperCase()+" - TFT",
       [rpLib(),...A.slice(1).map(a=>"FY"+String(a).slice(-2))],lignes,defs.map(d=>d[2]),
       new Set(),[3.2,...Array(A.length-1).fill(1.15)],8.5,
       "Source : reconstruction depuis les balances");
-    rpCadreComment(sl,7.6,1.95,5.2,4.9);
+    rpCadreComment(sl,7.6,2.15,5.2,4.7);
     rpPied(sl,mention,++page);
   }
   rpSlideRatios(pptx,B,mention,++page);
@@ -3421,7 +3499,11 @@ function construireBP(pptx){
     ["titre","sous_total","sous_total","sous_total"],new Set(),
     [2.6,...Array(1+ap.length).fill(1.15)],8.5,
     "Source : projections Findalyx Advisory (hypothèses modifiables dans l'application)");
-  rpCadreComment(sl,7.65,3.15,5.15,3.55);
+  rpColonnes(sl,7.65,3.35,5.15,2.1,"("+rpLib()+")",[fy[fy.length-1],...fyp],[
+    {name:"CA",values:[v.CA[a1],...ap.map(a=>proj.pl.CA[a])],color:"172554"},
+    {name:"EBITDA",values:[v.EBITDA[a1],...ap.map(a=>proj.pl.EBITDA[a])],color:"2E5AAC"},
+    {name:"RN",values:[v.RESULTAT_NET[a1],...ap.map(a=>proj.pl.RN[a])],color:"8FAADC"}]);
+  rpCadreComment(sl,7.65,5.55,5.15,1.3);
   rpPied(sl,mention,++page);
   rpSection(pptx,2,"Présentation du projet et étude de marché",
     ["Structure du projet","Étude de marché"],mention,++page);
@@ -3482,7 +3564,11 @@ function construireBP(pptx){
     new Set(Array.from({length:A.length},(_,k)=>1+k)),
     [2.6,...Array(A.length+ap.length).fill(1.05)],8,
     "Colonnes bleutées : historique reconstitué ; autres : projections.");
-  rpCadreComment(sl,0.55,5.05,12.25,1.8);
+  rpColonnes(sl,0.55,5.0,7.5,1.85,"("+rpLib()+")",[...fy,...fyp],[
+    {name:"CA",values:[...A.map(a=>v.CA[a]),...ap.map(a=>proj.pl.CA[a])],color:"172554"},
+    {name:"EBITDA",values:[...A.map(a=>v.EBITDA[a]),...ap.map(a=>proj.pl.EBITDA[a])],color:"2E5AAC"},
+    {name:"RN",values:[...A.map(a=>v.RESULTAT_NET[a]),...ap.map(a=>proj.pl.RN[a])],color:"8FAADC"}]);
+  rpCadreComment(sl,8.15,5.0,4.65,1.85);
   rpPied(sl,mention,++page);
   /* bilan & trésorerie prévisionnels */
   sl=pptx.addSlide();
@@ -3569,7 +3655,9 @@ function construireValo(pptx){
   rpTable(sl,0.55,3.35,6.9,B.societe.toUpperCase()+" - Synthèse de valorisation",
     [rpLib(),"Valeur"],brg,["detail","detail","sous_total","detail","sous_total","sous_total"],
     new Set(),[4.4,1.8],9,"Source : DCF et multiples sur projections Findalyx Advisory");
-  rpCadreComment(sl,7.65,3.15,5.15,3.55);
+  rpBarresH(sl,7.65,3.35,5.15,2.2,"Fourchette — fonds propres ("+rpLib()+")",["Bas","DCF","Multiples","Haut"],
+    [val.eqMin,val.equityDcf,val.equityMult,val.eqMax],{colors:["9CA3AF","172554","2E5AAC","9CA3AF"]});
+  rpCadreComment(sl,7.65,5.7,5.15,1.15);
   rpPied(sl,mention,++page);
   /* DCF détaillé */
   sl=pptx.addSlide();
@@ -3589,7 +3677,8 @@ function construireValo(pptx){
   rpTable(sl,0.55,3.6,12.25,"Projections sous-jacentes "+ap[0]+" - "+ap[ap.length-1],
     [rpLib(),...fyp],proj4,["titre","sous_total","sous_total"],new Set(),
     [3.2,...Array(ap.length).fill(1.2)],9);
-  rpCadreComment(sl,0.55,5.15,12.25,1.65);
+  rpColonnes(sl,0.55,5.1,7.4,1.75,"FCFF actualisés ("+rpLib()+")",fyp,[{name:"FCFF actualisés",values:ap.map(a=>val.pv[a]),color:"16904E"}]);
+  rpCadreComment(sl,8.15,5.1,4.65,1.75);
   rpPied(sl,mention,++page);
   rpSection(pptx,2,"Risques",["Risques majeurs et couverture"],mention,++page);
   rpPlaceholder(pptx,B.societe,"Risques","Risques majeurs et couverture",
