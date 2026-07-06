@@ -2881,8 +2881,7 @@ function rpEnTete(sl, societe, section){
 }
 function rpTitre(sl,txt){sl.addText(txt,{x:0.55,y:0.92,w:12.2,h:0.45,fontSize:17,
   bold:true,color:RP.NAVY,fontFace:"Arial"});}
-function rpAssertion(sl,txt){sl.addText(txt,{x:0.55,y:1.4,w:12.2,h:0.35,fontSize:11,
-  italic:true,color:RP.G_TXT,fontFace:"Arial"});}
+function rpAssertion(sl,txt){}  /* accroche auto retirée (Salif) — l'analyste écrit dans le cadre Commentaires */
 function rpPied(sl,mention,page){
   sl.addShape("rect",{x:0.55,y:7.02,w:12.23,h:0.015,fill:{color:RP.FILET}});
   {const _lg=logoCab();sl.addImage(_lg?{data:_lg.data,x:0.55,y:7.09,h:0.24,w:0.24*_lg.ratio}:{data:LOGO_FINDALYX_CLAIR,x:0.55,y:7.09,h:0.24,w:0.24*4.45});}
@@ -3227,22 +3226,16 @@ function rpSlideRatios(pptx,B,mention,page){
     lignes.push([c[1],...A.map(()=>""),""]);styles.push("titre");
     rs.forEach(r=>{lignes.push([r.lab,...A.map(a=>fmtR(r,a)),r.statut?app[r.statut]:"—"]);styles.push("detail");});
   });
-  rpTable(sl,0.55,2.0,8.5,B.societe.toUpperCase()+" - Ratios",
+  rpTable(sl,0.55,1.65,8.5,B.societe.toUpperCase()+" - Ratios",
     ["Indicateur",...fy,"Appréciation"],lignes,styles,new Set(),
     [3.5,...A.map(()=>0.85),1.45],8,"Seuils indicatifs ; à apprécier au regard du secteur d'activité.");
-  rpCadreComment(sl,9.35,2.0,3.45,4.7);
+  rpCadreComment(sl,9.35,1.65,3.45,5.05);
   rpPied(sl,mention,page);
 }
 
 /* ---------- design & graphiques "cabinet" ---------- */
 const RP_PAL=["172554","2E5AAC","8FAADC","9E3A38","4E7C3A","B08D2A"];
-function rpAssertionBox(sl,txt,x,y,w,h){
-  x=(x==null?0.55:x);y=(y==null?1.36:y);w=(w==null?12.23:w);h=(h==null?0.44:h);
-  sl.addShape("roundRect",{x:x,y:y,w:w,h:h,rectRadius:0.02,fill:{color:"F7F9FC"},
-    line:{color:RP.NAVY,width:1,dashType:"dash"}});
-  sl.addText(txt,{x:x+0.18,y:y+0.03,w:w-0.36,h:h-0.06,fontSize:10.5,italic:true,
-    color:RP.G_TITRE,fontFace:"Arial",valign:"middle"});
-}
+function rpAssertionBox(sl,txt){}  /* accroche auto retirée (Salif) */
 function rpBandeau(sl,x,y,w,titre,num){
   if(num!=null){
     sl.addShape("rect",{x:x,y:y,w:0.52,h:0.3,fill:{color:RP.BLEU}});
@@ -3382,9 +3375,9 @@ function construireDD(pptx){
     "CHARGES_PERSONNEL","EBITDA","DA","EBIT","RESULTAT_FIN","RESULTAT_HAO","IMPOTS","RESULTAT_NET"],
     A,RP_LIBS,{CA:"titre",MARGE_BRUTE:"sous_total",EBITDA:"sous_total",EBIT:"sous_total",
     RESULTAT_NET:"sous_total",pctApres:new Set(["MARGE_BRUTE","EBITDA","RESULTAT_NET"])});
-  rpTable(sl,0.55,2.15,6.55,B.societe.toUpperCase()+" - Compte de résultat",pl.entetes,pl.lignes,pl.styles,
+  rpTable(sl,0.55,1.65,6.55,B.societe.toUpperCase()+" - Compte de résultat",pl.entetes,pl.lignes,pl.styles,
     pl.colsDelta,pl.largeurs,8,"Source : balances générales "+fy[0]+" - "+fy[fy.length-1]);
-  rpColonnes(sl,7.4,2.15,5.4,2.6,"("+rpLib()+")",fy,[
+  rpColonnes(sl,7.4,1.65,5.4,3.05,"("+rpLib()+")",fy,[
     {name:"CA",values:A.map(a=>v.CA[a]),color:"172554"},
     {name:"EBITDA",values:A.map(a=>v.EBITDA[a]),color:"2E5AAC"},
     {name:"Résultat net",values:A.map(a=>v.RESULTAT_NET[a]),color:"8FAADC"}]);
@@ -3400,15 +3393,15 @@ function construireDD(pptx){
     "DETTES_FINANCIERES","ACTIF_NET","CAPITAUX_PROPRES"],A,RP_LIBS,
     {ACTIFS_IMMOBILISES:"sous_total",BFR:"sous_total",TRESORERIE_NETTE:"sous_total",
      ACTIF_NET:"titre",CAPITAUX_PROPRES:"titre"});
-  rpTable(sl,0.55,2.15,7.0,B.societe.toUpperCase()+" - Actif net",bs.entetes,bs.lignes,bs.styles,
+  rpTable(sl,0.55,1.65,7.0,B.societe.toUpperCase()+" - Actif net",bs.entetes,bs.lignes,bs.styles,
     bs.colsDelta,bs.largeurs,8,"Source : balances générales "+fy[0]+" - "+fy[fy.length-1]);
   const dso=ca1?Math.round(v.CLIENTS[a1]*360/(ca1*1.18)):0;
-  rpBarreStructure(sl,7.85,2.35,4.95,"Structure de l'actif "+fy[fy.length-1],[
+  rpBarreStructure(sl,7.85,1.85,4.95,"Structure de l'actif "+fy[fy.length-1],[
     {name:"Immobilisé",value:Math.max(0,v.ACTIFS_IMMOBILISES[a1]),color:"172554"},
     {name:"Stocks",value:Math.max(0,v.STOCKS[a1]),color:"2E5AAC"},
     {name:"Créances",value:Math.max(0,v.CLIENTS[a1]+v.AUTRES_CREANCES[a1]),color:"8FAADC"},
     {name:"Trésorerie",value:Math.max(0,v.TRESORERIE_NETTE[a1]),color:"16904E"}]);
-  rpCadreComment(sl,7.85,3.75,4.95,3.1);
+  rpCadreComment(sl,7.85,3.4,4.95,3.45);
   rpPied(sl,mention,++page);
   /* BFR et délais */
   sl=pptx.addSlide();
@@ -3440,11 +3433,11 @@ function construireDD(pptx){
       ["ZF","Variation nette de trésorerie","sous_total"],
       ["OUVERTURE","Trésorerie d'ouverture","detail"],["CLOTURE","Trésorerie de clôture","sous_total"]];
     const lignes=defs.map(([c,lib])=>[lib,...A.slice(1).map(a=>rpFmt(ETATS.tft[a][c]))]);
-    rpTable(sl,0.55,2.15,6.9,B.societe.toUpperCase()+" - TFT",
+    rpTable(sl,0.55,1.65,6.9,B.societe.toUpperCase()+" - TFT",
       [rpLib(),...A.slice(1).map(a=>"FY"+String(a).slice(-2))],lignes,defs.map(d=>d[2]),
       new Set(),[3.2,...Array(A.length-1).fill(1.15)],8.5,
       "Source : reconstruction depuis les balances");
-    rpCadreComment(sl,7.6,2.15,5.2,4.7);
+    rpCadreComment(sl,7.6,1.65,5.2,5.2);
     rpPied(sl,mention,++page);
   }
   rpSlideRatios(pptx,B,mention,++page);
@@ -3537,9 +3530,9 @@ function construireBP(pptx){
   gH("Coût du capital",[
     ["WACC",pcH((typeof val!=="undefined"&&val&&val.wacc)||(hyp.valo.rf+hyp.valo.beta*hyp.valo.primeMarche+hyp.valo.primeSpecifique)*(1-hyp.valo.poidsDette)+hyp.valo.coutDette*(1-hyp.is_taux)*hyp.valo.poidsDette)],
     ["Croissance à l'infini (g)",pcH(hyp.valo.g)]]);
-  rpTable(sl,0.55,1.95,7.6,B.societe.toUpperCase()+" - Hypothèses",["Hypothèse","Valeur"],
+  rpTable(sl,0.55,1.6,7.6,B.societe.toUpperCase()+" - Hypothèses",["Hypothèse","Valeur"],
     lignesH,stylesH,new Set(),[5.2,1.4],8);
-  rpCadreComment(sl,8.35,1.95,4.45,4.9);
+  rpCadreComment(sl,8.35,1.6,4.45,5.25);
   rpPied(sl,mention,++page);
   /* projections */
   rpSection(pptx,4,"Projections financières",["Compte de résultat","Bilan et trésorerie"],mention,++page);
@@ -3559,7 +3552,7 @@ function construireBP(pptx){
     RESULTAT_FIN:"RESULTAT_FIN",IS:"IMPOTS",RN:"RESULTAT_NET"};
   const lignesBP=codesP.map(([c,lib])=>[lib,...A.map(a=>rpFmt(v[histM[c]][a])),
     ...ap.map(a=>rpFmt(proj.pl[c][a]))]);
-  rpTable(sl,0.55,1.95,12.25,B.societe.toUpperCase()+" - P&L prévisionnel",
+  rpTable(sl,0.55,1.6,12.25,B.societe.toUpperCase()+" - P&L prévisionnel",
     [rpLib(),...fy,...fyp],lignesBP,codesP.map(x=>x[2]),
     new Set(Array.from({length:A.length},(_,k)=>1+k)),
     [2.6,...Array(A.length+ap.length).fill(1.05)],8,
@@ -3586,10 +3579,10 @@ function construireBP(pptx){
     ["Capitaux propres",...ap.map(a=>rpFmt(proj.bs.CP[a]))],
     ["Provisions pour risques et charges",...ap.map(a=>rpFmt(proj.bs.PROVISIONS[a]))],
     ["Dettes financières",...ap.map(a=>rpFmt(proj.bs.DETTE[a]))]];
-  rpTable(sl,0.55,1.95,7.7,B.societe.toUpperCase()+" - Bilan prévisionnel (grandes masses)",[rpLib(),...fyp],bsP,
+  rpTable(sl,0.55,1.6,7.7,B.societe.toUpperCase()+" - Bilan prévisionnel (grandes masses)",[rpLib(),...fyp],bsP,
     ["sous_total","detail","detail","detail","detail","detail","sous_total","sous_total","titre","detail","titre"],
     new Set(),[3.4,...ap.map(()=>0.86)],8,"Source : projections Findalyx Advisory");
-  rpCadreComment(sl,8.45,1.95,4.35,4.9);
+  rpCadreComment(sl,8.45,1.6,4.35,5.25);
   rpPied(sl,mention,++page);
   /* TFT prévisionnel */
   sl=pptx.addSlide();
@@ -3605,9 +3598,9 @@ function construireBP(pptx){
     ["Flux de financement","ZFIN","sous_total"],["Variation nette de trésorerie","ZF","sous_total"],
     ["Trésorerie d'ouverture","OUVERTURE","detail"],["Trésorerie de clôture","CLOTURE","sous_total"]];
   const tftL=tftD.map(d=>[d[0],...ap.map(a=>rpFmt(proj.tft[a][d[1]]))]);
-  rpTable(sl,0.55,1.95,7.7,B.societe.toUpperCase()+" - TFT prévisionnel",[rpLib(),...fyp],tftL,tftD.map(d=>d[2]),
+  rpTable(sl,0.55,1.6,7.7,B.societe.toUpperCase()+" - TFT prévisionnel",[rpLib(),...fyp],tftL,tftD.map(d=>d[2]),
     new Set(),[3.4,...ap.map(()=>0.86)],8,"Source : projections Findalyx Advisory (bilan bouclé par la trésorerie)");
-  rpCadreComment(sl,8.45,1.95,4.35,4.9);
+  rpCadreComment(sl,8.45,1.6,4.35,5.25);
   rpPied(sl,mention,++page);
   rpSection(pptx,5,"Annexes",["Glossaire","Lexique financier"],mention,++page);
   rpGlossaire(pptx,B,mention,++page);
@@ -3668,13 +3661,13 @@ function construireValo(pptx){
     (val.ev?Math.round(val.vtPv/val.ev*100):0)+"% de l'EV).");
   const fcf=[["FCFF",...ap.map(a=>rpFmt(val.fcff[a]))],
              ["FCFF actualisés (WACC "+rpPct(val.wacc)+")",...ap.map(a=>rpFmt(val.pv[a]))]];
-  rpTable(sl,0.55,1.95,12.25,B.societe.toUpperCase()+" - Flux actualisés",
+  rpTable(sl,0.55,1.6,12.25,B.societe.toUpperCase()+" - Flux actualisés",
     [rpLib(),...fyp],fcf,["detail","detail"],new Set(),
     [3.2,...Array(ap.length).fill(1.2)],9);
   const proj4=[["Chiffre d'affaires",...ap.map(a=>rpFmt(proj.pl.CA[a]))],
     ["EBITDA",...ap.map(a=>rpFmt(proj.pl.EBITDA[a]))],
     ["Résultat net",...ap.map(a=>rpFmt(proj.pl.RN[a]))]];
-  rpTable(sl,0.55,3.6,12.25,"Projections sous-jacentes "+ap[0]+" - "+ap[ap.length-1],
+  rpTable(sl,0.55,3.25,12.25,"Projections sous-jacentes "+ap[0]+" - "+ap[ap.length-1],
     [rpLib(),...fyp],proj4,["titre","sous_total","sous_total"],new Set(),
     [3.2,...Array(ap.length).fill(1.2)],9);
   rpColonnes(sl,0.55,5.1,7.4,1.75,"FCFF actualisés ("+rpLib()+")",fyp,[{name:"FCFF actualisés",values:ap.map(a=>val.pv[a]),color:"16904E"}]);
