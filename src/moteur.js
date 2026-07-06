@@ -362,7 +362,7 @@ function construireTbagr(balances){
 }
 
 /* ---------- 3. Mapping automatique + overrides ---------- */
-function indexPrefixes(defs){const ix={};defs.forEach(d=>d.pref.forEach(p=>{if(!(p in ix)||p.length>=p.length) ix[p]=d;}));return ix;}
+function indexPrefixes(defs){const ix={};defs.forEach(d=>d.pref.forEach(p=>{ix[p]=d;}));return ix;}
 const IX_PL=indexPrefixes(LIGNES_PL), IX_BS=indexPrefixes(LIGNES_BS);
 
 /**

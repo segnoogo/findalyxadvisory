@@ -46,10 +46,13 @@ padding:11px 28px;display:flex;align-items:center;justify-content:space-between;
 details.profil{position:relative}
 details.profil>summary{list-style:none;outline:none}
 details.profil>summary::-webkit-details-marker{display:none}
-.profil-menu{position:absolute;right:0;top:calc(100% + 8px);width:288px;background:#fff;border:1px solid var(--border);
-  border-radius:14px;box-shadow:0 12px 34px rgba(23,37,84,.16);padding:14px;z-index:30}
-.profil-h{font-weight:700;color:var(--navy);font-size:12.5px;margin-bottom:8px}
-.profil-act{display:flex;gap:8px;margin-top:12px}.profil-act .btn{flex:1}
+.profil-menu{position:absolute;right:0;top:calc(100% + 8px);width:240px;background:#fff;border:1px solid var(--border);
+  border-radius:14px;box-shadow:0 12px 34px rgba(23,37,84,.16);padding:6px;z-index:30}
+.pm-head{font-size:11.5px;color:var(--muted);padding:6px 10px 8px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pm-item{display:flex;align-items:center;gap:9px;padding:9px 10px;border-radius:8px;color:var(--navy);font-size:13.5px;cursor:pointer;text-decoration:none}
+.pm-item:hover{background:#eef2f9}
+.pm-sep{height:1px;background:var(--border);margin:6px 4px}
+.pm-danger{color:var(--red)}
 .btn.danger{background:#fdeceb;color:var(--red);border-color:#f6d4d1}.btn.danger:hover{background:#fbdad7}
 .lic-info{display:flex;flex-direction:column}
 .lic-row{display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px solid #f0f2f6;font-size:11px}
@@ -1285,7 +1288,7 @@ function construireTbagr(balances){
 }
 
 /* ---------- 3. Mapping automatique + overrides ---------- */
-function indexPrefixes(defs){const ix={};defs.forEach(d=>d.pref.forEach(p=>{if(!(p in ix)||p.length>=p.length) ix[p]=d;}));return ix;}
+function indexPrefixes(defs){const ix={};defs.forEach(d=>d.pref.forEach(p=>{ix[p]=d;}));return ix;}
 const IX_PL=indexPrefixes(LIGNES_PL), IX_BS=indexPrefixes(LIGNES_BS);
 
 /**
@@ -3731,8 +3734,6 @@ function shell(){
     <div class="logo"><img class="brand-logo" src="${LOGO_FINDALYX}" alt="Findalyx">
     <div class="brandsub">Advisory — Due diligence · BP · Valorisation</div></div>
     <div class="nav">${items}</div>
-    ${(LIC_ETAT&&(LIC_ETAT.produit==="tous"||LIC_ETAT.mode==="proprietaire"))?`
-    <button class="side-sysco" onclick="window.open(URL_SYSCO,'_blank')" title="Ouvrir l'app liasse fiscale (SYSCO) — couverte par votre licence">↗ Liasse fiscale (SYSCO)</button>`:""}
     <div class="sfoot">Les données restent sur cet ordinateur.</div>
     ${(LIC_ETAT&&LIC_ETAT.exp&&licJoursRestants(LIC_ETAT.exp)!==null&&licJoursRestants(LIC_ETAT.exp)<30)?`
     <div class="lic-foot" onclick="aller('licence')" title="Licence bientôt expirée — voir la licence">
@@ -3746,6 +3747,7 @@ function shell(){
     </div>
     <div class="view" id="vue"></div>
   </div><div id="modal"></div>`;
+  if(!window.__profClose){window.__profClose=true;document.addEventListener("click",function(e){document.querySelectorAll("details.profil[open]").forEach(function(d){var s=d.querySelector("summary");if(s&&s.contains(e.target))return;d.open=false;});});}
   rendre();
 }
 function selecteurUnite(){
@@ -3797,13 +3799,14 @@ function initialesLic(){
   return ((p[0][0]||"")+(p.length>1?p[p.length-1][0]:(p[0][1]||""))).toUpperCase();
 }
 function avatarMenu(){
+  const sysco=(LIC_ETAT&&(LIC_ETAT.produit==="tous"||LIC_ETAT.mode==="proprietaire"))?`<a class="pm-item" onclick="window.open(URL_SYSCO,'_blank')">Ouvrir Findalyx Sysco ↗</a>`:"";
   return `<details class="profil"><summary class="avatar" title="Profil et licence">${initialesLic()}</summary>
     <div class="profil-menu">
-      <div class="profil-h">${esc((LIC_ETAT&&LIC_ETAT.customer)||"Utilisateur")}</div>
-      <div class="profil-act" style="flex-direction:column">
-        <button class="btn sm" onclick="aller('licence')">Licence</button>
-        <button class="btn sm danger" onclick="deconnexion()">Déconnexion</button>
-      </div>
+      <div class="pm-head">${esc(nomCabinet()||(LIC_ETAT&&LIC_ETAT.customer)||"Findalyx")}</div>
+      <a class="pm-item" onclick="aller('licence')">Licence &amp; cabinet</a>
+      ${sysco}
+      <div class="pm-sep"></div>
+      <a class="pm-item pm-danger" onclick="deconnexion()">Déconnexion</a>
     </div></details>`;
 }
 function deconnexion(){
@@ -3864,6 +3867,7 @@ function copierCle(){
     navigator.clipboard.writeText(k).then(()=>toast("Clé de licence copiée"),()=>copierCleFallback(k));
   else copierCleFallback(k);
 }
+function afficherCle(btn){const i=document.getElementById("licKeyInput");if(!i)return;if(i.type==="password"){i.type="text";btn.textContent="Masquer";}else{i.type="password";btn.textContent="Afficher";}}
 function vueLicence(){
   return `<h1>Licence &amp; cabinet</h1>
   <div class="deux">
@@ -3872,7 +3876,8 @@ function vueLicence(){
       <div style="margin-top:12px">
         <div class="lic-k" style="margin-bottom:5px">Clé de licence</div>
         <div style="display:flex;gap:8px">
-          <input class="sel" style="flex:1;font-family:monospace;font-size:11px" readonly value="${esc(cleLicence())}" onclick="this.select()" title="Cliquez pour tout sélectionner">
+          <input id="licKeyInput" class="sel" type="password" style="flex:1;font-family:monospace;font-size:11px" readonly value="${esc(cleLicence())}" onclick="this.select()" title="Cliquez pour tout sélectionner">
+          <button class="btn sm" onclick="afficherCle(this)">Afficher</button>
           <button class="btn sm" onclick="copierCle()">Copier</button></div></div>
       <div style="margin-top:12px;display:flex;gap:8px">
         <button class="btn sm" onclick="licChanger()">Renouveler / nouvelle clé</button>
@@ -5946,7 +5951,7 @@ function construireFeuillesBP(wb){
   /* historique de chaque ligne P&L, branché sur la TBAGR */
   const FHP={};
   FHP[rp.CA]=i=>su(["CA_MARCHANDISES","CA_PRODUITS","CA_SERVICES","CA_ACCESSOIRES",...pca("CA")],i,"-");
-  FHP[rp.CD]=i=>su(["ACHATS_MARCH","ACHATS_MP","AUTRES_ACHATS",...pca("COUTS_DIRECTS")],i,"-");
+  FHP[rp.CD]=i=>su(["ACHATS_MARCH","ACHATS_MP","VARIATION_STOCKS",...pca("COUTS_DIRECTS")],i,"-");
   FHP[rp.MB]=i=>`${hc(rp.CA,i)}+${hc(rp.CD,i)}`;
   FHP[rp.PMB]=i=>`IF(${hc(rp.CA,i)}=0,"",${hc(rp.MB,i)}/${hc(rp.CA,i)})`;
   FHP[rp.AP_]=i=>su(["SUBVENTIONS","PROD_STOCKEE","PROD_IMMOBILISEE","AUTRES_PRODUITS",...pca("AUTRES_PROD")],i,"-");
@@ -6111,8 +6116,9 @@ function construireFeuillesBP(wb){
   cellF(wsV,rv.WACC,3,`C${rv.KE}*(1-${h1(hy.wd)})+C${rv.KD}*${h1(hy.wd)}`,PCT2);
   totalRow(wsV,rv.WACC,3);
   const W=`$C$${rv.WACC}`,G=h1(hy.g);
-  styliserEntete(wsV.addRow([null,"Construction du FCFF",...Array(1).fill(""),...AP.map(a=>"FY"+String(a).slice(-2)+"p")]),2);
-  /* NB : la ligne d'en-tête ci-dessus atterrit après rv.EQ… on la place manuellement : */
+  cellV(wsV,rv.SEC,2,"Construction du FCFF");
+  AP.forEach((a,i)=>cellV(wsV,rv.SEC,4+i,"FY"+String(a).slice(-2)+"p"));
+  styliserEntete(wsV.getRow(rv.SEC),2);
   const vLibs=[[rv.EBIT,"EBIT"],[rv.IMP,"Impôt théorique sur l'EBIT"],[rv.NOP,"NOPAT"],
     [rv.DOT,"+ Dotations aux amortissements"],[rv.DBF,"± Variation du BFR"],
     [rv.CPX,"– Investissements"],[rv.FCF,"FCFF"],[rv.PV,"FCFF actualisés"]];

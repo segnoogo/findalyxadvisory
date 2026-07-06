@@ -60,8 +60,6 @@ function shell(){
     <div class="logo"><img class="brand-logo" src="${LOGO_FINDALYX}" alt="Findalyx">
     <div class="brandsub">Advisory — Due diligence · BP · Valorisation</div></div>
     <div class="nav">${items}</div>
-    ${(LIC_ETAT&&(LIC_ETAT.produit==="tous"||LIC_ETAT.mode==="proprietaire"))?`
-    <button class="side-sysco" onclick="window.open(URL_SYSCO,'_blank')" title="Ouvrir l'app liasse fiscale (SYSCO) — couverte par votre licence">↗ Liasse fiscale (SYSCO)</button>`:""}
     <div class="sfoot">Les données restent sur cet ordinateur.</div>
     ${(LIC_ETAT&&LIC_ETAT.exp&&licJoursRestants(LIC_ETAT.exp)!==null&&licJoursRestants(LIC_ETAT.exp)<30)?`
     <div class="lic-foot" onclick="aller('licence')" title="Licence bientôt expirée — voir la licence">
@@ -75,6 +73,7 @@ function shell(){
     </div>
     <div class="view" id="vue"></div>
   </div><div id="modal"></div>`;
+  if(!window.__profClose){window.__profClose=true;document.addEventListener("click",function(e){document.querySelectorAll("details.profil[open]").forEach(function(d){var s=d.querySelector("summary");if(s&&s.contains(e.target))return;d.open=false;});});}
   rendre();
 }
 function selecteurUnite(){
@@ -126,13 +125,14 @@ function initialesLic(){
   return ((p[0][0]||"")+(p.length>1?p[p.length-1][0]:(p[0][1]||""))).toUpperCase();
 }
 function avatarMenu(){
+  const sysco=(LIC_ETAT&&(LIC_ETAT.produit==="tous"||LIC_ETAT.mode==="proprietaire"))?`<a class="pm-item" onclick="window.open(URL_SYSCO,'_blank')">Ouvrir Findalyx Sysco ↗</a>`:"";
   return `<details class="profil"><summary class="avatar" title="Profil et licence">${initialesLic()}</summary>
     <div class="profil-menu">
-      <div class="profil-h">${esc((LIC_ETAT&&LIC_ETAT.customer)||"Utilisateur")}</div>
-      <div class="profil-act" style="flex-direction:column">
-        <button class="btn sm" onclick="aller('licence')">Licence</button>
-        <button class="btn sm danger" onclick="deconnexion()">Déconnexion</button>
-      </div>
+      <div class="pm-head">${esc(nomCabinet()||(LIC_ETAT&&LIC_ETAT.customer)||"Findalyx")}</div>
+      <a class="pm-item" onclick="aller('licence')">Licence &amp; cabinet</a>
+      ${sysco}
+      <div class="pm-sep"></div>
+      <a class="pm-item pm-danger" onclick="deconnexion()">Déconnexion</a>
     </div></details>`;
 }
 function deconnexion(){
@@ -193,6 +193,7 @@ function copierCle(){
     navigator.clipboard.writeText(k).then(()=>toast("Clé de licence copiée"),()=>copierCleFallback(k));
   else copierCleFallback(k);
 }
+function afficherCle(btn){const i=document.getElementById("licKeyInput");if(!i)return;if(i.type==="password"){i.type="text";btn.textContent="Masquer";}else{i.type="password";btn.textContent="Afficher";}}
 function vueLicence(){
   return `<h1>Licence &amp; cabinet</h1>
   <div class="deux">
@@ -201,7 +202,8 @@ function vueLicence(){
       <div style="margin-top:12px">
         <div class="lic-k" style="margin-bottom:5px">Clé de licence</div>
         <div style="display:flex;gap:8px">
-          <input class="sel" style="flex:1;font-family:monospace;font-size:11px" readonly value="${esc(cleLicence())}" onclick="this.select()" title="Cliquez pour tout sélectionner">
+          <input id="licKeyInput" class="sel" type="password" style="flex:1;font-family:monospace;font-size:11px" readonly value="${esc(cleLicence())}" onclick="this.select()" title="Cliquez pour tout sélectionner">
+          <button class="btn sm" onclick="afficherCle(this)">Afficher</button>
           <button class="btn sm" onclick="copierCle()">Copier</button></div></div>
       <div style="margin-top:12px;display:flex;gap:8px">
         <button class="btn sm" onclick="licChanger()">Renouveler / nouvelle clé</button>

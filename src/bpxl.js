@@ -171,7 +171,7 @@ function construireFeuillesBP(wb){
   /* historique de chaque ligne P&L, branché sur la TBAGR */
   const FHP={};
   FHP[rp.CA]=i=>su(["CA_MARCHANDISES","CA_PRODUITS","CA_SERVICES","CA_ACCESSOIRES",...pca("CA")],i,"-");
-  FHP[rp.CD]=i=>su(["ACHATS_MARCH","ACHATS_MP","AUTRES_ACHATS",...pca("COUTS_DIRECTS")],i,"-");
+  FHP[rp.CD]=i=>su(["ACHATS_MARCH","ACHATS_MP","VARIATION_STOCKS",...pca("COUTS_DIRECTS")],i,"-");
   FHP[rp.MB]=i=>`${hc(rp.CA,i)}+${hc(rp.CD,i)}`;
   FHP[rp.PMB]=i=>`IF(${hc(rp.CA,i)}=0,"",${hc(rp.MB,i)}/${hc(rp.CA,i)})`;
   FHP[rp.AP_]=i=>su(["SUBVENTIONS","PROD_STOCKEE","PROD_IMMOBILISEE","AUTRES_PRODUITS",...pca("AUTRES_PROD")],i,"-");
@@ -336,8 +336,9 @@ function construireFeuillesBP(wb){
   cellF(wsV,rv.WACC,3,`C${rv.KE}*(1-${h1(hy.wd)})+C${rv.KD}*${h1(hy.wd)}`,PCT2);
   totalRow(wsV,rv.WACC,3);
   const W=`$C$${rv.WACC}`,G=h1(hy.g);
-  styliserEntete(wsV.addRow([null,"Construction du FCFF",...Array(1).fill(""),...AP.map(a=>"FY"+String(a).slice(-2)+"p")]),2);
-  /* NB : la ligne d'en-tête ci-dessus atterrit après rv.EQ… on la place manuellement : */
+  cellV(wsV,rv.SEC,2,"Construction du FCFF");
+  AP.forEach((a,i)=>cellV(wsV,rv.SEC,4+i,"FY"+String(a).slice(-2)+"p"));
+  styliserEntete(wsV.getRow(rv.SEC),2);
   const vLibs=[[rv.EBIT,"EBIT"],[rv.IMP,"Impôt théorique sur l'EBIT"],[rv.NOP,"NOPAT"],
     [rv.DOT,"+ Dotations aux amortissements"],[rv.DBF,"± Variation du BFR"],
     [rv.CPX,"– Investissements"],[rv.FCF,"FCFF"],[rv.PV,"FCFF actualisés"]];
