@@ -3181,12 +3181,12 @@ function rpCadreComment(sl,x,y,w,h){
   sl.addShape("roundRect",{x:x,y:y+0.32,w:w,h:Math.max(0.5,h-0.32),rectRadius:0.02,fill:{color:"FBFCFE"},line:{color:RP.FILET,width:1}});
   sl.addText("Zone réservée aux commentaires de l'analyste.",{x:x+0.16,y:y+0.46,w:w-0.32,h:0.3,fontSize:9,italic:true,color:RP.G_CLAIR,fontFace:"Arial",valign:"top"});
 }
-function rpPreambule(pptx,B,mention,page){
+function rpPreambule(pptx,B,mention,page,ctx,base){
   const sl=pptx.addSlide();rpEnTete(sl,B.societe,"Préambule");rpTitre(sl,"Préambule et périmètre d'intervention");
   const fy=B.fy;
   const blocs=[
-    ["Contexte de la mission","Le présent rapport restitue les constats issus de la revue financière de "+B.societe+" sur les exercices "+fy[0]+" à "+fy[fy.length-1]+". Il constitue un support de discussion préalable aux échanges avec le management, et n'a pas vocation à être diffusé hors de ce cadre."],
-    ["Base de travail","Les analyses sont établies à partir des balances générales importées, retraitées selon le référentiel SYSCOHADA. Les agrégats (marge brute, EBITDA, BFR, flux de trésorerie, ratios) sont reconstitués automatiquement et réconciliés avec le bilan."],
+    ["Contexte de la mission",ctx||("Le présent rapport restitue les constats issus de la revue financière de "+B.societe+" sur les exercices "+fy[0]+" à "+fy[fy.length-1]+". Il constitue un support de discussion préalable aux échanges avec le management, et n'a pas vocation à être diffusé hors de ce cadre.")],
+    ["Base de travail",base||"Les analyses sont établies à partir des balances générales importées, retraitées selon le référentiel SYSCOHADA. Les agrégats (marge brute, EBITDA, BFR, flux de trésorerie, ratios) sont reconstitués automatiquement et réconciliés avec le bilan."],
     ["Périmètre et limites","Nos travaux ne constituent ni un audit ni une revue limitée au sens des normes d'exercice professionnel. Les données n'ont pas fait l'objet de vérifications indépendantes : les constats doivent être confirmés avec le management et les pièces justificatives."],
     ["Unité de présentation","Sauf mention contraire, les montants sont exprimés en "+rpLib()+". Les variations annuelles et le taux de croissance annuel moyen (TCAM) figurent dans les tableaux."]];
   let y=1.68;
@@ -3419,8 +3419,11 @@ function construireBP(pptx){
   const mention=B.societe+" - Business plan "+ap[0]+"-"+ap[ap.length-1]+" - "+B.dateTxt+" - Confidentiel";
   let page=1;
   rpGarde(pptx,B.societe,"Rapport provisoire de Business Plan "+ap[0]+" – "+ap[ap.length-1],
-    "Historique "+fy[0]+" – "+fy[fy.length-1]+"  |  Montants en "+rpLib()+"",B.dateTxt);
-  rpSection(pptx,1,"Note de synthèse",["Résumé exécutif"],mention,++page);
+    "Historique "+fy[0]+" – "+fy[fy.length-1]+"  |  Montants en "+rpLib()+"",B.dateTxt,B.cabinet);
+  rpPreambule(pptx,B,mention,++page,
+    "Le présent rapport présente le business plan de "+B.societe+" sur la période "+ap[0]+" à "+ap[ap.length-1]+", construit à partir de l'historique "+fy[0]+"–"+fy[fy.length-1]+". Il constitue un support de discussion préalable aux échanges avec le management.",
+    "Les projections sont établies à partir des balances historiques et d'hypothèses paramétrées dans l'application (croissance du CA, marges, BFR, investissements, financement). Le bilan prévisionnel est bouclé par la trésorerie ; toutes les hypothèses sont modifiables.");
+  rpSection(pptx,1,"Note de synthèse",["Résumé exécutif et trajectoire"],mention,++page);
   let sl=pptx.addSlide();
   rpEnTete(sl,B.societe,"Note de synthèse");
   rpTitre(sl,"Résumé exécutif");
@@ -3450,13 +3453,10 @@ function construireBP(pptx){
     ["titre","sous_total","sous_total","sous_total"],new Set(),
     [2.6,...Array(1+ap.length).fill(1.15)],8.5,
     "Source : projections Findalyx Advisory (hypothèses modifiables dans l'application)");
-  rpObservations(sl,7.65,3.35,5.15,[
-    ["Hypothèses","Le plan repose sur une croissance de "+rpPct(hyp.caCroiss[0])+
-     " par an, des coûts directs à "+Math.round(hyp.coutsDirects_pct*100)+
-     "% du CA et un BFR de "+Math.round(hyp.dso)+" jours de chiffre d'affaires."],
-    ["Trésorerie","Le bilan projeté est bouclé par la trésorerie : la trajectoire mesure la capacité du plan à générer du cash."],
-    ["À compléter","Les messages du management, la stratégie et le plan d'actions restent à intégrer."],
-  ]);
+  rpGraphBarres(sl,7.65,3.15,5.15,3.55,"Trajectoire CA · EBITDA · RN ("+rpLib()+")",[fy[fy.length-1],...fyp],[
+    {name:"CA",values:[rq(v.CA[a1]),...ap.map(a=>rq(proj.pl.CA[a]))]},
+    {name:"EBITDA",values:[rq(v.EBITDA[a1]),...ap.map(a=>rq(proj.pl.EBITDA[a]))]},
+    {name:"Résultat net",values:[rq(v.RESULTAT_NET[a1]),...ap.map(a=>rq(proj.pl.RN[a]))]}],{fmt:"#,##0",showValue:false});
   rpPied(sl,mention,++page);
   rpSection(pptx,2,"Présentation du projet et étude de marché",
     ["Structure du projet","Étude de marché"],mention,++page);
@@ -3468,8 +3468,7 @@ function construireBP(pptx){
   sl=pptx.addSlide();
   rpEnTete(sl,B.societe,"Hypothèses");
   rpTitre(sl,"Hypothèses opérationnelles et financières");
-  rpAssertion(sl,"Les valeurs par défaut sont dérivées de l'historique "+fy[0]+" – "+
-    fy[fy.length-1]+" et doivent être challengées avec le management.");
+  rpAssertion(sl,"Les valeurs par défaut sont dérivées de l'historique "+fy[0]+" – "+fy[fy.length-1]+".");
   const lignesH=[],stylesH=[];
   const pcH=x=>(x*100).toFixed(1).replace(".0","")+" %";
   const gH=(t,items)=>{lignesH.push([t,""]);stylesH.push("sous_total");
@@ -3493,6 +3492,7 @@ function construireBP(pptx){
     ["Croissance à l'infini (g)",pcH(hyp.valo.g)]]);
   rpTable(sl,0.55,1.95,7.6,B.societe.toUpperCase()+" - Hypothèses",["Hypothèse","Valeur"],
     lignesH,stylesH,new Set(),[5.2,1.4],8);
+  rpCadreComment(sl,8.35,1.95,4.45,4.9);
   rpPied(sl,mention,++page);
   /* projections */
   rpSection(pptx,4,"Projections financières",["Compte de résultat","Bilan et trésorerie"],mention,++page);
@@ -3517,11 +3517,32 @@ function construireBP(pptx){
     new Set(Array.from({length:A.length},(_,k)=>1+k)),
     [2.6,...Array(A.length+ap.length).fill(1.05)],8,
     "Colonnes bleutées : historique reconstitué ; autres : projections.");
+  rpGraphLignes(sl,0.55,5.05,7.4,1.8,"Trajectoire CA · EBITDA · Résultat net ("+rpLib()+")",[...fy,...fyp],[
+    {name:"CA",values:[...A.map(a=>rq(v.CA[a])),...ap.map(a=>rq(proj.pl.CA[a]))]},
+    {name:"EBITDA",values:[...A.map(a=>rq(v.EBITDA[a])),...ap.map(a=>rq(proj.pl.EBITDA[a]))]},
+    {name:"Résultat net",values:[...A.map(a=>rq(v.RESULTAT_NET[a])),...ap.map(a=>rq(proj.pl.RN[a]))]}],{fmt:"#,##0",showValue:false});
+  rpCadreComment(sl,8.15,5.05,4.65,1.8);
   rpPied(sl,mention,++page);
-  rpSection(pptx,5,"Annexes",["Sources","Modèle financier"],mention,++page);
-  rpPlaceholder(pptx,B.societe,"Annexes","Sources et documents de référence",
-    ["Sources des données (balances importées)","Export Excel de l'application (hypothèses, plan, valorisation)",
-     "Tableau d'amortissement du financement","Glossaire"],mention,++page);
+  /* bilan & trésorerie prévisionnels */
+  sl=pptx.addSlide();
+  rpEnTete(sl,B.societe,"Projections financières");
+  rpTitre(sl,"Bilan et trésorerie prévisionnels");
+  rpAssertion(sl,"La trésorerie nette évolue de "+rpFmt(v.TRESORERIE_NETTE[a1])+" "+rpLib()+" ("+fy[fy.length-1]+") à "+rpFmt(proj.bs.TRESO_NETTE[ap[ap.length-1]])+" "+rpLib()+" ("+fyp[fyp.length-1]+").");
+  const bsP=[["Immobilisations nettes",...ap.map(a=>rpFmt(proj.bs.IMMO_NET[a]))],
+    ["Besoin en fonds de roulement",...ap.map(a=>rpFmt(proj.bs.BFR[a]))],
+    ["Capitaux propres",...ap.map(a=>rpFmt(proj.bs.CP[a]))],
+    ["Dettes financières",...ap.map(a=>rpFmt(proj.bs.DETTE[a]))],
+    ["Trésorerie nette",...ap.map(a=>rpFmt(proj.bs.TRESO_NETTE[a]))]];
+  rpTable(sl,0.55,1.95,7.0,B.societe.toUpperCase()+" - Bilan prévisionnel",[rpLib(),...fyp],bsP,
+    ["sous_total","sous_total","titre","detail","sous_total"],new Set(),[3.0,...ap.map(()=>1.0)],8,"Source : projections Findalyx Advisory");
+  rpGraphLignes(sl,7.85,1.95,4.95,3.4,"Trésorerie nette & BFR ("+rpLib()+")",fyp,[
+    {name:"Trésorerie nette",values:ap.map(a=>rq(proj.bs.TRESO_NETTE[a]))},
+    {name:"BFR",values:ap.map(a=>rq(proj.bs.BFR[a]))}],{fmt:"#,##0",showValue:false});
+  rpCadreComment(sl,7.85,5.35,4.95,1.5);
+  rpPied(sl,mention,++page);
+  rpSection(pptx,5,"Annexes",["Glossaire","Lexique financier"],mention,++page);
+  rpGlossaire(pptx,B,mention,++page);
+  rpLexique(pptx,B,mention,++page);
   rpContacts(pptx,B.cabinet,mention,++page);
 }
 
@@ -3537,7 +3558,10 @@ function construireValo(pptx){
   const mention=B.societe+" - Évaluation financière au 31/12/"+a1+" - Confidentiel";
   let page=1;
   rpGarde(pptx,B.societe,"Rapport provisoire d'évaluation financière au 31/12/"+a1,
-    "Historique "+fy[0]+" – "+fy[fy.length-1]+"  |  Montants en "+rpLib()+"",B.dateTxt);
+    "Historique "+fy[0]+" – "+fy[fy.length-1]+"  |  Montants en "+rpLib()+"",B.dateTxt,B.cabinet);
+  rpPreambule(pptx,B,mention,++page,
+    "Le présent rapport présente l'évaluation financière des fonds propres de "+B.societe+" au 31/12/"+a1+", à partir des projections issues du business plan. Il constitue un support de discussion préalable aux échanges avec le management.",
+    "L'évaluation combine une actualisation des flux de trésorerie disponibles (DCF, valeur terminale de Gordon) et une approche par multiples d'EBITDA. Les flux et le coût du capital sont paramétrés dans l'application et modifiables.");
   rpSection(pptx,1,"Note de synthèse",["Méthodes d'évaluation","Fourchette de valorisation"],mention,++page);
   let sl=pptx.addSlide();
   rpEnTete(sl,B.societe,"Note de synthèse");
@@ -3562,11 +3586,9 @@ function construireValo(pptx){
   rpTable(sl,0.55,3.35,6.9,B.societe.toUpperCase()+" - Synthèse de valorisation",
     [rpLib(),"Valeur"],brg,["detail","detail","sous_total","detail","sous_total","sous_total"],
     new Set(),[4.4,1.8],9,"Source : DCF et multiples sur projections Findalyx Advisory");
-  rpObservations(sl,7.65,3.35,5.15,[
-    ["Méthodes","La valorisation repose sur un DCF des flux pour l'entreprise avec valeur terminale de Gordon, contrôlé par une approche par multiples d'EBITDA."],
-    ["Sensibilité","La fourchette est obtenue en faisant varier le WACC de ±1 point et g de ±0,5 point."],
-    ["À compléter","L'appréciation de l'évaluateur, les actifs hors exploitation et les passifs éventuels restent à intégrer."],
-  ]);
+  rpGraphBarres(sl,7.65,3.15,5.15,2.4,"Fourchette — fonds propres ("+rpLib()+")",
+    ["Bas","DCF","Multiples","Haut"],[{name:"Fonds propres",values:[rq(val.eqMin),rq(val.equityDcf),rq(val.equityMult),rq(val.eqMax)],color:"224289"}],{fmt:"#,##0"});
+  rpCadreComment(sl,7.65,5.7,5.15,1.15);
   rpPied(sl,mention,++page);
   /* DCF détaillé */
   sl=pptx.addSlide();
@@ -3586,15 +3608,17 @@ function construireValo(pptx){
   rpTable(sl,0.55,3.6,12.25,"Projections sous-jacentes "+ap[0]+" - "+ap[ap.length-1],
     [rpLib(),...fyp],proj4,["titre","sous_total","sous_total"],new Set(),
     [3.2,...Array(ap.length).fill(1.2)],9);
-  rpObservations(sl,0.55,5.15,12.25,[
-    ["WACC","Le taux d'actualisation doit être calé sur la structure financière cible, le bêta sectoriel et la prime de risque pays."],
-    ["Dette nette","La dette nette doit être ajustée des provisions, engagements hors bilan et actifs excédentaires."],
-  ]);
+  rpGraphBarres(sl,0.55,5.15,7.4,1.65,"FCFF actualisés ("+rpLib()+")",fyp,
+    [{name:"FCFF actualisés",values:ap.map(a=>rq(val.pv[a])),color:"16904E"}],{fmt:"#,##0",showValue:false});
+  rpCadreComment(sl,8.15,5.15,4.65,1.65);
   rpPied(sl,mention,++page);
   rpSection(pptx,2,"Risques",["Risques majeurs et couverture"],mention,++page);
   rpPlaceholder(pptx,B.societe,"Risques","Risques majeurs et couverture",
     ["Risques de marché et de concurrence","Risques opérationnels",
      "Risques financiers (change, taux, liquidité)","Risques juridiques et fiscaux"],mention,++page);
+  rpSection(pptx,3,"Annexes",["Glossaire","Lexique financier"],mention,++page);
+  rpGlossaire(pptx,B,mention,++page);
+  rpLexique(pptx,B,mention,++page);
   rpContacts(pptx,B.cabinet,mention,++page);
 }
 
