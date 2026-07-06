@@ -62,9 +62,10 @@ function shell(){
     <div class="nav">${items}</div>
     ${(LIC_ETAT&&(LIC_ETAT.produit==="tous"||LIC_ETAT.mode==="proprietaire"))?`
     <button class="side-sysco" onclick="window.open(URL_SYSCO,'_blank')" title="Ouvrir l'app liasse fiscale (SYSCO) — couverte par votre licence">↗ Liasse fiscale (SYSCO)</button>`:""}
-    <div class="sfoot">Les données restent sur cet ordinateur.<br>Findalyx — Dakar</div>
-    <div class="lic-foot" onclick="licChanger()" title="Cliquer pour changer de code">
-      ${LIC_ETAT?("Licence : "+esc(LIC_ETAT.customer||"active")+(LIC_ETAT.exp?" · expire le "+esc(LIC_ETAT.exp):" · propriétaire")):"Licence non vérifiée"}</div>
+    <div class="sfoot">Les données restent sur cet ordinateur.</div>
+    ${(LIC_ETAT&&LIC_ETAT.exp&&licJoursRestants(LIC_ETAT.exp)!==null&&licJoursRestants(LIC_ETAT.exp)<30)?`
+    <div class="lic-foot" onclick="aller('licence')" title="Licence bientôt expirée — voir la licence">
+      ⚠ Licence : expire dans ${licJoursRestants(LIC_ETAT.exp)} j</div>`:""}
   </div>
   <div class="main">
     <div class="top">
@@ -125,12 +126,11 @@ function initialesLic(){
   return ((p[0][0]||"")+(p.length>1?p[p.length-1][0]:(p[0][1]||""))).toUpperCase();
 }
 function avatarMenu(){
-  return `<details class="profil"><summary class="avatar" title="Profil &amp; licence">${initialesLic()}</summary>
+  return `<details class="profil"><summary class="avatar" title="Profil et licence">${initialesLic()}</summary>
     <div class="profil-menu">
       <div class="profil-h">${esc((LIC_ETAT&&LIC_ETAT.customer)||"Utilisateur")}</div>
-      ${infosLicenceHTML()}
-      <div class="profil-act">
-        <button class="btn sm" onclick="aller('params')">Paramètres &amp; licence</button>
+      <div class="profil-act" style="flex-direction:column">
+        <button class="btn sm" onclick="aller('licence')">Licence</button>
         <button class="btn sm danger" onclick="deconnexion()">Déconnexion</button>
       </div>
     </div></details>`;
@@ -140,8 +140,39 @@ function deconnexion(){
   try{localStorage.removeItem("fxc_licence");}catch(e){}
   location.reload();
 }
+/* ---------- cabinet : coordonnées de l'analyste, reprises dans les exports ---------- */
+function chargerCabinet(){try{return JSON.parse(localStorage.getItem("fxc_cabinet")||"{}")||{};}catch(e){return {};}}
+function majCabinet(k,val){const c=chargerCabinet();c[k]=(val||"").trim();try{localStorage.setItem("fxc_cabinet",JSON.stringify(c));}catch(e){}}
+function nomCabinet(){return chargerCabinet().cabinet||"";}
+/* nom à afficher dans les exports : cabinet configuré, sinon titulaire de la licence */
+function cabinetExport(){return nomCabinet()||((typeof LIC_ETAT!=="undefined"&&LIC_ETAT&&LIC_ETAT.customer)||"");}
+function carteCabinet(){
+  const c=chargerCabinet();
+  const champs=[["cabinet","Cabinet / raison sociale","ex. Cabinet Sawadogo & Associés"],
+    ["analyste","Analyste / signataire","ex. Salif Sawadogo"],
+    ["adresse","Adresse","ex. Dakar, Sénégal"],
+    ["telephone","Téléphone","ex. +221 …"],
+    ["email","E-mail","ex. contact@moncabinet.com"]];
+  const lignes=champs.map(([k,lab,ph])=>`<div class="hyp-l"><span>${lab}</span>
+    <input class="sel" style="width:52%" placeholder="${esc(ph)}" value="${esc(c[k]||"")}"
+      onchange="majCabinet('${k}',this.value)"></div>`).join("");
+  return `<div class="card"><div class="sec-titre" style="margin-top:0">Mon cabinet — coordonnées dans les exports</div>
+    <div class="mut" style="margin-bottom:10px">Ces informations (cabinet, analyste, coordonnées) apparaissent sur les pages de garde et pieds de page des rapports (PDF, PowerPoint, databook), à la place de « Findalyx ». Laissez vide pour ne rien afficher.</div>
+    ${lignes}</div>`;
+}
+function vueLicence(){
+  return `<h1>Licence &amp; cabinet</h1>
+  <div class="deux">
+    <div class="card"><div class="sec-titre" style="margin-top:0">Abonnement Findalyx</div>
+      ${infosLicenceHTML()}
+      <div style="margin-top:12px;display:flex;gap:8px">
+        <button class="btn sm" onclick="licChanger()">Renouveler / nouvelle clé</button>
+        <button class="btn sm danger" onclick="deconnexion()">Déconnexion</button></div></div>
+    ${carteCabinet()}
+  </div>`;
+}
 function aller(v){
-  if(v!=="accueil"&&!DOSSIER){toast("Ouvrez d'abord un dossier");return;}
+  if(v!=="accueil"&&v!=="licence"&&!DOSSIER){toast("Ouvrez d'abord un dossier");return;}
   VUE=v;shell();
 }
 function toast(t){const m=document.getElementById("toast");m.textContent=t;m.style.display="block";
@@ -163,6 +194,7 @@ function rendre(){
   else if(VUE==="bp") el.innerHTML=vueBP();
   else if(VUE==="valo"){el.innerHTML=vueValo();dessinerFootball();}
   else if(VUE==="params") el.innerHTML=vueParams();
+  else if(VUE==="licence") el.innerHTML=vueLicence();
   else if(VUE==="exports") el.innerHTML=vueExports();
   else if(VUE==="wizard") el.innerHTML=vueWizard();
   document.querySelectorAll("#vue select[data-compte]").forEach(s=>{s.value=s.dataset.val;});

@@ -225,12 +225,13 @@ function rpContacts(pptx, cabinet, mention, page){
   sl.addImage({data:LOGO_FINDALYX,x:10.9,y:0.72,h:0.42,w:0.42*4.45});
   sl.addShape("rect",{x:0.7,y:2.9,w:3.95,h:2.5,fill:{color:RP.BLANC},line:{color:RP.FILET,width:1}});
   sl.addShape("rect",{x:0.95,y:3.18,w:0.5,h:0.04,fill:{color:RP.ORANGE}});
-  sl.addText("Salif Sawadogo",{x:0.95,y:3.32,w:3.45,h:0.35,fontSize:14,bold:true,color:RP.NAVY,fontFace:"Arial"});
+  const cab=chargerCabinet();
+  sl.addText(cab.analyste||cabinet||"Analyste",{x:0.95,y:3.32,w:3.45,h:0.35,fontSize:14,bold:true,color:RP.NAVY,fontFace:"Arial"});
   sl.addText("Financial Advisory — "+cabinet,{x:0.95,y:3.7,w:3.45,h:0.3,fontSize:10.5,color:RP.G_TITRE,fontFace:"Arial"});
-  sl.addText("sawadgsalif@gmail.com",{x:0.95,y:4.13,w:3.45,h:0.28,fontSize:10.5,color:RP.BLEU,fontFace:"Arial"});
-  sl.addText("[Téléphone à compléter]",{x:0.95,y:4.43,w:3.45,h:0.28,fontSize:10.5,color:RP.G_TXT,fontFace:"Arial"});
-  sl.addText("Dakar, Sénégal",{x:0.95,y:4.73,w:3.45,h:0.28,fontSize:10.5,color:RP.G_TXT,fontFace:"Arial"});
-  sl.addText("Findalyx — conseil financier : due diligence, business plans, évaluations d'entreprises et modélisation financière dans l'espace OHADA.",
+  if(cab.email)sl.addText(cab.email,{x:0.95,y:4.13,w:3.45,h:0.28,fontSize:10.5,color:RP.BLEU,fontFace:"Arial"});
+  if(cab.telephone)sl.addText(cab.telephone,{x:0.95,y:4.43,w:3.45,h:0.28,fontSize:10.5,color:RP.G_TXT,fontFace:"Arial"});
+  if(cab.adresse)sl.addText(cab.adresse,{x:0.95,y:4.73,w:3.45,h:0.28,fontSize:10.5,color:RP.G_TXT,fontFace:"Arial"});
+  sl.addText(cabinet+" — conseil financier : due diligence, business plans, évaluations d'entreprises et modélisation financière dans l'espace OHADA.",
     {x:0.7,y:5.8,w:11.9,h:0.5,fontSize:10.5,color:RP.G_TXT,fontFace:"Arial"});
   rpPied(sl,mention,page);
 }
@@ -278,7 +279,7 @@ function rpBase(){
   const a1=A[A.length-1],a0=A[0],ca1=v.CA[a1];
   const fy=A.map(a=>"FY"+String(a).slice(-2));
   const dateTxt=new Date().toLocaleDateString("fr-FR",{month:"long",year:"numeric"});
-  return {A,v,a1,a0,ca1,fy,dateTxt,societe:DOSSIER.societe,cabinet:"Findalyx"};
+  return {A,v,a1,a0,ca1,fy,dateTxt,societe:DOSSIER.societe,cabinet:cabinetExport()||"Findalyx Advisory"};
 }
 function rpPilule(v,code,a0p,a1){
   if(!a0p||!v[code][a0p])return [null,"neutre"];

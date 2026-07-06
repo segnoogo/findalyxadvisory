@@ -10,7 +10,7 @@ function pdfEntete(doc,titre,page){
 }
 function pdfPied(doc,page){
   doc.setFontSize(8);doc.setTextColor(...PDF_GRIS);doc.setFont("helvetica","normal");
-  doc.text(DOSSIER.societe+" — états financiers et analyse · Findalyx Advisory",14,202);
+  doc.text(DOSSIER.societe+" — états financiers et analyse · "+(cabinetExport()||"Findalyx Advisory"),14,202);
   doc.text("Page "+page,283,202,{align:"right"});
 }
 function pdfTable(doc,head,body,stylesLignes,debutY){
@@ -53,7 +53,7 @@ function construirePDF(doc){
   doc.setFontSize(15);doc.setFont("helvetica","normal");doc.setTextColor(202,220,252);
   doc.text("États financiers et analyse — exercices "+fys.join(" · "),16,138);
   doc.setFontSize(10.5);doc.setTextColor(159,176,214);
-  doc.text("Montants en "+u.lib+"  ·  préparé par Findalyx Advisory  ·  strictement confidentiel",16,147);
+  doc.text("Montants en "+u.lib+"  ·  préparé par "+(cabinetExport()||"Findalyx Advisory")+"  ·  strictement confidentiel",16,147);
   const I=(DOSSIER.infos||{});
   const idBits=[I.secteur,I.formeJuridique,I.creation?"créée en "+I.creation:null,I.adresse].filter(Boolean);
   if(idBits.length){doc.setFontSize(10);doc.setTextColor(202,220,252);

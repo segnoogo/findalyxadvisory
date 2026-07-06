@@ -134,7 +134,7 @@ async function genererDatabook(){
   met(ligneT+3,"Exercices "+fy.join(" · ")+"   —   montants en "+UNI.lib,12,"FF172554");
   const infosG=[(DOSSIER.infos||{}).secteur,(DOSSIER.infos||{}).adresse].filter(Boolean).join(" — ");
   met(ligneT+4,infosG||"Scénario comptable SYSCOHADA — balance agrégée, états en formules, détails par poste",11,"FF6B7280");
-  met(ligneT+6,"Généré le "+dateGen+" par Findalyx Advisory",11,"FF6B7280");
+  met(ligneT+6,"Généré le "+dateGen+" par "+(cabinetExport()||"Findalyx Advisory"),11,"FF6B7280");
   const lm=ligneT+9;
   met(lm,"MODE D'EMPLOI",12,"FF172554",true);
   [["1. La colonne B de l'onglet TBAGR (Mapping) est modifiable par liste déroulante."],
