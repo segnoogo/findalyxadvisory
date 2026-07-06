@@ -181,18 +181,19 @@ function vueBPPl(P){
     {lib:"Coûts directs",hist:v.COUTS_DIRECTS[a1],proj:a=>P.pl.COUTS_DIRECTS[a]},
     {lib:"Marge brute",st:"total",hist:v.MARGE_BRUTE[a1],proj:a=>P.pl.MARGE_BRUTE[a]},
     {lib:"% Marge brute / CA",type:"pct",hist:v.CA[a1]?v.MARGE_BRUTE[a1]/v.CA[a1]:null,proj:a=>P.pl.CA[a]?P.pl.MARGE_BRUTE[a]/P.pl.CA[a]:null},
-    {lib:"Subventions et autres produits",hist:v.AUTRES_PROD[a1],proj:a=>P.pl.AUTRES_PROD[a]},
-    {sec:"Frais généraux — détail"},
+    {lib:"Autres produits",hist:v.AUTRES_PROD[a1],proj:a=>P.pl.AUTRES_PROD[a]},
+    {sec:"Frais généraux"},
     ...Object.entries(P.pl.OPEX_DETAIL).map(([c,o])=>({lib:o.lib,hist:v[c]?v[c][a1]:0,proj:a=>o.vals[a]})),
-    {lib:"Total frais généraux",st:"total",hist:v.OPEX[a1],proj:a=>P.pl.OPEX_TOTAL[a]},
-    {sec:""},
     {lib:"Charges de personnel",hist:v.CHARGES_PERSONNEL[a1],proj:a=>P.pl.CHARGES_PERSONNEL[a]},
+    {lib:"Total frais généraux",st:"total",hist:v.FRAIS_GENERAUX[a1],proj:a=>P.pl.OPEX_TOTAL[a]+P.pl.CHARGES_PERSONNEL[a]},
+    {sec:""},
     {lib:"EBITDA",st:"total",hist:v.EBITDA[a1],proj:a=>P.pl.EBITDA[a]},
     {lib:"% EBITDA / CA",type:"pct",hist:v.CA[a1]?v.EBITDA[a1]/v.CA[a1]:null,proj:a=>P.pl.CA[a]?P.pl.EBITDA[a]/P.pl.CA[a]:null},
     {lib:"Dotations aux amortissements",hist:v.DA[a1],proj:a=>P.pl.DA[a]},
     {lib:"EBIT",st:"total",hist:v.EBIT[a1],proj:a=>P.pl.EBIT[a]},
     {lib:"Produits financiers",hist:v.RESULTAT_FIN[a1]>0?v.RESULTAT_FIN[a1]:0,proj:a=>P.pl.PRODUITS_FIN[a]},
     {lib:"Frais financiers",hist:v.RESULTAT_FIN[a1]<0?v.RESULTAT_FIN[a1]:0,proj:a=>P.pl.FRAIS_FIN[a]},
+    {lib:"Résultat financier",st:"total",hist:v.RESULTAT_FIN[a1],proj:a=>(P.pl.PRODUITS_FIN[a]||0)+(P.pl.FRAIS_FIN[a]||0)},
     {lib:"Résultat avant impôt",st:"total",hist:v.EBIT[a1]+v.RESULTAT_FIN[a1],proj:a=>P.pl.EBT[a]},
     {lib:"Impôt sur les sociétés",hist:v.IMPOTS[a1],proj:a=>P.pl.IS[a]},
     {lib:"Résultat net",st:"total",hist:v.RESULTAT_NET[a1],proj:a=>P.pl.RN[a]}];
@@ -610,6 +611,9 @@ function vueParams(){
     <div class="hyp-l"><span>Secteur de comparaison des ratios et de la notation</span>
       <select class="sel" style="width:46%" onchange="changerSecteur(this.value)">${SECTEURS.map(s=>`<option${s===(DOSSIER.secteur||"Général")?" selected":""}>${s}</option>`).join("")}</select></div>
     <div class="mut" style="margin-top:8px">Détermine la comparaison sectorielle des ratios et le calcul de la Notation. Le benchmark provient de la base en ligne — aucune borne n'est affichée tant que le secteur n'a pas assez de sociétés.</div></div>`;
+  const licenceCard=`<div class="card"><div class="sec-titre" style="margin-top:0">Abonnement Findalyx</div>
+    ${infosLicenceHTML()}
+    <div style="margin-top:12px"><button class="btn sm" onclick="licChanger()">Renouveler / saisir une nouvelle clé</button></div></div>`;
   return `<h1>Paramètres — fiche société</h1>
   <div class="mut" style="margin-bottom:12px">Ces informations alimentent automatiquement les rapports
   (présentation de la société, contexte de mission) et les pages de garde. Tout est facultatif — les
@@ -617,5 +621,6 @@ function vueParams(){
   ${secteurCtl}
   <div class="deux">${groupes[0]}${groupes[2]}</div>
   ${groupes[1]}
-  <div class="deux">${groupes[3]}${logoCtl}</div>`;
+  <div class="deux">${groupes[3]}${logoCtl}</div>
+  ${licenceCard}`;
 }

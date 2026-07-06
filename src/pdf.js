@@ -15,7 +15,7 @@ function pdfPied(doc,page){
 }
 function pdfTable(doc,head,body,stylesLignes,debutY){
   doc.autoTable({
-    head:[head],body,startY:debutY||27,margin:{left:14,right:14},
+    head:[head],body,startY:debutY||27,margin:{left:14,right:14},rowPageBreak:"avoid",
     theme:"plain",
     styles:{font:"helvetica",fontSize:8,cellPadding:1.6,halign:"right",textColor:[40,40,40]},
     headStyles:{fillColor:PDF_NAVY,textColor:[255,255,255],fontStyle:"bold",halign:"right"},
@@ -68,6 +68,7 @@ function construirePDF(doc){
   const etatBody=defs=>{
     const body=[],st=[];
     defs.forEach(d=>{
+      if(d.detail)return;   /* vue synthétique — comme l'app par défaut (pas de sur-longueur) */
       if(d.type==="pct"){
         body.push(["% "+d.lib+" / CA",...A.map(a=>v.CA[a]?Math.round(v[d.code][a]/v.CA[a]*100)+"%":"-"),...A.slice(1).map(()=>""),...(n>2?[""]:[])]);
         st.push("pct");return;
@@ -84,7 +85,22 @@ function construirePDF(doc){
   /* ---- P&L ---- */
   doc.addPage("a4","landscape");
   pdfEntete(doc,"Compte de résultat analytique — "+u.lib);
-  let [b,s]=etatBody(DEF_PL);pdfTable(doc,head,b,s);pdfPied(doc,++page);
+  let [b,s]=etatBody(DEF_PL);pdfTable(doc,head,b,s);
+  {/* ratios du compte de résultat, sous le P&L */
+    const rdef=[["Marge brute / CA","MARGE_BRUTE","CA",1],["Marge d'EBITDA","EBITDA","CA",1],
+      ["Marge d'exploitation (EBIT)","EBIT","CA",1],["Marge nette","RESULTAT_NET","CA",1],
+      ["Frais généraux (overhead) / CA","FRAIS_GENERAUX","CA",-1],["Charges de personnel / CA","CHARGES_PERSONNEL","CA",-1],
+      ["Taux d'impôt effectif","IS","RESULTAT_AVANT_IMPOT",-1]];
+    const bR=[["Ratios du compte de résultat",...fys.map(()=>""),...deltas.map(()=>""),...cagrCol.map(()=>"")]],sR=["sec"];
+    rdef.forEach(([lib,num,den,sg])=>{
+      const m=A.map(a=>v[den][a]?sg*v[num][a]/v[den][a]*100:null);
+      const cells=m.map(x=>x==null?"-":(Math.round(x*10)/10).toString().replace(".",",")+" %");
+      const dl=A.slice(1).map((a,i)=>{const d=(m[i]!=null&&m[i+1]!=null)?Math.round((m[i+1]-m[i])*100):null;return d==null?"-":(d>0?"+":"")+d+" pb";});
+      bR.push([lib,...cells,...dl,...cagrCol.map(()=>"")]);sR.push("pct");
+    });
+    pdfTable(doc,head,bR,sR,doc.lastAutoTable.finalY+6);
+  }
+  pdfPied(doc,++page);
   /* ---- Bilan ---- */
   doc.addPage("a4","landscape");
   pdfEntete(doc,"Bilan — présentation actif net — "+u.lib);

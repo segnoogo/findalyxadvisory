@@ -39,6 +39,25 @@ padding:11px 28px;display:flex;align-items:center;justify-content:space-between;
 .chip{font-size:10.2px;padding:4px 11px;border-radius:20px}
 .chip.ok{color:var(--green);background:#e7f4ee}.chip.bad{color:var(--red);background:#fdeceb}
 .chip.muted{color:var(--muted);background:#eee}
+/* avatar + menu profil (topbar) */
+.avatar{width:34px;height:34px;border-radius:50%;background:var(--navy);color:#fff;font-size:12px;font-weight:700;
+  display:flex;align-items:center;justify-content:center;cursor:pointer;border:0;list-style:none;user-select:none}
+details.profil{position:relative}
+details.profil>summary{list-style:none;outline:none}
+details.profil>summary::-webkit-details-marker{display:none}
+.profil-menu{position:absolute;right:0;top:calc(100% + 8px);width:288px;background:#fff;border:1px solid var(--border);
+  border-radius:14px;box-shadow:0 12px 34px rgba(23,37,84,.16);padding:14px;z-index:30}
+.profil-h{font-weight:700;color:var(--navy);font-size:12.5px;margin-bottom:8px}
+.profil-act{display:flex;gap:8px;margin-top:12px}.profil-act .btn{flex:1}
+.btn.danger{background:#fdeceb;color:var(--red);border-color:#f6d4d1}.btn.danger:hover{background:#fbdad7}
+.lic-info{display:flex;flex-direction:column}
+.lic-row{display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px solid #f0f2f6;font-size:11px}
+.lic-row:last-child{border-bottom:0}
+.lic-k{color:var(--muted)}.lic-v{font-weight:600;color:var(--ink)}
+.lic-v.ok{color:var(--green)}.lic-v.warn{color:#b26b00}
+.side-sysco{margin-top:auto;background:transparent;border:1px solid rgba(255,255,255,.16);color:#aab6d6;
+  font-size:10px;padding:7px 10px;border-radius:9px;cursor:pointer;text-align:left;font-family:inherit}
+.side-sysco:hover{color:#fff;border-color:rgba(255,255,255,.4)}
 .sel{padding:7px 10px;border:1px solid var(--border);border-radius:8px;background:#fff;
 font-size:11.2px;color:var(--ink);font-family:inherit}
 .btn{padding:8px 14px;border:1px solid var(--border);background:#fff;border-radius:8px;
@@ -3464,7 +3483,7 @@ function pdfPied(doc,page){
 }
 function pdfTable(doc,head,body,stylesLignes,debutY){
   doc.autoTable({
-    head:[head],body,startY:debutY||27,margin:{left:14,right:14},
+    head:[head],body,startY:debutY||27,margin:{left:14,right:14},rowPageBreak:"avoid",
     theme:"plain",
     styles:{font:"helvetica",fontSize:8,cellPadding:1.6,halign:"right",textColor:[40,40,40]},
     headStyles:{fillColor:PDF_NAVY,textColor:[255,255,255],fontStyle:"bold",halign:"right"},
@@ -3517,6 +3536,7 @@ function construirePDF(doc){
   const etatBody=defs=>{
     const body=[],st=[];
     defs.forEach(d=>{
+      if(d.detail)return;   /* vue synthétique — comme l'app par défaut (pas de sur-longueur) */
       if(d.type==="pct"){
         body.push(["% "+d.lib+" / CA",...A.map(a=>v.CA[a]?Math.round(v[d.code][a]/v.CA[a]*100)+"%":"-"),...A.slice(1).map(()=>""),...(n>2?[""]:[])]);
         st.push("pct");return;
@@ -3533,7 +3553,22 @@ function construirePDF(doc){
   /* ---- P&L ---- */
   doc.addPage("a4","landscape");
   pdfEntete(doc,"Compte de résultat analytique — "+u.lib);
-  let [b,s]=etatBody(DEF_PL);pdfTable(doc,head,b,s);pdfPied(doc,++page);
+  let [b,s]=etatBody(DEF_PL);pdfTable(doc,head,b,s);
+  {/* ratios du compte de résultat, sous le P&L */
+    const rdef=[["Marge brute / CA","MARGE_BRUTE","CA",1],["Marge d'EBITDA","EBITDA","CA",1],
+      ["Marge d'exploitation (EBIT)","EBIT","CA",1],["Marge nette","RESULTAT_NET","CA",1],
+      ["Frais généraux (overhead) / CA","FRAIS_GENERAUX","CA",-1],["Charges de personnel / CA","CHARGES_PERSONNEL","CA",-1],
+      ["Taux d'impôt effectif","IS","RESULTAT_AVANT_IMPOT",-1]];
+    const bR=[["Ratios du compte de résultat",...fys.map(()=>""),...deltas.map(()=>""),...cagrCol.map(()=>"")]],sR=["sec"];
+    rdef.forEach(([lib,num,den,sg])=>{
+      const m=A.map(a=>v[den][a]?sg*v[num][a]/v[den][a]*100:null);
+      const cells=m.map(x=>x==null?"-":(Math.round(x*10)/10).toString().replace(".",",")+" %");
+      const dl=A.slice(1).map((a,i)=>{const d=(m[i]!=null&&m[i+1]!=null)?Math.round((m[i+1]-m[i])*100):null;return d==null?"-":(d>0?"+":"")+d+" pb";});
+      bR.push([lib,...cells,...dl,...cagrCol.map(()=>"")]);sR.push("pct");
+    });
+    pdfTable(doc,head,bR,sR,doc.lastAutoTable.finalY+6);
+  }
+  pdfPied(doc,++page);
   /* ---- Bilan ---- */
   doc.addPage("a4","landscape");
   pdfEntete(doc,"Bilan — présentation actif net — "+u.lib);
@@ -3692,8 +3727,7 @@ function shell(){
     <div class="brandsub">Advisory — Due diligence · BP · Valorisation</div></div>
     <div class="nav">${items}</div>
     ${(LIC_ETAT&&(LIC_ETAT.produit==="tous"||LIC_ETAT.mode==="proprietaire"))?`
-    <div class="item bascule" onclick="window.open(URL_SYSCO,'_blank')" title="Votre licence couvre les deux applications">
-      ${icone("M8 7h12m0 0l-4-4m4 4l-4 4M16 17H4m0 0l4 4m-4-4l4-4")}Liasse fiscale (SYSCO) ↗</div>`:""}
+    <button class="side-sysco" onclick="window.open(URL_SYSCO,'_blank')" title="Ouvrir l'app liasse fiscale (SYSCO) — couverte par votre licence">↗ Liasse fiscale (SYSCO)</button>`:""}
     <div class="sfoot">Les données restent sur cet ordinateur.<br>Findalyx — Dakar</div>
     <div class="lic-foot" onclick="licChanger()" title="Cliquer pour changer de code">
       ${LIC_ETAT?("Licence : "+esc(LIC_ETAT.customer||"active")+(LIC_ETAT.exp?" · expire le "+esc(LIC_ETAT.exp):" · propriétaire")):"Licence non vérifiée"}</div>
@@ -3702,7 +3736,7 @@ function shell(){
     <div class="top">
       <div><div class="name">${DOSSIER?esc(DOSSIER.societe):"Aucun dossier ouvert"}</div>
       <div class="sub">${DOSSIER&&DOSSIER.balances.length?DOSSIER.balances.map(b=>"FY"+b.annee).join(" · ")+" — montants en "+uni().lib:"créez ou ouvrez un dossier"}</div></div>
-      <div class="right">${DOSSIER?selecteurUnite():""}${selecteurSocietes()}${DOSSIER?`<span class="chip ${chipMapping().cls}">${chipMapping().txt}</span>`:""}</div>
+      <div class="right">${DOSSIER?selecteurUnite():""}${selecteurSocietes()}${(()=>{const c=chipMapping();return c?`<span class="chip ${c.cls}">${c.txt}</span>`:"";})()}${avatarMenu()}</div>
     </div>
     <div class="view" id="vue"></div>
   </div><div id="modal"></div>`;
@@ -3725,9 +3759,52 @@ function selecteurSocietes(){
     title="Changer de société">${placeholder}${opts}</select>`;
 }
 function chipMapping(){
-  if(!DOSSIER||!DOSSIER.tbagr) return {cls:"muted",txt:"—"};
+  if(!DOSSIER||!DOSSIER.tbagr) return null;
   const nm=DOSSIER.tbagr.lignes.filter(l=>l.mapping==="NON_MAPPE").length;
-  return nm? {cls:"bad",txt:nm+" compte(s) à mapper"} : {cls:"ok",txt:"Mapping 100 %"};
+  return nm? {cls:"bad",txt:nm+" compte(s) à mapper"} : null;   /* rien quand tout est mappé */
+}
+/* jours restants avant expiration de la licence */
+function licJoursRestants(exp){
+  if(!exp) return null;
+  const d=Math.ceil((new Date(exp+"T00:00:00")-new Date())/86400000);
+  return isFinite(d)?d:null;
+}
+/* bloc d'infos licence — partagé par le profil (avatar) et les Paramètres */
+function infosLicenceHTML(){
+  const L=LIC_ETAT;
+  if(!L) return '<div class="mut">Licence non vérifiée.</div>';
+  const modeLib={proprietaire:"Propriétaire",secours:"Hors ligne (secours)"}[L.mode]||"En ligne";
+  const jr=licJoursRestants(L.exp), used=chargerDossiers().length, max=L.maxSoc||0;
+  const r=(k,v,cls)=>`<div class="lic-row"><span class="lic-k">${k}</span><span class="lic-v ${cls||""}">${v}</span></div>`;
+  return `<div class="lic-info">
+    ${r("Titulaire de la licence",esc(L.customer||"—"))}
+    ${r("Statut","Actif","ok")}
+    ${r("Vérification",modeLib,"ok")}
+    ${L.exp?r("Expire le",esc(L.exp)):""}
+    ${jr!==null?r("Jours restants",jr+" jour"+(jr>1?"s":""),jr<30?"warn":""):""}
+    ${max?r("Sociétés analysées",used+" / "+max):""}</div>`;
+}
+function initialesLic(){
+  const n=(LIC_ETAT&&LIC_ETAT.customer||"").trim();
+  if(!n) return "FX";
+  const p=n.split(/\s+/);
+  return ((p[0][0]||"")+(p.length>1?p[p.length-1][0]:(p[0][1]||""))).toUpperCase();
+}
+function avatarMenu(){
+  return `<details class="profil"><summary class="avatar" title="Profil &amp; licence">${initialesLic()}</summary>
+    <div class="profil-menu">
+      <div class="profil-h">${esc((LIC_ETAT&&LIC_ETAT.customer)||"Utilisateur")}</div>
+      ${infosLicenceHTML()}
+      <div class="profil-act">
+        <button class="btn sm" onclick="aller('params')">Paramètres &amp; licence</button>
+        <button class="btn sm danger" onclick="deconnexion()">Déconnexion</button>
+      </div>
+    </div></details>`;
+}
+function deconnexion(){
+  if(!confirm("Se déconnecter ? La licence sera oubliée sur cet appareil (vos dossiers restent enregistrés)."))return;
+  try{localStorage.removeItem("fxc_licence");}catch(e){}
+  location.reload();
 }
 function aller(v){
   if(v!=="accueil"&&!DOSSIER){toast("Ouvrez d'abord un dossier");return;}
@@ -5181,18 +5258,19 @@ function vueBPPl(P){
     {lib:"Coûts directs",hist:v.COUTS_DIRECTS[a1],proj:a=>P.pl.COUTS_DIRECTS[a]},
     {lib:"Marge brute",st:"total",hist:v.MARGE_BRUTE[a1],proj:a=>P.pl.MARGE_BRUTE[a]},
     {lib:"% Marge brute / CA",type:"pct",hist:v.CA[a1]?v.MARGE_BRUTE[a1]/v.CA[a1]:null,proj:a=>P.pl.CA[a]?P.pl.MARGE_BRUTE[a]/P.pl.CA[a]:null},
-    {lib:"Subventions et autres produits",hist:v.AUTRES_PROD[a1],proj:a=>P.pl.AUTRES_PROD[a]},
-    {sec:"Frais généraux — détail"},
+    {lib:"Autres produits",hist:v.AUTRES_PROD[a1],proj:a=>P.pl.AUTRES_PROD[a]},
+    {sec:"Frais généraux"},
     ...Object.entries(P.pl.OPEX_DETAIL).map(([c,o])=>({lib:o.lib,hist:v[c]?v[c][a1]:0,proj:a=>o.vals[a]})),
-    {lib:"Total frais généraux",st:"total",hist:v.OPEX[a1],proj:a=>P.pl.OPEX_TOTAL[a]},
-    {sec:""},
     {lib:"Charges de personnel",hist:v.CHARGES_PERSONNEL[a1],proj:a=>P.pl.CHARGES_PERSONNEL[a]},
+    {lib:"Total frais généraux",st:"total",hist:v.FRAIS_GENERAUX[a1],proj:a=>P.pl.OPEX_TOTAL[a]+P.pl.CHARGES_PERSONNEL[a]},
+    {sec:""},
     {lib:"EBITDA",st:"total",hist:v.EBITDA[a1],proj:a=>P.pl.EBITDA[a]},
     {lib:"% EBITDA / CA",type:"pct",hist:v.CA[a1]?v.EBITDA[a1]/v.CA[a1]:null,proj:a=>P.pl.CA[a]?P.pl.EBITDA[a]/P.pl.CA[a]:null},
     {lib:"Dotations aux amortissements",hist:v.DA[a1],proj:a=>P.pl.DA[a]},
     {lib:"EBIT",st:"total",hist:v.EBIT[a1],proj:a=>P.pl.EBIT[a]},
     {lib:"Produits financiers",hist:v.RESULTAT_FIN[a1]>0?v.RESULTAT_FIN[a1]:0,proj:a=>P.pl.PRODUITS_FIN[a]},
     {lib:"Frais financiers",hist:v.RESULTAT_FIN[a1]<0?v.RESULTAT_FIN[a1]:0,proj:a=>P.pl.FRAIS_FIN[a]},
+    {lib:"Résultat financier",st:"total",hist:v.RESULTAT_FIN[a1],proj:a=>(P.pl.PRODUITS_FIN[a]||0)+(P.pl.FRAIS_FIN[a]||0)},
     {lib:"Résultat avant impôt",st:"total",hist:v.EBIT[a1]+v.RESULTAT_FIN[a1],proj:a=>P.pl.EBT[a]},
     {lib:"Impôt sur les sociétés",hist:v.IMPOTS[a1],proj:a=>P.pl.IS[a]},
     {lib:"Résultat net",st:"total",hist:v.RESULTAT_NET[a1],proj:a=>P.pl.RN[a]}];
@@ -5610,6 +5688,9 @@ function vueParams(){
     <div class="hyp-l"><span>Secteur de comparaison des ratios et de la notation</span>
       <select class="sel" style="width:46%" onchange="changerSecteur(this.value)">${SECTEURS.map(s=>`<option${s===(DOSSIER.secteur||"Général")?" selected":""}>${s}</option>`).join("")}</select></div>
     <div class="mut" style="margin-top:8px">Détermine la comparaison sectorielle des ratios et le calcul de la Notation. Le benchmark provient de la base en ligne — aucune borne n'est affichée tant que le secteur n'a pas assez de sociétés.</div></div>`;
+  const licenceCard=`<div class="card"><div class="sec-titre" style="margin-top:0">Abonnement Findalyx</div>
+    ${infosLicenceHTML()}
+    <div style="margin-top:12px"><button class="btn sm" onclick="licChanger()">Renouveler / saisir une nouvelle clé</button></div></div>`;
   return `<h1>Paramètres — fiche société</h1>
   <div class="mut" style="margin-bottom:12px">Ces informations alimentent automatiquement les rapports
   (présentation de la société, contexte de mission) et les pages de garde. Tout est facultatif — les
@@ -5617,7 +5698,8 @@ function vueParams(){
   ${secteurCtl}
   <div class="deux">${groupes[0]}${groupes[2]}</div>
   ${groupes[1]}
-  <div class="deux">${groupes[3]}${logoCtl}</div>`;
+  <div class="deux">${groupes[3]}${logoCtl}</div>
+  ${licenceCard}`;
 }
 /* ============================================================
    Modèle financier Excel à FORMULES VIVANTES

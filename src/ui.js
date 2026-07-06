@@ -61,8 +61,7 @@ function shell(){
     <div class="brandsub">Advisory — Due diligence · BP · Valorisation</div></div>
     <div class="nav">${items}</div>
     ${(LIC_ETAT&&(LIC_ETAT.produit==="tous"||LIC_ETAT.mode==="proprietaire"))?`
-    <div class="item bascule" onclick="window.open(URL_SYSCO,'_blank')" title="Votre licence couvre les deux applications">
-      ${icone("M8 7h12m0 0l-4-4m4 4l-4 4M16 17H4m0 0l4 4m-4-4l4-4")}Liasse fiscale (SYSCO) ↗</div>`:""}
+    <button class="side-sysco" onclick="window.open(URL_SYSCO,'_blank')" title="Ouvrir l'app liasse fiscale (SYSCO) — couverte par votre licence">↗ Liasse fiscale (SYSCO)</button>`:""}
     <div class="sfoot">Les données restent sur cet ordinateur.<br>Findalyx — Dakar</div>
     <div class="lic-foot" onclick="licChanger()" title="Cliquer pour changer de code">
       ${LIC_ETAT?("Licence : "+esc(LIC_ETAT.customer||"active")+(LIC_ETAT.exp?" · expire le "+esc(LIC_ETAT.exp):" · propriétaire")):"Licence non vérifiée"}</div>
@@ -71,7 +70,7 @@ function shell(){
     <div class="top">
       <div><div class="name">${DOSSIER?esc(DOSSIER.societe):"Aucun dossier ouvert"}</div>
       <div class="sub">${DOSSIER&&DOSSIER.balances.length?DOSSIER.balances.map(b=>"FY"+b.annee).join(" · ")+" — montants en "+uni().lib:"créez ou ouvrez un dossier"}</div></div>
-      <div class="right">${DOSSIER?selecteurUnite():""}${selecteurSocietes()}${DOSSIER?`<span class="chip ${chipMapping().cls}">${chipMapping().txt}</span>`:""}</div>
+      <div class="right">${DOSSIER?selecteurUnite():""}${selecteurSocietes()}${(()=>{const c=chipMapping();return c?`<span class="chip ${c.cls}">${c.txt}</span>`:"";})()}${avatarMenu()}</div>
     </div>
     <div class="view" id="vue"></div>
   </div><div id="modal"></div>`;
@@ -94,9 +93,52 @@ function selecteurSocietes(){
     title="Changer de société">${placeholder}${opts}</select>`;
 }
 function chipMapping(){
-  if(!DOSSIER||!DOSSIER.tbagr) return {cls:"muted",txt:"—"};
+  if(!DOSSIER||!DOSSIER.tbagr) return null;
   const nm=DOSSIER.tbagr.lignes.filter(l=>l.mapping==="NON_MAPPE").length;
-  return nm? {cls:"bad",txt:nm+" compte(s) à mapper"} : {cls:"ok",txt:"Mapping 100 %"};
+  return nm? {cls:"bad",txt:nm+" compte(s) à mapper"} : null;   /* rien quand tout est mappé */
+}
+/* jours restants avant expiration de la licence */
+function licJoursRestants(exp){
+  if(!exp) return null;
+  const d=Math.ceil((new Date(exp+"T00:00:00")-new Date())/86400000);
+  return isFinite(d)?d:null;
+}
+/* bloc d'infos licence — partagé par le profil (avatar) et les Paramètres */
+function infosLicenceHTML(){
+  const L=LIC_ETAT;
+  if(!L) return '<div class="mut">Licence non vérifiée.</div>';
+  const modeLib={proprietaire:"Propriétaire",secours:"Hors ligne (secours)"}[L.mode]||"En ligne";
+  const jr=licJoursRestants(L.exp), used=chargerDossiers().length, max=L.maxSoc||0;
+  const r=(k,v,cls)=>`<div class="lic-row"><span class="lic-k">${k}</span><span class="lic-v ${cls||""}">${v}</span></div>`;
+  return `<div class="lic-info">
+    ${r("Titulaire de la licence",esc(L.customer||"—"))}
+    ${r("Statut","Actif","ok")}
+    ${r("Vérification",modeLib,"ok")}
+    ${L.exp?r("Expire le",esc(L.exp)):""}
+    ${jr!==null?r("Jours restants",jr+" jour"+(jr>1?"s":""),jr<30?"warn":""):""}
+    ${max?r("Sociétés analysées",used+" / "+max):""}</div>`;
+}
+function initialesLic(){
+  const n=(LIC_ETAT&&LIC_ETAT.customer||"").trim();
+  if(!n) return "FX";
+  const p=n.split(/\s+/);
+  return ((p[0][0]||"")+(p.length>1?p[p.length-1][0]:(p[0][1]||""))).toUpperCase();
+}
+function avatarMenu(){
+  return `<details class="profil"><summary class="avatar" title="Profil &amp; licence">${initialesLic()}</summary>
+    <div class="profil-menu">
+      <div class="profil-h">${esc((LIC_ETAT&&LIC_ETAT.customer)||"Utilisateur")}</div>
+      ${infosLicenceHTML()}
+      <div class="profil-act">
+        <button class="btn sm" onclick="aller('params')">Paramètres &amp; licence</button>
+        <button class="btn sm danger" onclick="deconnexion()">Déconnexion</button>
+      </div>
+    </div></details>`;
+}
+function deconnexion(){
+  if(!confirm("Se déconnecter ? La licence sera oubliée sur cet appareil (vos dossiers restent enregistrés)."))return;
+  try{localStorage.removeItem("fxc_licence");}catch(e){}
+  location.reload();
 }
 function aller(v){
   if(v!=="accueil"&&!DOSSIER){toast("Ouvrez d'abord un dossier");return;}
