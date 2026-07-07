@@ -173,9 +173,13 @@ function nettoyer(t){
 }
 function norm(s){return nettoyer(s).toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"");}
 function estCompte(v){const s=nettoyer(v).replace(/\.0$/,"");return /^\d{2,10}$/.test(s);}
+/* retire une mention de devise en tête/fin (« 1 000 000 FCFA » → « 1 000 000 ») */
+function sansDevise(v){return String(v)
+  .replace(/^\s*(fcfa|f\.?\s?cfa|xof|xaf|cfa|€|\$)\s*/i,"")
+  .replace(/\s*(fcfa|f\.?\s?cfa|francs?|frs?|xof|xaf|cfa|euros?|eur|dollars?|usd|€|\$)\s*$/i,"");}
 function estNombre(v){
   if(typeof v==="number") return isFinite(v);
-  const s=nettoyer(v).replace(/[   ]/g,"").replace(",",".").replace(/^\((.*)\)$/,"$1");
+  const s=sansDevise(nettoyer(v)).replace(/[   ]/g,"").replace(",",".").replace(/^\((.*)\)$/,"$1");
   return s!=="" && !isNaN(parseFloat(s)) && isFinite(+s);
 }
 /**
@@ -186,7 +190,7 @@ function estNombre(v){
 function toNum(v){
   if(v===null||v===undefined||v==="") return 0;
   if(typeof v==="number") return isFinite(v)?v:0;
-  let s=String(v).trim().replace(/[   ]/g,"");
+  let s=sansDevise(String(v)).trim().replace(/[   ]/g,"");
   if(!s||s==="-"||s==="--") return 0;
   const neg=s.startsWith("(")&&s.endsWith(")");
   s=s.replace(/^\(|\)$/g,"").replace(",",".");
@@ -251,7 +255,7 @@ function lireBalance(matrice){
       if(estNombre(v)) cntNum[c]++; else cntTxt[c]++;
     }
   }
-  if(!vues) throw new Error("Aucune ligne de compte détectée");
+  if(!vues) throw new Error("Aucun numéro de compte reconnu — la colonne Compte doit contenir des nombres de 2 à 10 chiffres (ex. 601100). Téléchargez le modèle pour le format attendu.");
   const seuil=Math.max(1,Math.floor(0.05*vues));
   const colsTxt=[],colsNum=[];
   for(let c=0;c<nc;c++){
@@ -266,7 +270,7 @@ function lireBalance(matrice){
   let colNet=null;
   if(!paires.length){
     if(colsNum.length===1) colNet=colsNum[0];   /* balance à solde net signé (une seule colonne de montants) */
-    else throw new Error("Aucune paire Débit/Crédit détectée");
+    else throw new Error("Colonnes de montants non reconnues — il faut une colonne Débit et une colonne Crédit (ou une seule colonne Solde signé), avec des montants numériques (sans texte comme « FCFA »). Téléchargez le modèle pour le format attendu.");
   }
   if(paires.length>3) paires=paires.slice(-3);
   const modeles={1:["sf"],2:["mvt","sf"],3:["si","mvt","sf"]};

@@ -440,6 +440,7 @@ function wizEtapeBalances(){
      <select id="fFeuille" class="sel" style="min-width:160px"><option value="">Feuille…</option></select>
      <button class="btn primary" onclick="importerBalance()">Importer</button>
    </div>
+   ${blocFormatBalance()}
    <table class="tb" style="margin-top:12px"><tr><th>Exercice</th><th>Fichier</th><th>Contrôle</th><th></th></tr>
    ${bal||'<tr><td colspan="4" class="mut">Aucune balance importée pour l’instant.</td></tr>'}</table>`;
 }
@@ -519,6 +520,7 @@ function vueImport(){
       <select id="fFeuille" class="sel" style="min-width:160px"><option value="">Feuille…</option></select>
       <button class="btn primary" onclick="importerBalance()">Importer</button>
     </div>
+    ${blocFormatBalance()}
   </div>
   <div class="card"><b>Balances du dossier</b>
   <table class="tb"><tr><th>Exercice</th><th>Fichier</th><th>Feuille</th><th>Comptes</th><th>Contrôle</th><th></th></tr>
@@ -567,6 +569,84 @@ function retirerBalance(annee){
   if(WIZ&&VUE==="wizard"){WIZ.balances=WIZ.balances.filter(b=>b.annee!==annee);shell();return;}
   DOSSIER.balances=DOSSIER.balances.filter(b=>b.annee!==annee);
   recalculer();sauverDossier();shell();
+}
+/* Aide « format attendu » + bouton de modèle, partagé par les 2 écrans d'import. */
+function blocFormatBalance(){
+  return `<div class="row" style="margin-top:8px">
+    <button class="btn" onclick="telechargerModeleBalance()">⬇ Télécharger un modèle de balance</button>
+  </div>
+  <details style="margin-top:8px">
+    <summary class="mut" style="cursor:pointer">Format attendu &amp; colonnes nécessaires</summary>
+    <div class="mut" style="margin-top:8px;line-height:1.6">
+      <b>Colonnes minimales</b> (les intitulés sont reconnus automatiquement, l'ordre ci-dessous est recommandé) :<br>
+      • <b>Compte</b> — numéro à <b>2 à 10 chiffres</b> (ex. 601100), sans lettres, points ni tirets<br>
+      • <b>Libellé</b> — intitulé du compte<br>
+      • <b>Débit</b> et <b>Crédit</b> — le solde, en <b>nombres simples</b> (pas de « FCFA » ni symbole ; un compte a un solde au débit <i>ou</i> au crédit)<br>
+      <b>Variantes acceptées :</b> une seule colonne <b>Solde</b> signé (crédit en négatif) ; ou balance détaillée à <b>8 colonnes</b> (SI / Mouvement / Solde, chacun en débit &amp; crédit).<br>
+      Les sous-totaux (libellés « TOTAL… ») et comptes-chapeaux sont exclus automatiquement. Le total des débits doit égaler le total des crédits.
+    </div>
+  </details>`;
+}
+/* Génère un classeur modèle de balance (feuille à remplir + format détaillé + instructions). */
+async function telechargerModeleBalance(){
+  if(typeof ExcelJS==="undefined"){toast("Bibliothèque Excel non chargée");return;}
+  const wb=new ExcelJS.Workbook(), NF='#,##0;(#,##0);"-"', navy="FF172554";
+  const ent=(row,n)=>row.eachCell((c,col)=>{c.font={bold:true,color:{argb:"FFFFFFFF"}};
+    c.fill={type:"pattern",pattern:"solid",fgColor:{argb:navy}};if(col>n)c.alignment={horizontal:"right"};});
+  /* comptes d'exemple SYSCOHADA — équilibrés (total débit = total crédit) */
+  const D=[
+    ["101000","Capital social",0,50000000],["106000","Réserves",0,10000000],
+    ["211000","Frais de développement",3000000,0],["241000","Matériel et outillage",40000000,0],
+    ["284100","Amortissements du matériel",0,12000000],["311000","Stocks de marchandises",15000000,0],
+    ["401000","Fournisseurs",0,18000000],["411000","Clients",28000000,0],
+    ["521000","Banques",9000000,0],["571000","Caisse",1000000,0],
+    ["601000","Achats de marchandises",73000000,0],["605000","Autres achats",8000000,0],
+    ["622000","Locations",6000000,0],["631000","Frais bancaires",1500000,0],
+    ["641000","Impôts et taxes",2500000,0],["661000","Charges de personnel",22000000,0],
+    ["671000","Charges financières",3000000,0],["681000","Dotations aux amortissements",6000000,0],
+    ["701000","Ventes de marchandises",0,120000000],["706000","Prestations de services",0,8000000],
+  ];
+  /* Feuille 1 — Balance (simple, à remplir) */
+  const ws=wb.addWorksheet("Balance"); ws.views=[{state:"frozen",ySplit:1}];
+  ent(ws.addRow(["Compte","Libellé","Débit","Crédit"]),2);
+  D.forEach(r=>{const row=ws.addRow(r);row.getCell(3).numFmt=NF;row.getCell(4).numFmt=NF;});
+  const tot=ws.addRow(["","TOTAL (doit être équilibré)",{formula:`SUM(C2:C${D.length+1})`},{formula:`SUM(D2:D${D.length+1})`}]);
+  tot.font={bold:true};tot.getCell(3).numFmt=NF;tot.getCell(4).numFmt=NF;
+  ws.columns=[{width:12},{width:40},{width:18},{width:18}];
+  /* Feuille 2 — Format détaillé (8 colonnes) */
+  const ws2=wb.addWorksheet("Format détaillé"); ws2.views=[{state:"frozen",ySplit:1}];
+  ent(ws2.addRow(["Compte","Libellé","SI débit","SI crédit","Mouvement débit","Mouvement crédit","Solde débit","Solde crédit"]),2);
+  D.forEach(r=>{const row=ws2.addRow([r[0],r[1],0,0,r[2],r[3],r[2],r[3]]);for(let c=3;c<=8;c++)row.getCell(c).numFmt=NF;});
+  ws2.columns=[{width:12},{width:40},...Array(6).fill({width:15})];
+  /* Feuille 3 — Instructions */
+  const wi=wb.addWorksheet("Instructions"); wi.views=[{showGridLines:false}];
+  const H=(rn,t,sz,co,gr)=>{const c=wi.getCell(rn,2);c.value=t;c.font={name:"Arial",size:sz,bold:!!gr,color:{argb:co}};};
+  H(2,"Modèle de balance générale — Findalyx Advisory",16,navy,true);
+  ["",
+   "COLONNES NÉCESSAIRES (feuille « Balance ») :",
+   "• Compte — numéro de compte : 2 à 10 CHIFFRES uniquement (ex. 601100). Pas de lettres, points ni tirets.",
+   "• Libellé — intitulé du compte (texte).",
+   "• Débit — solde débiteur, en nombre simple (pas de « FCFA » ni symbole).",
+   "• Crédit — solde créditeur. Un compte a un solde au débit OU au crédit.",
+   "",
+   "VARIANTES ACCEPTÉES :",
+   "• Solde signé : une seule colonne « Solde » (débit positif, crédit négatif).",
+   "• Balance détaillée : 8 colonnes (feuille « Format détaillé ») — SI / Mouvement / Solde, en débit et crédit.",
+   "",
+   "RÈGLES :",
+   "• Un fichier (ou une feuille) = un exercice.",
+   "• Les intitulés de colonnes sont détectés automatiquement ; l'ordre ci-dessus est recommandé.",
+   "• Les sous-totaux (libellés « TOTAL… ») et comptes-chapeaux sont exclus automatiquement.",
+   "• Le total des débits doit égaler le total des crédits (contrôle affiché après l'import).",
+   "",
+   "→ Remplacez les lignes d'exemple de la feuille « Balance » par vos comptes, puis importez le fichier dans Findalyx Advisory.",
+  ].forEach((t,i)=>{const sect=/:$/.test(t);H(4+i,t,11,sect?navy:"FF404040",sect);});
+  wi.columns=[{width:3},{width:120}];
+  const buf=await wb.xlsx.writeBuffer();
+  const blob=new Blob([buf],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+  const a=document.createElement("a");a.href=URL.createObjectURL(blob);
+  a.download="Modele_balance_Findalyx.xlsx";a.click();
+  toast("Modèle de balance téléchargé");
 }
 
 /* --- mapping --- */
