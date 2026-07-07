@@ -2456,6 +2456,24 @@ function dbEntete(row,texteCols){
   row.eachCell((c,col)=>{c.font={bold:true,color:{argb:"FFFFFFFF"}};
     c.fill={type:"pattern",pattern:"solid",fgColor:{argb:"FF172554"}};
     if(col>texteCols)c.alignment={horizontal:"right"};});}
+/* Bloc de ratios sous un état (Bilan / TFT), en formules — mêmes ratios que l'app.
+   items:[{lab,unit:"%"|"x"|"j",f:(colLettre)=>formuleBrute}] ; show:[{col,cell}] ; deltas:[{cell,c1,c2}]. */
+function dbBlocRatios(ws,titre,items,show,deltas){
+  ws.addRow([]);
+  const rh=ws.addRow([null,titre]);
+  rh.getCell(2).font={bold:true,color:{argb:"FF172554"}};
+  const fmtV=u=>u==="%"?'0.0%;(0.0%);"-"':u==="j"?'#,##0" j";(#,##0)" j";"-"':'#,##0.00" ×";(#,##0.00)" ×";"-"';
+  const fmtD=u=>u==="%"?'+#,##0" pb";-#,##0" pb";0" pb"':u==="j"?'+#,##0" j";-#,##0" j";0" j"':'+0.00" ×";-0.00" ×";0" ×"';
+  items.forEach(it=>{
+    const r=ws.addRow([null,it.lab]);
+    r.font={italic:true,color:{argb:"FF808080"}};
+    const num=r.number, fv=fmtV(it.unit), fd=fmtD(it.unit);
+    show.forEach(s=>{const c=r.getCell(s.cell);c.value={formula:it.f(s.col)};c.numFmt=fv;});
+    deltas.forEach(d=>{const cd=r.getCell(d.cell);
+      const e=it.unit==="%"?`(${d.c2}${num}-${d.c1}${num})*10000`:`(${d.c2}${num}-${d.c1}${num})`;
+      cd.value={formula:`IFERROR(${e},"")`};cd.numFmt=fd;cd.alignment={horizontal:"right"};});
+  });
+}
 
 async function genererDatabook(){
   if(!ETATS||!DOSSIER.tbagr){toast("Importez d'abord des balances");return;}
@@ -2662,6 +2680,45 @@ async function genererDatabook(){
     rc.getCell(3+j).numFmt=DB_NUMFMT;
   });
 
+  /* ---- Ratios de structure, rentabilité et liquidité (bas du bilan) ---- */
+  {
+    const c0=67;                                 /* colonne C = 1re année */
+    const PL=(code,c)=>`${q(ongPL)}!${c}${localPL[code]}`;
+    const BS=(code,c)=>`${c}${localBS[code]}`;   /* même feuille : pas de préfixe */
+    const ca=c=>PL("CA",c), ebitda=c=>PL("EBITDA",c), ebit=c=>PL("EBIT",c), rn=c=>PL("RESULTAT_NET",c);
+    const cp=c=>BS("CAPITAUX_PROPRES",c);
+    const dettesFin=c=>`(-${BS("DETTES_FINANCIERES",c)})`;
+    const detteNette=c=>`(-${BS("DETTES_FINANCIERES",c)}-${BS("TRESORERIE_NETTE",c)})`;
+    const fraisFin=c=>`(-${PL("FRAIS_FIN",c)})`;
+    const stocks=c=>BS("STOCKS",c), clients=c=>BS("CLIENTS",c), tresoA=c=>BS("TRESO_ACTIF",c);
+    const fournisseurs=c=>`(-${BS("FOURNISSEURS",c)})`;
+    const achats=c=>`(-${PL("COUTS_DIRECTS",c)})`;
+    const opex=c=>`(${PL("CHARGES_PERSONNEL",c)}-${PL("FRAIS_GENERAUX",c)})`;   /* = -OPEX (hors personnel) */
+    const bfr=c=>BS("BFR_TOTAL",c);
+    const actifCirc=c=>`(${BS("STOCKS",c)}+${BS("CLIENTS",c)}+${BS("AUTRES_CREANCES",c)}+${BS("AVANCES_FRS",c)}+${BS("HAO_ACTIF",c)}+${BS("TRESO_ACTIF",c)})`;
+    const passifCirc=c=>`(-(${BS("FOURNISSEURS",c)}+${BS("CLIENTS_AVANCES",c)}+${BS("DETTES_SOCIALES",c)}+${BS("DETTES_FISCALES",c)}+${BS("AUTRES_DETTES",c)}+${BS("HAO_PASSIF",c)}+${BS("TRESO_PASSIF",c)}))`;
+    const totalActif=c=>`(${BS("ACTIFS_IMMOBILISES",c)}+${actifCirc(c)})`;
+    const items=[
+      {lab:"ROE (rentabilité des capitaux propres)",unit:"%",f:c=>`IF(${cp(c)}<=0,"",${rn(c)}/${cp(c)})`},
+      {lab:"ROA (rentabilité de l'actif)",unit:"%",f:c=>`IF(${totalActif(c)}<=0,"",${rn(c)}/${totalActif(c)})`},
+      {lab:"ROCE (rentabilité des capitaux employés)",unit:"%",f:c=>`IF((${cp(c)}+${dettesFin(c)})<=0,"",${ebit(c)}/(${cp(c)}+${dettesFin(c)}))`},
+      {lab:"Liquidité générale",unit:"x",f:c=>`IF(${passifCirc(c)}<=0,"",${actifCirc(c)}/${passifCirc(c)})`},
+      {lab:"Liquidité réduite",unit:"x",f:c=>`IF(${passifCirc(c)}<=0,"",(${actifCirc(c)}-${stocks(c)})/${passifCirc(c)})`},
+      {lab:"Liquidité immédiate",unit:"x",f:c=>`IF(${passifCirc(c)}<=0,"",${tresoA(c)}/${passifCirc(c)})`},
+      {lab:"BFR en jours de CA",unit:"j",f:c=>`IF(${ca(c)}=0,"",${bfr(c)}*360/${ca(c)})`},
+      {lab:"Délai clients (DSO)",unit:"j",f:c=>`IF(${ca(c)}=0,"",${clients(c)}*360/(${ca(c)}*1.18))`},
+      {lab:"Délai fournisseurs (DPO)",unit:"j",f:c=>`IF((${achats(c)}+${opex(c)})<=0,"",${fournisseurs(c)}*360/((${achats(c)}+${opex(c)})*1.18))`},
+      {lab:"Gearing (dette fin. / capitaux propres)",unit:"x",f:c=>`IF(${cp(c)}<=0,"",${dettesFin(c)}/${cp(c)})`},
+      {lab:"Leverage (dette nette / EBITDA)",unit:"x",f:c=>`IF(${ebitda(c)}<=0,"",${detteNette(c)}/${ebitda(c)})`},
+      {lab:"Couverture des intérêts (EBITDA / frais fin.)",unit:"x",f:c=>`IF(${fraisFin(c)}<=0,"",${ebitda(c)}/${fraisFin(c)})`},
+      {lab:"Autonomie financière (CP / total actif)",unit:"%",f:c=>`IF(${totalActif(c)}<=0,"",${cp(c)}/${totalActif(c)})`},
+    ];
+    const nA=A.length;
+    const show=A.map((a,j)=>({col:String.fromCharCode(c0+j),cell:3+j}));
+    const deltas=A.slice(1).map((a,i)=>({cell:3+nA+i,c1:String.fromCharCode(c0+i),c2:String.fromCharCode(c0+i+1)}));
+    dbBlocRatios(wsBS,"Ratios de structure, rentabilité et liquidité",items,show,deltas);
+  }
+
   /* ---- TFT en formules ---- */
   if(A.length>1){
     const ws=wb.addWorksheet(ong("TFT"));
@@ -2699,10 +2756,11 @@ async function genererDatabook(){
       ["Trésorerie de clôture calculée","CLO"],
       ["Trésorerie nette de clôture (BS)",j=>bs("TRESORERIE_NETTE",j)],
       ["Écart de réconciliation (doit être 0)","ECART"]];
-    const idx={};
+    const idx={}; let cafgRow;
     defs.forEach(([lib,f])=>{
       const r=ws.addRow([null,lib]);
       const num=r.number;
+      if(cafgRow==null)cafgRow=num;                 /* 1re ligne = CAFG */
       for(let j=1;j<A.length;j++){
         const cl=String.fromCharCode(66+j);
         let v;
@@ -2728,6 +2786,23 @@ async function genererDatabook(){
           r.getCell(c).fill={type:"pattern",pattern:"solid",fgColor:{argb:"FFF7F9FC"}};
       }
     });
+    /* ---- Ratios de flux et de trésorerie (bas du TFT) ---- */
+    {
+      const CA=c=>`${q(ongPL)}!${c}${localPL["CA"]}`;
+      const EBITDA=c=>`${q(ongPL)}!${c}${localPL["EBITDA"]}`;
+      const DFIN=c=>`${q(ongBS)}!${c}${localBS["DETTES_FINANCIERES"]}`;
+      const cE=cT=>String.fromCharCode(cT.charCodeAt(0)+1);   /* colonne année sur P&L/BS (décalée de 1 vs TFT) */
+      const items=[
+        {lab:"Capacité d'autofinancement (CAFG) / CA",unit:"%",f:c=>`IF(${CA(cE(c))}=0,"",${c}${cafgRow}/${CA(cE(c))})`},
+        {lab:"Conversion en cash (flux d'exploitation / EBITDA)",unit:"%",f:c=>`IF(${EBITDA(cE(c))}=0,"",${c}${idx.OP}/${EBITDA(cE(c))})`},
+        {lab:"Free cash flow / CA (exploitation + investissement)",unit:"%",f:c=>`IF(${CA(cE(c))}=0,"",(${c}${idx.OP}+${c}${idx.INV})/${CA(cE(c))})`},
+        {lab:"Capacité de remboursement (dette financière / CAFG)",unit:"x",f:c=>`IF(${c}${cafgRow}<=0,"",(-${DFIN(cE(c))})/${c}${cafgRow})`},
+        {lab:"Couverture des investissements (flux d'exploitation / investissements)",unit:"x",f:c=>`IF(${c}${idx.INV}=0,"",${c}${idx.OP}/ABS(${c}${idx.INV}))`},
+      ];
+      const show=[]; for(let j=1;j<A.length;j++)show.push({col:String.fromCharCode(66+j),cell:2+j});
+      const deltas=[]; for(let i=1;i<mT;i++)deltas.push({cell:2+mT+i,c1:String.fromCharCode(66+i),c2:String.fromCharCode(67+i)});
+      dbBlocRatios(ws,"Ratios de flux et de trésorerie",items,show,deltas);
+    }
     ws.columns=[{width:3},{width:48},...A.slice(1).map(()=>({width:14})),...A.slice(2).map(()=>({width:9}))];
   }
 
