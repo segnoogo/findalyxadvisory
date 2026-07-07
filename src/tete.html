@@ -266,9 +266,26 @@ font-family:inherit;font-size:11.2px;resize:vertical;background:#fbfcfe}
 .tb td.ref{font-weight:700;color:#172554;width:44px}
 .tb tr.sec td{background:#f7f9fc;color:#172554;font-weight:700;font-size:10.2px}
 .sec-titre{font-size:12.8px;font-weight:700;color:#172554;margin:18px 0 10px}
-.lgn{position:fixed;inset:0;background:linear-gradient(135deg,#0d1a3d,#172554 55%,#1d306b);display:flex;align-items:center;justify-content:center;z-index:200}
-.lgn-carte{background:#fff;border-radius:16px;padding:34px 38px;width:min(430px,92vw);box-shadow:0 30px 80px rgba(4,10,30,.5);text-align:center}
-.lgn-carte h2{color:#172554;margin:0 0 8px}
+.lgn{position:fixed;inset:0;background:linear-gradient(135deg,#eef2f8,#e4eaf4);display:flex;align-items:center;justify-content:center;z-index:200;padding:20px}
+.lgn-carte{background:#fff;border-radius:18px;width:min(880px,96vw);box-shadow:0 30px 80px rgba(4,10,30,.26);overflow:hidden;display:flex;text-align:left}
+.lgn-carte h2{color:#172554;margin:0 0 8px;font-size:19px}
+.lgn-promo{width:45%;flex:none;background:linear-gradient(150deg,#0d1a3d,#172554 55%,#1d306b);color:#fff;padding:40px 34px;display:flex;flex-direction:column}
+.lgn-logo{height:38px;align-self:flex-start;margin-bottom:26px}
+.lgn-promo h3{font-size:20px;line-height:1.32;margin:0 0 10px;color:#fff;font-weight:700}
+.lgn-sub{font-size:12.5px;line-height:1.55;color:#b9c6e4;margin:0 0 22px}
+.lgn-feats{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:13px}
+.lgn-feats li{position:relative;padding-left:24px;font-size:12.3px;line-height:1.45;color:#e7ecf7}
+.lgn-feats li::before{content:"✓";position:absolute;left:0;top:-1px;color:var(--orange);font-weight:800;font-size:13px}
+.lgn-mark{margin-top:auto;padding-top:26px;font-size:10px;letter-spacing:1.5px;color:#8093ba}
+.lgn-form{flex:1;min-width:0;padding:40px;display:flex;flex-direction:column;justify-content:center}
+@media(max-width:720px){
+  .lgn-carte{flex-direction:column;width:min(430px,94vw)}
+  .lgn-promo{width:auto;padding:28px 26px 22px}
+  .lgn-logo{margin-bottom:18px}.lgn-sub{margin-bottom:16px}.lgn-feats{gap:9px}
+  .lgn-feats li:nth-child(n+4){display:none}
+  .lgn-mark{display:none}
+  .lgn-form{padding:26px 26px 30px}
+}
 .lic-foot{font-size:9.0px;color:#8ea0c8;padding:10px 14px;border-top:1px solid rgba(255,255,255,.12);cursor:pointer}
 .lic-foot:hover{color:#fff}
 .item.bascule{margin-top:auto;opacity:.85;border-top:1px solid rgba(255,255,255,.12);border-radius:0;
@@ -324,7 +341,7 @@ display:flex;align-items:center;gap:10px;padding:11px 14px;font-size:11.2px;curs
   .view{padding:12px 8px 36px}
   .fenetre{width:calc(100vw - 74px);padding:12px}
   .kpis{grid-template-columns:1fr 1fr}
-  .lgn-carte{padding:24px 18px}
+  .lgn-form{padding:22px 20px 28px}
 }
 </style></head><body>
 <div id="toast"></div>

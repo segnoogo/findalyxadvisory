@@ -120,18 +120,30 @@ function licEcran(r){
   document.getElementById("app").innerHTML=`
   <div class="lgn">
     <div class="lgn-carte">
-      <img src="${LOGO_FINDALYX_CLAIR}" style="height:42px;margin-bottom:18px">
-      <h2>${T[r.kind]||"Bienvenue"}</h2>
-      <p class="mut">${M[r.kind]||M.activation}</p>
-      <input id="licCode" class="sel" placeholder="Code d'activation Findalyx"
-        style="width:100%;margin:14px 0" value="">
-      <div class="row">
-        <button class="btn primary" style="flex:1" onclick="licActiver()">Activer</button>
-        ${r.kind==="offline"?'<button class="btn" onclick="licDemarrer()">Réessayer</button>':""}
+      <div class="lgn-promo">
+        <img src="${LOGO_FINDALYX_CLAIR}" class="lgn-logo" alt="Findalyx Advisory">
+        <h3>L'analyse financière au standard cabinet.</h3>
+        <p class="lgn-sub">Due diligence, business plans et évaluations d'entreprises — pensés pour l'espace OHADA / SYSCOHADA.</p>
+        <ul class="lgn-feats">
+          <li>Import de balances&nbsp;→ états financiers, ratios et notation automatiques</li>
+          <li>Databook Excel en formules, rapports PowerPoint &amp; PDF prêts à livrer</li>
+          <li>Business plans prévisionnels et valorisation (DCF &amp; multiples)</li>
+          <li>100&nbsp;% hors-ligne — vos données restent sur votre poste</li>
+        </ul>
+        <div class="lgn-mark">FINDALYX · DAKAR</div>
       </div>
-      <p class="mut" style="margin-top:14px;font-size:11.5px">Licence annuelle par appareil.
-      Vos données restent sur cet ordinateur — la vérification ne transmet que le code et
-      l'identifiant de l'appareil.<br>Contact : sawadgsalif@gmail.com — Findalyx, Dakar.</p>
+      <div class="lgn-form">
+        <h2>${T[r.kind]||"Bienvenue"}</h2>
+        <p class="mut">${M[r.kind]||M.activation}</p>
+        <input id="licCode" class="sel" placeholder="Code d'activation Findalyx"
+          style="width:100%;margin:14px 0" value="">
+        <div class="row">
+          <button class="btn primary" style="flex:1" onclick="licActiver()">Activer</button>
+          ${r.kind==="offline"?'<button class="btn" onclick="licDemarrer()">Réessayer</button>':""}
+        </div>
+        <p class="mut" style="margin-top:14px;font-size:11.5px">Licence annuelle par appareil&nbsp;;
+        la vérification ne transmet que le code et l'identifiant de l'appareil.<br>Contact&nbsp;: sawadgsalif@gmail.com</p>
+      </div>
     </div>
   </div>`;
   const e=document.getElementById("licCode");
