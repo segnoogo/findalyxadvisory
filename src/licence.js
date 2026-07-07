@@ -121,6 +121,23 @@ function licEcran(r){
   <div class="lgn">
     <div class="lgn-carte">
       <div class="lgn-promo">
+        <svg class="lgn-bg" viewBox="0 0 400 640" preserveAspectRatio="xMidYMid slice" fill="none" stroke="#fff" aria-hidden="true">
+          <circle cx="332" cy="76" r="46" stroke-width="15" opacity=".5" stroke-dasharray="150 130"/>
+          <circle cx="332" cy="76" r="46" stroke-width="15" stroke="#FA6706" opacity=".85" stroke-dasharray="66 224"/>
+          <rect x="26" y="150" width="150" height="86" rx="10" stroke-width="2" opacity=".45"/>
+          <rect x="42" y="170" width="50" height="10" rx="3" fill="#fff" stroke="none" opacity=".55"/>
+          <polyline points="42,214 64,206 86,212 108,195 130,203 152,186" stroke-width="2.5" opacity=".7"/>
+          <path d="M22,360 70,330 118,344 166,300 214,318 262,286 310,304 358,268 378,278" stroke-width="2.5" opacity=".7"/>
+          <path d="M22,360 70,330 118,344 166,300 214,318 262,286 310,304 358,268 378,278 378,430 22,430Z" fill="#fff" stroke="none" opacity=".07"/>
+          <g stroke-width="9" opacity=".45">
+            <line x1="48" y1="566" x2="48" y2="516"/><line x1="62" y1="566" x2="62" y2="488"/>
+            <line x1="122" y1="566" x2="122" y2="500"/><line x1="136" y1="566" x2="136" y2="470"/>
+            <line x1="196" y1="566" x2="196" y2="524"/><line x1="210" y1="566" x2="210" y2="446"/>
+            <line x1="270" y1="566" x2="270" y2="482"/><line x1="284" y1="566" x2="284" y2="430"/>
+            <line x1="344" y1="566" x2="344" y2="504"/><line x1="358" y1="566" x2="358" y2="420"/>
+          </g>
+          <line x1="22" y1="566" x2="378" y2="566" stroke-width="1.5" opacity=".3"/>
+        </svg>
         <img src="${LOGO_FINDALYX_CLAIR}" class="lgn-logo" alt="Findalyx Advisory">
         <h3>L'analyse financière au standard cabinet.</h3>
         <p class="lgn-sub">Due diligence, business plans et évaluations d'entreprises — pensés pour l'espace OHADA / SYSCOHADA.</p>
@@ -130,7 +147,7 @@ function licEcran(r){
           <li>Business plans prévisionnels et valorisation (DCF &amp; multiples)</li>
           <li>100&nbsp;% hors-ligne — vos données restent sur votre poste</li>
         </ul>
-        <div class="lgn-mark">FINDALYX · DAKAR</div>
+        <div class="lgn-mark">FINDALYX</div>
       </div>
       <div class="lgn-form">
         <h2>${T[r.kind]||"Bienvenue"}</h2>
@@ -142,7 +159,7 @@ function licEcran(r){
           ${r.kind==="offline"?'<button class="btn" onclick="licDemarrer()">Réessayer</button>':""}
         </div>
         <p class="mut" style="margin-top:14px;font-size:11.5px">Licence annuelle par appareil&nbsp;;
-        la vérification ne transmet que le code et l'identifiant de l'appareil.<br>Contact&nbsp;: sawadgsalif@gmail.com</p>
+        la vérification ne transmet que le code et l'identifiant de l'appareil.<br>Contact&nbsp;: support@findalyx.com</p>
       </div>
     </div>
   </div>`;
