@@ -29,11 +29,12 @@ function construireFeuillesBP(wb){
   Object.assign(hy,{dso:hb,dio:hb+1,dpo:hb+2,ac:hb+3,ad:hb+4,dfs:hb+5,capex:hb+6,amort:hb+7,
     tauxEx:hb+8,durEx:hb+9,empr:hb+10,tauxN:hb+11,durN:hb+12,pfin:hb+13,payout:hb+14,
     rf:hb+16,pm:hb+17,beta:hb+18,ppays:hb+19,ptaille:hb+20,pilliq:hb+21,kd:hb+22,wd:hb+23,g:hb+24,mc:hb+25,mt:hb+26,adjE:hb+27,
-    exitM:hb+28,mEbit:hb+29,mCA:hb+30,per:hb+31,pdcf:hb+32,pcomp:hb+33,ptrans:hb+34,pebit:hb+35,pca:hb+36,pper:hb+37,panr:hb+38});
+    exitM:hb+28,mEbit:hb+29,mCA:hb+30,per:hb+31,pdcf:hb+32,pcomp:hb+33,ptrans:hb+34,pebit:hb+35,pca:hb+36,pper:hb+37,panr:hb+38,
+    seuil:hb+39,repdef:hb+40,decouvert:hb+41});
   const rp={CA:5,CD:6,MB:7,PMB:8,AP_:9,SEC:10,opex0:11,TFG:11+m,PERS:12+m,EBITDA:13+m,
-    PEB:14+m,DA:15+m,EBIT:16+m,PF:17+m,FF:18+m,EBT:19+m,IS:20+m,RN:21+m};
-  const rb={BRUT:5,AMC:6,IMN:7,STK:8,CLI:9,ACR:10,FRN:11,ADT:12,BFR:13,CP:14,DIV:15,
-    DET:16,PROV:17,TRES:18,CTRL:19};
+    PEB:14+m,DA:15+m,EBIT:16+m,PF:17+m,FF:18+m,RFIN:19+m,RAO:20+m,HAO:21+m,EBT:22+m,IS:23+m,RN:24+m,REPDEF:25+m};
+  const rb={BRUT:5,AMC:6,IMN:7,STK:8,CLI:9,ACR:10,FRN:11,DFI:12,DSO:13,ADT:14,BFR:15,
+    CAP:16,PRI:17,RAN:18,SUB:19,RNB:20,CP:21,DIV:22,DET:23,PROV:24,TRES:25,TRA:26,LCT:27,CTRL:28};
   const rd={OUV:5,TIR:6,REMB:7,INT:8,CLO:9,EXO:11,EXR:12,EXC:13,EXI:14,
     MR:16,MS:16+N,MI:16+2*N,RN_:16+3*N,SN:17+3*N,IN_:18+3*N};
 
@@ -77,6 +78,9 @@ function construireFeuillesBP(wb){
   hRow(hy.ac,"Autres créances hors exploitation (figées)");hVal(hy.ac,mnt(H.autresCreances_fixe),NF);
   hRow(hy.ad,"Autres dettes hors exploitation (figées)");hVal(hy.ad,mnt(H.autresDettes_fixe),NF);
   hRow(hy.dfs,"Dettes fiscales & sociales (% du CA)");hVal(hy.dfs,H.dettesFiscSoc_pct,PCT2);
+  hRow(hy.seuil,"Seuil de trésorerie minimum");hVal(hy.seuil,mnt(H.seuilCash||0),NF);
+  hRow(hy.decouvert,"Taux du découvert / ligne court terme");hVal(hy.decouvert,H.decouvert_taux||0.12,PCT2);
+  hRow(hy.repdef,"Déficits reportables (stock initial)");hVal(hy.repdef,mnt(H.reportDeficitaire||0),NF);
   hRow(hy.capex,"Investissements (CAPEX) par année");hSer(hy.capex,H.capex,NF,true);
   hRow(hy.amort,"Taux d'amortissement (sur brut)");hVal(hy.amort,H.amort_taux,PCT2);
   hRow(hy.tauxEx,"Taux d'intérêt — dette existante");hVal(hy.tauxEx,H.dette_taux,PCT2);
@@ -142,6 +146,7 @@ function construireFeuillesBP(wb){
   const S=(row)=>`${L(cP(0))}${row}:${L(cP(N-1))}${row}`;
 
   /* ================= P&L prévisionnel ================= */
+  const priorRep=i=>i===0?h1(hy.repdef):`${L(cP(i-1))}${rp.REPDEF}`;   /* stock de déficits à l'ouverture */
   const defsP=[
    {rn:rp.CA,lib:"Chiffre d'affaires",st:1,hist:a=>v.CA[a],
     f:i=>`${Pp(rp.CA,i)}*(1+${hp(hy.caCroiss,i)})`},
@@ -172,14 +177,22 @@ function construireFeuillesBP(wb){
     f:i=>`${P(rp.EBITDA,i)}+${P(rp.DA,i)}`},
    {rn:rp.PF,lib:"Produits financiers",hist:a=>v.RESULTAT_FIN[a]>0?v.RESULTAT_FIN[a]:0,
     f:i=>`${h1(hy.pfin)}`},
-   {rn:rp.FF,lib:"Frais financiers",hist:a=>v.RESULTAT_FIN[a]<0?v.RESULTAT_FIN[a]:0,
-    f:i=>`-${D(rd.INT,i)}`},
-   {rn:rp.EBT,lib:"Résultat avant impôt",st:1,hist:a=>v.EBIT[a]+v.RESULTAT_FIN[a],
-    f:i=>`${P(rp.EBIT,i)}+${P(rp.PF,i)}+${P(rp.FF,i)}`},
-   {rn:rp.IS,lib:"Impôt sur les sociétés",hist:a=>v.IMPOTS[a],
-    f:i=>`IF(${P(rp.EBT,i)}>0,-${h1(hy.is)}*${P(rp.EBT,i)},0)`},
+   {rn:rp.FF,lib:"Frais financiers (dette + découvert)",hist:a=>v.RESULTAT_FIN[a]<0?v.RESULTAT_FIN[a]:0,
+    f:i=>`-${D(rd.INT,i)}+${h1(hy.decouvert)}*${Bp(rb.LCT,i)}`},
+   {rn:rp.RFIN,lib:"Résultat financier",st:1,hist:a=>v.RESULTAT_FIN[a],
+    f:i=>`${P(rp.PF,i)}+${P(rp.FF,i)}`},
+   {rn:rp.RAO,lib:"Résultat des activités ordinaires",st:1,hist:a=>v.EBIT[a]+v.RESULTAT_FIN[a],
+    f:i=>`${P(rp.EBIT,i)}+${P(rp.RFIN,i)}`},
+   {rn:rp.HAO,lib:"Résultat HAO",hist:a=>v.RESULTAT_HAO?v.RESULTAT_HAO[a]:0,
+    f:i=>`0`},
+   {rn:rp.EBT,lib:"Résultat avant impôt",st:1,hist:a=>v.EBIT[a]+v.RESULTAT_FIN[a]+(v.RESULTAT_HAO?v.RESULTAT_HAO[a]:0),
+    f:i=>`${P(rp.RAO,i)}+${P(rp.HAO,i)}`},
+   {rn:rp.IS,lib:"Impôt sur les sociétés (report déficitaire imputé)",hist:a=>v.IMPOTS[a],
+    f:i=>`-${h1(hy.is)}*MAX(0,${P(rp.EBT,i)}-${priorRep(i)})`},
    {rn:rp.RN,lib:"Résultat net",st:1,hist:a=>v.RESULTAT_NET[a],
-    f:i=>`${P(rp.EBT,i)}+${P(rp.IS,i)}`}];
+    f:i=>`${P(rp.EBT,i)}+${P(rp.IS,i)}`},
+   {rn:rp.REPDEF,lib:"Déficits reportables — solde de clôture",pctRow:1,hist:()=>null,
+    f:i=>`${priorRep(i)}-MIN(MAX(0,${P(rp.EBT,i)}),${priorRep(i)})+MAX(0,-${P(rp.EBT,i)})`}];
   /* historique de chaque ligne P&L, branché sur la TBAGR */
   const FHP={};
   FHP[rp.CA]=i=>su(["CA_MARCHANDISES","CA_PRODUITS","CA_SERVICES","CA_ACCESSOIRES",...pca("CA")],i,"-");
@@ -196,13 +209,18 @@ function construireFeuillesBP(wb){
   FHP[rp.EBIT]=i=>`${hc(rp.EBITDA,i)}+${hc(rp.DA,i)}`;
   FHP[rp.PF]=i=>`MAX(0,${su(["REVENUS_FIN","FRAIS_FIN"],i,"-")})`;
   FHP[rp.FF]=i=>`MIN(0,${su(["REVENUS_FIN","FRAIS_FIN"],i,"-")})`;
-  FHP[rp.EBT]=i=>`${hc(rp.EBIT,i)}+${hc(rp.PF,i)}+${hc(rp.FF,i)}`;
+  FHP[rp.RFIN]=i=>`${hc(rp.PF,i)}+${hc(rp.FF,i)}`;
+  FHP[rp.RAO]=i=>`${hc(rp.EBIT,i)}+${hc(rp.RFIN,i)}`;
+  FHP[rp.HAO]=i=>su(["PRODUITS_HAO","CHARGES_HAO",...pca("RESULTAT_HAO")],i,"-");
+  FHP[rp.EBT]=i=>`${hc(rp.RAO,i)}+${hc(rp.HAO,i)}`;
   FHP[rp.IS]=i=>su(["IS","PARTICIPATION",...pca("IMPOTS")],i,"-");
-  FHP[rp.RN]=i=>`${hc(rp.EBT,i)}+${hc(rp.IS,i)}+${su(["PRODUITS_HAO","CHARGES_HAO",...pca("RESULTAT_HAO")],i,"-")}`;
+  FHP[rp.RN]=i=>`${hc(rp.EBT,i)}+${hc(rp.IS,i)}`;
   defsP.forEach(d=>{if(FHP[d.rn])d.fh=FHP[d.rn];});
   feuille(nomP,"Compte de résultat prévisionnel — FORMULES — scénario "+sc.lab+" — "+u.lib,defsP);
 
   /* ================= Bilan prévisionnel ================= */
+  const socfisc=v.DETTES_FISCALES[a1]+v.DETTES_SOCIALES[a1];
+  const fiscFrac=socfisc?v.DETTES_FISCALES[a1]/socfisc:0.5, socFrac=1-fiscFrac;
   const defsB=[
    {rn:rb.BRUT,lib:"Immobilisations brutes",hist:a=>v.ACTIFS_IMMOBILISES[a]-v.AMORT_DEPREC[a],
     f:i=>`${Bp(rb.BRUT,i)}+${hp(hy.capex,i)}`},
@@ -218,11 +236,25 @@ function construireFeuillesBP(wb){
     f:i=>`${h1(hy.ac)}`},
    {rn:rb.FRN,lib:"Dettes fournisseurs",hist:a=>v.FOURNISSEURS[a],
     f:i=>`(${P(rp.CD,i)}+${P(rp.TFG,i)})*${h1(hy.dpo)}/360`},
-   {rn:rb.ADT,lib:"Dettes fiscales, sociales et autres",hist:a=>v.DETTES_SOCIALES[a]+v.DETTES_FISCALES[a]+v.AUTRES_DETTES[a]+v.CLIENTS_AVANCES[a]+v.HAO_PASSIF[a],
-    f:i=>`-${P(rp.CA,i)}*${h1(hy.dfs)}+${h1(hy.ad)}`},
+   {rn:rb.DFI,lib:"Dettes fiscales",hist:a=>v.DETTES_FISCALES[a],
+    f:i=>`-${P(rp.CA,i)}*${h1(hy.dfs)}*${fiscFrac.toFixed(4)}`},
+   {rn:rb.DSO,lib:"Dettes sociales",hist:a=>v.DETTES_SOCIALES[a],
+    f:i=>`-${P(rp.CA,i)}*${h1(hy.dfs)}*${socFrac.toFixed(4)}`},
+   {rn:rb.ADT,lib:"Autres dettes",hist:a=>v.AUTRES_DETTES[a]+v.CLIENTS_AVANCES[a]+v.HAO_PASSIF[a],
+    f:i=>`${h1(hy.ad)}`},
    {rn:rb.BFR,lib:"Besoin en fonds de roulement",st:1,hist:a=>v.BFR[a],
     f:i=>`SUM(${L(cP(i))}${rb.STK}:${L(cP(i))}${rb.ADT})`},
-   {rn:rb.CP,lib:"Capitaux propres",hist:a=>v.CAPITAUX_PROPRES[a],
+   {rn:rb.CAP,lib:"Capital social",hist:a=>-v.CAPITAL[a],
+    f:i=>`${Bp(rb.CAP,i)}`},
+   {rn:rb.PRI,lib:"Primes et réserves",hist:a=>-v.PRIMES_RESERVES[a],
+    f:i=>`${Bp(rb.PRI,i)}`},
+   {rn:rb.RAN,lib:"Report à nouveau et résultats antérieurs",hist:a=>-v.RAN_RESULTATS_ANT[a],
+    f:i=>`${B(rb.CP,i)}-${B(rb.CAP,i)}-${B(rb.PRI,i)}-${B(rb.SUB,i)}-${B(rb.RNB,i)}`},
+   {rn:rb.SUB,lib:"Subventions et provisions réglementées",hist:a=>-v.SUBV_PROV_REGL[a],
+    f:i=>`${Bp(rb.SUB,i)}`},
+   {rn:rb.RNB,lib:"Résultat net de l'exercice",hist:a=>v.RESULTAT_NET[a],
+    f:i=>`${P(rp.RN,i)}`},
+   {rn:rb.CP,lib:"Capitaux propres",st:1,hist:a=>v.CAPITAUX_PROPRES[a],
     f:i=>`${Bp(rb.CP,i)}+${P(rp.RN,i)}-${B(rb.DIV,i)}`},
    {rn:rb.DIV,lib:"Dividendes versés (mémo)",pctRow:1,hist:()=>0,
     f:i=>`MAX(0,${h1(hy.payout)}*${Pp(rp.RN,i)})`},
@@ -232,6 +264,10 @@ function construireFeuillesBP(wb){
     f:i=>`${Bp(rb.PROV,i)}`},
    {rn:rb.TRES,lib:"Trésorerie nette (bouclage)",st:1,hist:a=>v.TRESORERIE_NETTE[a],
     f:i=>`${B(rb.CP,i)}+${B(rb.DET,i)}+${B(rb.PROV,i)}-${B(rb.IMN,i)}-${B(rb.BFR,i)}`},
+   {rn:rb.TRA,lib:"— dont trésorerie active",pctRow:1,hist:a=>v.TRESO_ACTIF[a],
+    f:i=>`${B(rb.TRES,i)}-${B(rb.LCT,i)}`},
+   {rn:rb.LCT,lib:"— dont concours bancaires courants (découvert)",pctRow:1,hist:a=>v.TRESO_PASSIF[a],
+    f:i=>`-MAX(0,${h1(hy.seuil)}-${B(rb.TRES,i)})`},
    {rn:rb.CTRL,lib:"Contrôle : actif - passif (doit être 0)",pctRow:1,hist:()=>0,
     f:i=>`${B(rb.IMN,i)}+${B(rb.BFR,i)}+${B(rb.TRES,i)}-${B(rb.CP,i)}-${B(rb.DET,i)}-${B(rb.PROV,i)}`}];
   /* historique de chaque ligne du bilan, branché sur la TBAGR */
@@ -243,12 +279,21 @@ function construireFeuillesBP(wb){
   FHB[rb.CLI]=i=>su(["CLIENTS"],i,"+");
   FHB[rb.ACR]=i=>su(["AUTRES_CREANCES","AVANCES_FRS","HAO_ACTIF"],i,"+");
   FHB[rb.FRN]=i=>su(["FOURNISSEURS"],i,"+");
-  FHB[rb.ADT]=i=>su(["DETTES_SOCIALES","DETTES_FISCALES","AUTRES_DETTES","CLIENTS_AVANCES","HAO_PASSIF"],i,"+");
+  FHB[rb.DFI]=i=>su(["DETTES_FISCALES"],i,"+");
+  FHB[rb.DSO]=i=>su(["DETTES_SOCIALES"],i,"+");
+  FHB[rb.ADT]=i=>su(["AUTRES_DETTES","CLIENTS_AVANCES","HAO_PASSIF"],i,"+");
   FHB[rb.BFR]=i=>`SUM(${L(cH(i))}${rb.STK}:${L(cH(i))}${rb.ADT})`;
+  FHB[rb.CAP]=i=>su(["CAPITAL"],i,"-");
+  FHB[rb.PRI]=i=>su(["PRIMES_RESERVES"],i,"-");
+  FHB[rb.RAN]=i=>su(["RAN_RESULTATS_ANT",...pca("CAPITAUX_PROPRES")],i,"-");
+  FHB[rb.SUB]=i=>su(["SUBV_PROV_REGL"],i,"-");
+  FHB[rb.RNB]=i=>`${rP}!${L(cH(i))}${rp.RN}`;
+  FHB[rb.CP]=i=>`${hc(rb.CAP,i)}+${hc(rb.PRI,i)}+${hc(rb.RAN,i)}+${hc(rb.SUB,i)}+${hc(rb.RNB,i)}`;
   FHB[rb.DET]=i=>su(["DETTES_FINANCIERES",...pca("FINANCEMENT")],i,"-");
   FHB[rb.PROV]=i=>su(["PROVISIONS_RC"],i,"-");
   FHB[rb.TRES]=i=>su(["TRESO_ACTIF","TRESO_PASSIF",...pca("TRESORERIE_NETTE")],i,"+");
-  FHB[rb.CP]=i=>`${su(["CAPITAL","PRIMES_RESERVES","RAN_RESULTATS_ANT","SUBV_PROV_REGL",...pca("CAPITAUX_PROPRES")],i,"-")}+${rP}!${L(cH(i))}${rp.RN}`;
+  FHB[rb.TRA]=i=>su(["TRESO_ACTIF"],i,"+");
+  FHB[rb.LCT]=i=>su(["TRESO_PASSIF"],i,"+");
   FHB[rb.DIV]=()=>`0`;
   FHB[rb.CTRL]=i=>`${hc(rb.IMN,i)}+${hc(rb.BFR,i)}+${hc(rb.TRES,i)}-${hc(rb.CP,i)}-${hc(rb.DET,i)}-${hc(rb.PROV,i)}`;
   defsB.forEach(d=>{if(FHB[d.rn])d.fh=FHB[d.rn];});
