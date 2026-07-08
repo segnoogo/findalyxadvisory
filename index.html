@@ -2203,7 +2203,7 @@ function hypothesesBP(etats, lignesPerso){
   const opex=[...OPEX_STD,...persoOpex]
     .map(c=>({code:c,lib:libOf(c),hist:v[c]?v[c][a1]:0}));
 
-  const brut=v.ACTIFS_IMMOBILISES[a1]-v.AMORT_DEPREC[a1]>=0?v.ACTIFS_IMMOBILISES[a1]:0;
+  const brut=Math.max(v.ACTIFS_IMMOBILISES[a1]-v.AMORT_DEPREC[a1],0);  /* base BRUTE (net + amort. cumulés) — le taux d'amort. s'applique au brut */
   const dotHist=-(v.DA[a1]||0);
   const detteH=-v.DETTES_FINANCIERES[a1];
   const fraisFinH=-(v.RESULTAT_FIN[a1]<0?v.RESULTAT_FIN[a1]:0);
