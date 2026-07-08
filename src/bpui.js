@@ -147,6 +147,7 @@ function vueBPHyp(H){
     ${hypLigne("Taux d'inflation (défaut des frais généraux)",inPct("hBP.bind(null,'inflation')",H.inflation||0.03))}
     ${hypLigne("Croissance des charges de personnel",inPct("hBP.bind(null,'personnel_croiss')",H.personnel_croiss))}
     ${hypLigne("Taux d'IS effectif",inPct("hBP.bind(null,'is_taux')",H.is_taux))}
+    ${hypLigne("Déficits reportables — stock initial",inK("hBP.bind(null,'reportDeficitaire')",H.reportDeficitaire||0))}
   </div>
   <div class="card"><div class="sec-titre" style="margin-top:0">Besoin en fonds de roulement</div>
     ${hypLigne("Délai clients — DSO",inJ("hBP.bind(null,'dso')",H.dso))}
@@ -170,6 +171,8 @@ function vueBPHyp(H){
     ${hypLigne("Taux d'intérêt de la dette existante",inPct("hBP.bind(null,'dette_taux')",H.dette_taux,0.25))}
     ${hypLigne("Durée résiduelle de la dette existante",inN("hBP.bind(null,'dette_dureeResiduelle')",H.dette_dureeResiduelle,"ans"))}
     ${hypLigne("Produits financiers annuels",inK("hBP.bind(null,'produitsFin_montant')",H.produitsFin_montant))}
+    ${hypLigne("Seuil de trésorerie minimum",inK("hBP.bind(null,'seuilCash')",H.seuilCash||0))}
+    ${hypLigne("Taux du découvert / ligne court terme",inPct("hBP.bind(null,'decouvert_taux')",H.decouvert_taux||0.12,0.25))}
     </div><div>
     ${hypLigne("Taux des nouveaux emprunts",inPct("hBP.bind(null,'emprunt_taux')",H.emprunt_taux,0.25))}
     ${hypLigne("Durée des nouveaux emprunts",inN("hBP.bind(null,'emprunt_duree')",H.emprunt_duree,"ans"))}
@@ -262,6 +265,8 @@ function vueBPBs(P){
     {lib:"Dettes sociales",hist:v.DETTES_SOCIALES[a1],proj:a=>P.bs.DETTES_FISC_SOC[a]*socFrac},
     {lib:"Autres dettes",hist:v.AUTRES_DETTES[a1]+v.CLIENTS_AVANCES[a1]+v.HAO_PASSIF[a1],proj:a=>P.bs.AUTRES_DETTES[a]},
     {lib:"Besoin en fonds de roulement global",st:"total",hist:v.BFR[a1],proj:a=>P.bs.BFR[a]},
+    {lib:"Trésorerie active",hist:v.TRESO_ACTIF[a1],proj:a=>P.bs.TRESO_ACTIVE[a]},
+    {lib:"Concours bancaires courants (découvert)",hist:v.TRESO_PASSIF[a1],proj:a=>-P.bs.LIGNE_CT[a]},
     {lib:"Trésorerie nette",st:"total",hist:v.TRESORERIE_NETTE[a1],proj:a=>P.bs.TRESO[a]},
     {lib:"Provisions pour risques et charges",hist:v.PROVISIONS_RC[a1],proj:a=>-P.bs.PROVISIONS[a]},
     {lib:"Dettes financières",hist:v.DETTES_FINANCIERES[a1],proj:a=>-P.bs.DETTE[a]},

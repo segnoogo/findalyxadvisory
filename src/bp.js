@@ -61,6 +61,12 @@ function hypothesesBP(etats, lignesPerso){
        Un BP projette le cycle d'exploitation, pas le résiduel non piloté par l'activité. */
     autresCreances_fixe:v.AUTRES_CREANCES[a1]+v.AVANCES_FRS[a1]+v.HAO_ACTIF[a1],
     autresDettes_fixe:v.AUTRES_DETTES[a1]+v.CLIENTS_AVANCES[a1]+v.HAO_PASSIF[a1],
+    /* trésorerie & financement court terme : la ligne CT (découvert) couvre le besoin
+       sous le seuil de cash ; intérêts sur solde d'ouverture (bouclage non circulaire) */
+    seuilCash:0,
+    decouvert_taux:born((detteH>0?fraisFinH/detteH:0.08)+0.03,0.03,0.25,0.12),
+    /* report déficitaire : stock initial de déficits imputables sur les bénéfices futurs */
+    reportDeficitaire:0,
     /* financement */
     dette_taux:born(detteH>0?fraisFinH/detteH:0.08,0.02,0.2,0.08),
     dette_dureeResiduelle:5,
@@ -97,7 +103,8 @@ function projeterBP(etats,H,scenario){
   P.pl.OPEX_DETAIL={};
   H.opex.forEach(o=>P.pl.OPEX_DETAIL[o.code]={lib:o.lib,vals:{}});
   ["IMMO_BRUT","AMORT_CUM","IMMO_NET","STOCKS","CLIENTS","AUTRES_CREANCES",
-   "FOURNISSEURS","DETTES_FISC_SOC","AUTRES_DETTES","BFR","CP","DETTE","PROVISIONS","TRESO"].forEach(bs);
+   "FOURNISSEURS","DETTES_FISC_SOC","AUTRES_DETTES","BFR","CP","DETTE","PROVISIONS","TRESO",
+   "LIGNE_CT","TRESO_ACTIVE"].forEach(bs);
 
   /* point de départ (dernier exercice réel) */
   let caP=v.CA[a1];
@@ -115,6 +122,9 @@ function projeterBP(etats,H,scenario){
   let rnPrec=v.RESULTAT_NET[a1];
   const amortAnnuelExist=H.dette_dureeResiduelle>0?detteExist/H.dette_dureeResiduelle:detteExist;
   const emprunts=[];                        /* {solde,taux,amort} des nouveaux emprunts */
+  let ligneCT=0;                            /* concours bancaires courants (découvert), positif */
+  const seuilCash=H.seuilCash||0;
+  let reportDef=Math.max(0,H.reportDeficitaire||0); /* stock de déficits reportables imputables */
 
   AP.forEach((a,i)=>{
     /* --- P&L --- */
@@ -149,13 +159,18 @@ function projeterBP(etats,H,scenario){
       interets+=e.taux*(sDebut+(sDebut-rEff))/2;
       e.solde-=rEff;rembNouv+=rEff;soldeNouv+=e.solde;
     });
+    const interetsCT=H.decouvert_taux*ligneCT;   /* intérêts du découvert sur solde d'ouverture */
     const dette=detteExist+soldeNouv;
     const ebitda=caP+cd+autresProdP+opexTot+persP;
     const ebit=ebitda-dot;
     const pf=H.produitsFin_montant;
-    const rf=pf-interets;
+    const rf=pf-interets-interetsCT;
     const ebt=ebit+rf;
-    const impots=ebt>0?-H.is_taux*ebt:0;
+    /* report déficitaire : impute les pertes antérieures sur le bénéfice imposable */
+    let baseIS=ebt;
+    if(ebt>0){const imput=Math.min(ebt,reportDef);baseIS=ebt-imput;reportDef-=imput;}
+    else{reportDef+=-ebt;}
+    const impots=baseIS>0?-H.is_taux*baseIS:0;
     const rn=ebt+impots;
     /* --- BFR --- */
     const clients=caP*(H.dso+sc.dJours)/360;
@@ -168,9 +183,14 @@ function projeterBP(etats,H,scenario){
     /* --- capitaux propres & dividendes --- */
     const div=H.dividendes_payout>0&&rnPrec>0?H.dividendes_payout*rnPrec:0;
     cp=cp+rn-div;
-    /* --- trésorerie = bouclage du bilan --- */
+    /* --- trésorerie = bouclage du bilan (position nette) --- */
     const immoNet=brut-amortCum;
-    const treso=cp+dette+provisions-immoNet-bfr;
+    const tresoNette=cp+dette+provisions-immoNet-bfr;
+    /* financement du besoin : la ligne CT (découvert) couvre le manque sous le seuil de cash ;
+       cash-sweep automatique quand la trésorerie repasse au-dessus (ligneCT ramenée à 0) */
+    ligneCT=tresoNette<seuilCash?seuilCash-tresoNette:0;
+    const tresoActive=tresoNette+ligneCT;   /* = seuilCash si tiré, sinon la position nette */
+    const treso=tresoNette;                 /* trésorerie NETTE = variable de bouclage (inchangée) */
     /* --- TFT officiel prévisionnel --- */
     const dBfr=bfr-bfrP;
     P.tft[a]={ZA:tresoP,FA:rn+dot,FB:0,FC:-(stocks-(P.bs.STOCKS[AP[i-1]]!==undefined?P.bs.STOCKS[AP[i-1]]:v.STOCKS[a1])),
@@ -201,14 +221,15 @@ function projeterBP(etats,H,scenario){
     P.pl.CA[a]=caP;P.pl.COUTS_DIRECTS[a]=cd;P.pl.MARGE_BRUTE[a]=caP+cd;
     P.pl.AUTRES_PROD[a]=autresProdP;P.pl.OPEX_TOTAL[a]=opexTot;P.pl.CHARGES_PERSONNEL[a]=persP;
     P.pl.EBITDA[a]=ebitda;P.pl.DA[a]=-dot;P.pl.EBIT[a]=ebit;
-    P.pl.PRODUITS_FIN[a]=pf;P.pl.FRAIS_FIN[a]=-interets;P.pl.RESULTAT_FIN[a]=rf;
+    P.pl.PRODUITS_FIN[a]=pf;P.pl.FRAIS_FIN[a]=-(interets+interetsCT);P.pl.RESULTAT_FIN[a]=rf;
     P.pl.EBT[a]=ebt;P.pl.IS[a]=impots;P.pl.RN[a]=rn;
     P.bs.IMMO_BRUT[a]=brut;P.bs.AMORT_CUM[a]=-amortCum;P.bs.IMMO_NET[a]=immoNet;
     P.bs.STOCKS[a]=stocks;P.bs.CLIENTS[a]=clients;P.bs.AUTRES_CREANCES[a]=autresCr;
     P.bs.FOURNISSEURS[a]=fournisseurs;P.bs.DETTES_FISC_SOC[a]=dettesFiscSoc;P.bs.AUTRES_DETTES[a]=autresDet;P.bs.BFR[a]=bfr;
     P.bs.CP[a]=cp;P.bs.DETTE[a]=dette;P.bs.PROVISIONS[a]=provisions;P.bs.TRESO[a]=treso;
+    P.bs.LIGNE_CT[a]=ligneCT;P.bs.TRESO_ACTIVE[a]=tresoActive;
     P.dette[a]={ouverture:soldeExistDebut+ (soldeNouv+rembNouv-nouveau),tirage:nouveau,
-      remboursement:rembExist+rembNouv,interets,cloture:dette,div};
+      remboursement:rembExist+rembNouv,interets,interetsCT,ligneCT,cloture:dette,div};
     /* contrôle de bouclage */
     P.tft[a].ECART=t.ZG-treso;
     bfrP=bfr;tresoP=treso;rnPrec=rn;
