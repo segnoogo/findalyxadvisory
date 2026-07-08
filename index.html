@@ -3013,7 +3013,7 @@ async function genererDatabook(){
   {
     const ws=wb.addWorksheet(ong("Synthèse"));
     titreLiasse(ws,"Synthèse exécutive — indicateurs clés — "+UNI.lib);
-    dbEntete(ws.addRow([null,"Indicateur",...fy]),4);
+    dbEntete(ws.addRow([null,"Indicateur",...fy]),2);
     const kpi=(lib,fn,fmtStr,st)=>{const r=ws.addRow([null,lib]);
       A.forEach((a,i)=>{const c=r.getCell(3+i);c.value={formula:fn(i)};c.numFmt=fmtStr;});
       if(st){r.font={bold:true,color:{argb:"FF172554"}};for(let c=2;c<=2+A.length;c++)r.getCell(c).fill={type:"pattern",pattern:"solid",fgColor:{argb:"FFF7F9FC"}};}
@@ -3035,9 +3035,9 @@ async function genererDatabook(){
 
   /* --- Normalisation de l'EBITDA (Quality of Earnings) --- */
   {
-    const ws=wb.addWorksheet(ong("EBITDA normalisé"));
-    titreLiasse(ws,"Normalisation de l'EBITDA (Quality of Earnings) — "+UNI.lib);
-    dbEntete(ws.addRow([null,UNI.lib,...fy]),4);
+    const ws=wb.addWorksheet(ong("Normalisations"));
+    titreLiasse(ws,"Normalisation de l'EBITDA et du BFR (Quality of Earnings) — "+UNI.lib);
+    dbEntete(ws.addRow([null,UNI.lib,...fy]),2);
     const retr=(DOSSIER.adj&&DOSSIER.adj.ebitda)||[];
     const vAdj=(l,a)=>l.comptes&&l.comptes.length
       ?(l.sens||1)*lignesT.filter(t=>l.comptes.includes(t.compte)).reduce((q2,t)=>q2+(t.vals[a]||0),0)
@@ -3053,6 +3053,21 @@ async function genererDatabook(){
     const rM=ws.addRow([null,"Marge d'EBITDA normalisée (% du CA)"]);rM.font={italic:true,color:{argb:"FF808080"}};
     A.forEach((a,i)=>{const c=rM.getCell(3+i);c.value={formula:`IF(${celPL("CA",i)}=0,"",${colE(i)}${rNo.number}/${celPL("CA",i)})`};c.numFmt='0.0%';});
     if(!retr.length)ws.addRow([null,"(Aucun retraitement d'EBITDA défini — voir l'onglet Retraitements de l'application.)"]);
+    /* --- Normalisation du BFR (BFR normatif) --- */
+    ws.addRow([]);
+    const secB=ws.addRow([null,"Normalisation du BFR"]);secB.getCell(2).font={bold:true,color:{argb:"FF172554"}};
+    const retB=(DOSSIER.adj&&DOSSIER.adj.bfr)||[];
+    const rBe=ws.addRow([null,"BFR d'exploitation reporté"]);rBe.font={bold:true};
+    A.forEach((a,i)=>{const c=rBe.getCell(3+i);c.value={formula:celBS("BFR_EXPLOITATION",i)};c.numFmt=DB_NUMFMT;});
+    retB.forEach(l=>{const r=ws.addRow([null,"  retraitement : "+(l.lib||"—")]);
+      A.forEach((a,i)=>{const c=r.getCell(3+i);c.value=Math.round(vAdj(l,a)*UNI.f*1000)/1000;c.numFmt=DB_NUMFMT;});});
+    const fB=rBe.number,lB=rBe.number+retB.length;
+    const rBn=ws.addRow([null,"BFR normatif"]);rBn.font={bold:true,color:{argb:"FF172554"}};
+    A.forEach((a,i)=>{const c=rBn.getCell(3+i);c.value={formula:`SUM(${colE(i)}${fB}:${colE(i)}${lB})`};c.numFmt=DB_NUMFMT;});
+    for(let c=2;c<=2+A.length;c++)rBn.getCell(c).fill={type:"pattern",pattern:"solid",fgColor:{argb:"FFF7F9FC"}};
+    const rBj=ws.addRow([null,"BFR normatif en jours de CA"]);rBj.font={italic:true,color:{argb:"FF808080"}};
+    A.forEach((a,i)=>{const c=rBj.getCell(3+i);c.value={formula:`IF(${celPL("CA",i)}=0,"",${colE(i)}${rBn.number}*360/${celPL("CA",i)})`};c.numFmt='#,##0" j"';});
+    if(!retB.length)ws.addRow([null,"(Aucun retraitement de BFR défini.)"]);
     ws.columns=[{width:3},{width:48},...A.map(()=>({width:14}))];
   }
 
@@ -3060,7 +3075,7 @@ async function genererDatabook(){
   {
     const ws=wb.addWorksheet(ong("Common-size"));
     titreLiasse(ws,"États en pourcentage (analyse verticale) — P&L / CA · Bilan / actif net");
-    dbEntete(ws.addRow([null,"% vertical",...fy]),4);
+    dbEntete(ws.addRow([null,"% vertical",...fy]),2);
     const secT=t=>{const r=ws.addRow([null,t]);r.font={bold:true,color:{argb:"FF172554"}};for(let c=2;c<=2+A.length;c++)r.getCell(c).fill={type:"pattern",pattern:"solid",fgColor:{argb:"FFF7F9FC"}};};
     secT("Compte de résultat (% du chiffre d'affaires)");
     dPL.filter(l=>l.type!=="pourcentage").forEach(l=>{const r=ws.addRow([null,l.lib]);if(l.type==="sous_total")r.font={bold:true};
@@ -3076,7 +3091,7 @@ async function genererDatabook(){
     const ws=wb.addWorksheet(ong("Ponts de variation"));
     titreLiasse(ws,"Ponts de variation d'une année sur l'autre — "+UNI.lib);
     const trans=A.slice(1).map((a,k)=>fy[k]+" → "+fy[k+1]);
-    dbEntete(ws.addRow([null,UNI.lib,...trans]),4);
+    dbEntete(ws.addRow([null,UNI.lib,...trans]),2);
     const pont=(lib,fn,st)=>{const r=ws.addRow([null,lib]);
       A.slice(1).forEach((a,k)=>{const c=r.getCell(3+k);c.value={formula:fn(k,k+1)};c.numFmt=DB_NUMFMT;});
       if(st){r.font={bold:true,color:{argb:"FF172554"}};for(let c=2;c<=2+trans.length;c++)r.getCell(c).fill={type:"pattern",pattern:"solid",fgColor:{argb:"FFF7F9FC"}};}};
@@ -6731,6 +6746,17 @@ function construireFeuillesBP(wb){
   const Bp=(row,i)=>i===0?`${rB}!${L(cHL)}${row}`:`${rB}!${L(cP(i-1))}${row}`;
   const D=(row,i)=>`${rD}!${L(cP(i))}${row}`;
   const S=(row)=>`${L(cP(0))}${row}:${L(cP(N-1))}${row}`;
+  /* ---- bloc de ratios en bas d'une feuille (mêmes ratios que l'historique) ---- */
+  const ratFmt=u=>u==="%"?'0.0%;(0.0%);"-"':u==="j"?'#,##0" j";(#,##0)" j";"-"':'#,##0.00" ×";(#,##0.00)" ×";"-"';
+  function ratBloc(ws,titre,cols,items){
+    ws.addRow([]);
+    const rh=ws.addRow([null,titre]);rh.getCell(2).font={bold:true,color:{argb:"FF172554"}};
+    for(let c=2;c<=2+cols.length;c++)rh.getCell(c).fill={type:"pattern",pattern:"solid",fgColor:{argb:"FFF7F9FC"}};
+    items.forEach(it=>{const r=ws.addRow([null,it.lab]);r.font={italic:true,color:{argb:"FF808080"}};
+      cols.forEach((cm,k)=>{const cl=r.getCell(3+k);cl.value={formula:it.f(cm.own,cm.ref)};cl.numFmt=ratFmt(it.unit);cl.alignment={horizontal:"right"};});});
+  }
+  const colsHP=[...A.map((a,i)=>({own:L(cH(i)),ref:L(cH(i))})),...AP.map((a,i)=>({own:L(cP(i)),ref:L(cP(i))}))];
+  const colsTFT=AP.map((a,i)=>({own:L(3+i),ref:L(cP(i))}));
 
   /* ================= P&L prévisionnel ================= */
   const priorRep=i=>i===0?h1(hy.repdef):`${L(cP(i-1))}${rp.REPDEF}`;   /* stock de déficits à l'ouverture */
@@ -6803,7 +6829,16 @@ function construireFeuillesBP(wb){
   FHP[rp.IS]=i=>su(["IS","PARTICIPATION",...pca("IMPOTS")],i,"-");
   FHP[rp.RN]=i=>`${hc(rp.EBT,i)}+${hc(rp.IS,i)}`;
   defsP.forEach(d=>{if(FHP[d.rn])d.fh=FHP[d.rn];});
-  feuille(nomP,"Compte de résultat prévisionnel — FORMULES — scénario "+sc.lab+" — "+u.lib,defsP);
+  const wsPp=feuille(nomP,"Compte de résultat prévisionnel — FORMULES — scénario "+sc.lab+" — "+u.lib,defsP);
+  ratBloc(wsPp,"Ratios du compte de résultat",colsHP,[
+    {lab:"Marge brute / CA",unit:"%",f:c=>`IF(${c}${rp.CA}=0,"",${c}${rp.MB}/${c}${rp.CA})`},
+    {lab:"Marge d'EBITDA",unit:"%",f:c=>`IF(${c}${rp.CA}=0,"",${c}${rp.EBITDA}/${c}${rp.CA})`},
+    {lab:"Marge d'exploitation (EBIT)",unit:"%",f:c=>`IF(${c}${rp.CA}=0,"",${c}${rp.EBIT}/${c}${rp.CA})`},
+    {lab:"Marge nette",unit:"%",f:c=>`IF(${c}${rp.CA}=0,"",${c}${rp.RN}/${c}${rp.CA})`},
+    {lab:"Frais généraux / CA",unit:"%",f:c=>`IF(${c}${rp.CA}=0,"",-(${c}${rp.TFG}+${c}${rp.PERS})/${c}${rp.CA})`},
+    {lab:"Charges de personnel / CA",unit:"%",f:c=>`IF(${c}${rp.CA}=0,"",-${c}${rp.PERS}/${c}${rp.CA})`},
+    {lab:"Taux d'IS effectif",unit:"%",f:c=>`IF(${c}${rp.EBT}<=0,"",-${c}${rp.IS}/${c}${rp.EBT})`}
+  ]);
 
   /* ================= Bilan prévisionnel ================= */
   const socfisc=v.DETTES_FISCALES[a1]+v.DETTES_SOCIALES[a1];
@@ -6884,7 +6919,29 @@ function construireFeuillesBP(wb){
   FHB[rb.DIV]=()=>`0`;
   FHB[rb.CTRL]=i=>`${hc(rb.IMN,i)}+${hc(rb.BFR,i)}+${hc(rb.TRES,i)}-${hc(rb.CP,i)}-${hc(rb.DET,i)}-${hc(rb.PROV,i)}`;
   defsB.forEach(d=>{if(FHB[d.rn])d.fh=FHB[d.rn];});
-  feuille(nomB,"Bilan prévisionnel — FORMULES — bouclé par la trésorerie — "+u.lib,defsB);
+  const wsBp=feuille(nomB,"Bilan prévisionnel — FORMULES — bouclé par la trésorerie — "+u.lib,defsB);
+  {
+    const pl=(row,c)=>`${rP}!${c}${row}`;
+    const dfin=c=>`(${c}${rb.DET}-${c}${rb.LCT})`, dnet=c=>`(${c}${rb.DET}-${c}${rb.TRES})`;
+    const actC=c=>`(${c}${rb.STK}+${c}${rb.CLI}+${c}${rb.ACR}+${c}${rb.TRA})`;
+    const pasC=c=>`(-(${c}${rb.FRN}+${c}${rb.DFI}+${c}${rb.DSO}+${c}${rb.ADT})-${c}${rb.LCT})`;
+    const totA=c=>`(${c}${rb.IMN}+${actC(c)})`;
+    ratBloc(wsBp,"Ratios de structure, rentabilité et liquidité",colsHP,[
+      {lab:"ROE (rentabilité des capitaux propres)",unit:"%",f:c=>`IF(${c}${rb.CP}<=0,"",${pl(rp.RN,c)}/${c}${rb.CP})`},
+      {lab:"ROA (rentabilité de l'actif)",unit:"%",f:c=>`IF(${totA(c)}<=0,"",${pl(rp.RN,c)}/${totA(c)})`},
+      {lab:"ROCE (rentabilité des capitaux employés)",unit:"%",f:c=>`IF((${c}${rb.CP}+${dfin(c)})<=0,"",${pl(rp.EBIT,c)}/(${c}${rb.CP}+${dfin(c)}))`},
+      {lab:"Liquidité générale",unit:"x",f:c=>`IF(${pasC(c)}<=0,"",${actC(c)}/${pasC(c)})`},
+      {lab:"Liquidité réduite",unit:"x",f:c=>`IF(${pasC(c)}<=0,"",(${actC(c)}-${c}${rb.STK})/${pasC(c)})`},
+      {lab:"Liquidité immédiate",unit:"x",f:c=>`IF(${pasC(c)}<=0,"",${c}${rb.TRA}/${pasC(c)})`},
+      {lab:"BFR en jours de CA",unit:"j",f:c=>`IF(${pl(rp.CA,c)}=0,"",${c}${rb.BFR}*360/${pl(rp.CA,c)})`},
+      {lab:"Délai clients (DSO)",unit:"j",f:c=>`IF(${pl(rp.CA,c)}=0,"",${c}${rb.CLI}*360/(${pl(rp.CA,c)}*1.18))`},
+      {lab:"Délai fournisseurs (DPO)",unit:"j",f:c=>`IF((-${pl(rp.CD,c)}-${pl(rp.TFG,c)})<=0,"",(-${c}${rb.FRN})*360/((-${pl(rp.CD,c)}-${pl(rp.TFG,c)})*1.18))`},
+      {lab:"Gearing (dette fin. / capitaux propres)",unit:"x",f:c=>`IF(${c}${rb.CP}<=0,"",${dfin(c)}/${c}${rb.CP})`},
+      {lab:"Leverage (dette nette / EBITDA)",unit:"x",f:c=>`IF(${pl(rp.EBITDA,c)}<=0,"",${dnet(c)}/${pl(rp.EBITDA,c)})`},
+      {lab:"Couverture des intérêts (EBITDA / frais fin.)",unit:"x",f:c=>`IF((-${pl(rp.FF,c)})<=0,"",${pl(rp.EBITDA,c)}/(-${pl(rp.FF,c)}))`},
+      {lab:"Autonomie financière (CP / total actif)",unit:"%",f:c=>`IF(${totA(c)}<=0,"",${c}${rb.CP}/${totA(c)})`}
+    ]);
+  }
 
   /* ================= Dette (par millésime) ================= */
   const wsD=wb.addWorksheet(nomD);
@@ -6966,6 +7023,13 @@ function construireFeuillesBP(wb){
     F(rtE,`${Lc}${rt.ZG}-${B(rb.TRES,i)}`);
   });
   wsT.columns=[{width:3},{width:56},...AP.map(()=>({width:14}))];
+  ratBloc(wsT,"Ratios de flux et de trésorerie",colsTFT,[
+    {lab:"CAFG / CA",unit:"%",f:(c,r)=>`IF(${rP}!${r}${rp.CA}=0,"",${c}${rt.FA}/${rP}!${r}${rp.CA})`},
+    {lab:"Conversion en cash (flux d'exploitation / EBITDA)",unit:"%",f:(c,r)=>`IF(${rP}!${r}${rp.EBITDA}=0,"",${c}${rt.ZB}/${rP}!${r}${rp.EBITDA})`},
+    {lab:"Free cash flow / CA (exploitation + investissement)",unit:"%",f:(c,r)=>`IF(${rP}!${r}${rp.CA}=0,"",(${c}${rt.ZB}+${c}${rt.ZC})/${rP}!${r}${rp.CA})`},
+    {lab:"Capacité de remboursement (dette fin. / CAFG)",unit:"x",f:(c,r)=>`IF(${c}${rt.FA}<=0,"",(${rB}!${r}${rb.DET}-${rB}!${r}${rb.LCT})/${c}${rt.FA})`},
+    {lab:"Couverture des investissements (flux exploit. / invest.)",unit:"x",f:(c,r)=>`IF(${c}${rt.ZC}=0,"",${c}${rt.ZB}/ABS(${c}${rt.ZC}))`}
+  ]);
 
   /* ================= Valorisation ================= */
   const wsV=wb.addWorksheet(nomV);
@@ -7016,6 +7080,7 @@ function construireFeuillesBP(wb){
     [rv.DN,"(–) Dette nette (dernier exercice réel)",`${rB}!${L(cHL)}${rb.DET}-${rB}!${L(cHL)}${rb.TRES}`],
     [rv.BRG,"± Ajustements du pont (hors dette nette)",brgSum],
     [rv.EQ,"Valeur des fonds propres (DCF)",`C${rv.EV}-C${rv.DN}+C${rv.BRG}`]];
+  const hb2=cellV(wsV,rv.SPV-1,2,"Passage de la valeur d'entreprise aux fonds propres");hb2.font={bold:true,color:{argb:"FF172554"}};
   bridge.forEach(([rn,lib,f])=>{cellV(wsV,rn,2,lib);cellF(wsV,rn,3,f,NF);});
   totalRow(wsV,rv.EV,3);totalRow(wsV,rv.EQ,3);
   let rBr=rBr0;

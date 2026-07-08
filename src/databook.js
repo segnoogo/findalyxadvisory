@@ -494,7 +494,7 @@ async function genererDatabook(){
   {
     const ws=wb.addWorksheet(ong("Synthèse"));
     titreLiasse(ws,"Synthèse exécutive — indicateurs clés — "+UNI.lib);
-    dbEntete(ws.addRow([null,"Indicateur",...fy]),4);
+    dbEntete(ws.addRow([null,"Indicateur",...fy]),2);
     const kpi=(lib,fn,fmtStr,st)=>{const r=ws.addRow([null,lib]);
       A.forEach((a,i)=>{const c=r.getCell(3+i);c.value={formula:fn(i)};c.numFmt=fmtStr;});
       if(st){r.font={bold:true,color:{argb:"FF172554"}};for(let c=2;c<=2+A.length;c++)r.getCell(c).fill={type:"pattern",pattern:"solid",fgColor:{argb:"FFF7F9FC"}};}
@@ -516,9 +516,9 @@ async function genererDatabook(){
 
   /* --- Normalisation de l'EBITDA (Quality of Earnings) --- */
   {
-    const ws=wb.addWorksheet(ong("EBITDA normalisé"));
-    titreLiasse(ws,"Normalisation de l'EBITDA (Quality of Earnings) — "+UNI.lib);
-    dbEntete(ws.addRow([null,UNI.lib,...fy]),4);
+    const ws=wb.addWorksheet(ong("Normalisations"));
+    titreLiasse(ws,"Normalisation de l'EBITDA et du BFR (Quality of Earnings) — "+UNI.lib);
+    dbEntete(ws.addRow([null,UNI.lib,...fy]),2);
     const retr=(DOSSIER.adj&&DOSSIER.adj.ebitda)||[];
     const vAdj=(l,a)=>l.comptes&&l.comptes.length
       ?(l.sens||1)*lignesT.filter(t=>l.comptes.includes(t.compte)).reduce((q2,t)=>q2+(t.vals[a]||0),0)
@@ -534,6 +534,21 @@ async function genererDatabook(){
     const rM=ws.addRow([null,"Marge d'EBITDA normalisée (% du CA)"]);rM.font={italic:true,color:{argb:"FF808080"}};
     A.forEach((a,i)=>{const c=rM.getCell(3+i);c.value={formula:`IF(${celPL("CA",i)}=0,"",${colE(i)}${rNo.number}/${celPL("CA",i)})`};c.numFmt='0.0%';});
     if(!retr.length)ws.addRow([null,"(Aucun retraitement d'EBITDA défini — voir l'onglet Retraitements de l'application.)"]);
+    /* --- Normalisation du BFR (BFR normatif) --- */
+    ws.addRow([]);
+    const secB=ws.addRow([null,"Normalisation du BFR"]);secB.getCell(2).font={bold:true,color:{argb:"FF172554"}};
+    const retB=(DOSSIER.adj&&DOSSIER.adj.bfr)||[];
+    const rBe=ws.addRow([null,"BFR d'exploitation reporté"]);rBe.font={bold:true};
+    A.forEach((a,i)=>{const c=rBe.getCell(3+i);c.value={formula:celBS("BFR_EXPLOITATION",i)};c.numFmt=DB_NUMFMT;});
+    retB.forEach(l=>{const r=ws.addRow([null,"  retraitement : "+(l.lib||"—")]);
+      A.forEach((a,i)=>{const c=r.getCell(3+i);c.value=Math.round(vAdj(l,a)*UNI.f*1000)/1000;c.numFmt=DB_NUMFMT;});});
+    const fB=rBe.number,lB=rBe.number+retB.length;
+    const rBn=ws.addRow([null,"BFR normatif"]);rBn.font={bold:true,color:{argb:"FF172554"}};
+    A.forEach((a,i)=>{const c=rBn.getCell(3+i);c.value={formula:`SUM(${colE(i)}${fB}:${colE(i)}${lB})`};c.numFmt=DB_NUMFMT;});
+    for(let c=2;c<=2+A.length;c++)rBn.getCell(c).fill={type:"pattern",pattern:"solid",fgColor:{argb:"FFF7F9FC"}};
+    const rBj=ws.addRow([null,"BFR normatif en jours de CA"]);rBj.font={italic:true,color:{argb:"FF808080"}};
+    A.forEach((a,i)=>{const c=rBj.getCell(3+i);c.value={formula:`IF(${celPL("CA",i)}=0,"",${colE(i)}${rBn.number}*360/${celPL("CA",i)})`};c.numFmt='#,##0" j"';});
+    if(!retB.length)ws.addRow([null,"(Aucun retraitement de BFR défini.)"]);
     ws.columns=[{width:3},{width:48},...A.map(()=>({width:14}))];
   }
 
@@ -541,7 +556,7 @@ async function genererDatabook(){
   {
     const ws=wb.addWorksheet(ong("Common-size"));
     titreLiasse(ws,"États en pourcentage (analyse verticale) — P&L / CA · Bilan / actif net");
-    dbEntete(ws.addRow([null,"% vertical",...fy]),4);
+    dbEntete(ws.addRow([null,"% vertical",...fy]),2);
     const secT=t=>{const r=ws.addRow([null,t]);r.font={bold:true,color:{argb:"FF172554"}};for(let c=2;c<=2+A.length;c++)r.getCell(c).fill={type:"pattern",pattern:"solid",fgColor:{argb:"FFF7F9FC"}};};
     secT("Compte de résultat (% du chiffre d'affaires)");
     dPL.filter(l=>l.type!=="pourcentage").forEach(l=>{const r=ws.addRow([null,l.lib]);if(l.type==="sous_total")r.font={bold:true};
@@ -557,7 +572,7 @@ async function genererDatabook(){
     const ws=wb.addWorksheet(ong("Ponts de variation"));
     titreLiasse(ws,"Ponts de variation d'une année sur l'autre — "+UNI.lib);
     const trans=A.slice(1).map((a,k)=>fy[k]+" → "+fy[k+1]);
-    dbEntete(ws.addRow([null,UNI.lib,...trans]),4);
+    dbEntete(ws.addRow([null,UNI.lib,...trans]),2);
     const pont=(lib,fn,st)=>{const r=ws.addRow([null,lib]);
       A.slice(1).forEach((a,k)=>{const c=r.getCell(3+k);c.value={formula:fn(k,k+1)};c.numFmt=DB_NUMFMT;});
       if(st){r.font={bold:true,color:{argb:"FF172554"}};for(let c=2;c<=2+trans.length;c++)r.getCell(c).fill={type:"pattern",pattern:"solid",fgColor:{argb:"FFF7F9FC"}};}};
