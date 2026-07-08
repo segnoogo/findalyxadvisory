@@ -9,6 +9,10 @@ function assurerBP(){
       (DOSSIER.bp.opex||[]).forEach(o=>{if(o.mode==="pctCA")o.mode="inflation";});
     }
     for(const k in base) if(DOSSIER.bp[k]===undefined) DOSSIER.bp[k]=base[k];
+    /* migration : ancienne prime spécifique unique → build-up pays/taille/illiquidité (préserve le ke existant) */
+    if(DOSSIER.bp.valo&&DOSSIER.bp.valo.primeSpecifique!==undefined&&DOSSIER.bp.valo.primePays===undefined){
+      DOSSIER.bp.valo.primePays=DOSSIER.bp.valo.primeSpecifique;DOSSIER.bp.valo.primeTaille=0;DOSSIER.bp.valo.primeIlliquidite=0;
+    }
     for(const k in base.valo) if(DOSSIER.bp.valo[k]===undefined) DOSSIER.bp.valo[k]=base.valo[k];
     base.opex.forEach(o=>{if(!DOSSIER.bp.opex.find(x=>x.code===o.code))DOSSIER.bp.opex.push(o);});
     DOSSIER.bp.opex=DOSSIER.bp.opex.filter(o=>base.opex.find(x=>x.code===o.code));
@@ -50,6 +54,11 @@ function ajAnr(){assurerBP().valo.anrAjustements.push({lib:"Réévaluation…",m
 function majAnr(i,champ,val){const l=assurerBP().valo.anrAjustements[i];
   if(l){l[champ]=champ==="montant"?(+val)/uni().f:val;sauverDossier();if(champ==="montant")rendre();}}
 function supAnr(i){assurerBP().valo.anrAjustements.splice(i,1);sauverDossier();rendre();}
+function ajBridge(){const V=assurerBP().valo;(V.bridge=V.bridge||[]).push({lib:"Ajustement…",montant:0});sauverDossier();rendre();}
+function majBridge(i,champ,val){const l=assurerBP().valo.bridge[i];
+  if(l){l[champ]=champ==="montant"?(+val)/uni().f:val;sauverDossier();if(champ==="montant")rendre();}}
+function supBridge(i){assurerBP().valo.bridge.splice(i,1);sauverDossier();rendre();}
+function setTVMode(m){assurerBP().valo.tvMode=m;sauverDossier();rendre();}
 
 /* champs de saisie */
 const inPct=(fn,val,step)=>`<span class="ctl-h"><input type="text" inputmode="decimal" class="nin" value="${+(val*100).toFixed(2)}" step="${step||0.5}" onchange="${fn}(this.value,100)"><span class="mut" style="width:34px">%</span></span>`;
@@ -434,10 +443,15 @@ function vueValo(){
     ${hypLigne("Taux sans risque",inPct("hValo.bind(null,'rf')",Vh.rf,0.25))}
     ${hypLigne("Prime de risque marché",inPct("hValo.bind(null,'primeMarche')",Vh.primeMarche,0.25))}
     ${hypLigne("Beta",inN("hValo.bind(null,'beta')",Vh.beta,""))}
-    ${hypLigne("Prime spécifique (taille, pays)",inPct("hValo.bind(null,'primeSpecifique')",Vh.primeSpecifique,0.25))}
+    ${hypLigne("Prime de risque pays (spread souverain)",inPct("hValo.bind(null,'primePays')",Vh.primePays||0,0.25))}
+    ${hypLigne("Prime de taille (petite entreprise)",inPct("hValo.bind(null,'primeTaille')",Vh.primeTaille||0,0.25))}
+    ${hypLigne("Prime d'illiquidité (non cotée)",inPct("hValo.bind(null,'primeIlliquidite')",Vh.primeIlliquidite||0,0.25))}
     ${hypLigne("Coût de la dette (brut)",inPct("hValo.bind(null,'coutDette')",Vh.coutDette,0.25))}
     ${hypLigne("Poids de la dette (structure cible)",inPct("hValo.bind(null,'poidsDette')",Vh.poidsDette,5))}
-    ${hypLigne("Croissance à l'infini (g)",inPct("hValo.bind(null,'g')",Vh.g,0.25))}
+    ${hypLigne("Valeur terminale",`<span class="segvue"><button class="${(Vh.tvMode||'gordon')==='gordon'?'on':''}" onclick="setTVMode('gordon')">Gordon</button><button class="${Vh.tvMode==='exit'?'on':''}" onclick="setTVMode('exit')">Mult. sortie</button></span>`)}
+    ${(Vh.tvMode||'gordon')==='gordon'
+      ?hypLigne("Croissance à l'infini (g)",inPct("hValo.bind(null,'g')",Vh.g,0.25))
+      :hypLigne("Multiple de sortie (× EBITDA terminal)",`<span class="ctl-h"><input type="text" inputmode="decimal" class="nin" value="${Vh.exitMultiple||0}" step="0.5" onchange="hValo('exitMultiple',this.value,1)"><span class="mut" style="width:34px">×</span></span>`)}
     <div class="row" style="margin-top:10px">
       <span class="chip ok">Coût des fonds propres : ${pc(V.ke)}</span>
       <span class="chip ok">Coût de la dette net d'IS : ${pc(V.kd)}</span>
@@ -450,7 +464,11 @@ function vueValo(){
       ${["min","central","max"].map(k=>`<td class="num"><input type="text" inputmode="decimal" class="nin" value="${Vh.multiplesComparables[k]}" step="0.5" onchange="hValoM('multiplesComparables','${k}',this.value,1)"></td>`).join("")}</tr>
     <tr><td>Multiples de transactions (× EBITDA)</td>
       ${["min","central","max"].map(k=>`<td class="num"><input type="text" inputmode="decimal" class="nin" value="${Vh.multiplesTransactions[k]}" step="0.5" onchange="hValoM('multiplesTransactions','${k}',this.value,1)"></td>`).join("")}</tr>
+    <tr><td>EV / EBIT (×)</td><td></td><td class="num"><input type="text" inputmode="decimal" class="nin" value="${Vh.multEbit||0}" step="0.5" onchange="hValo('multEbit',this.value,1)"></td><td></td></tr>
+    <tr><td>EV / Chiffre d'affaires (×)</td><td></td><td class="num"><input type="text" inputmode="decimal" class="nin" value="${Vh.multCA||0}" step="0.1" onchange="hValo('multCA',this.value,1)"></td><td></td></tr>
+    <tr><td>PER — cours / bénéfice (×)</td><td></td><td class="num"><input type="text" inputmode="decimal" class="nin" value="${Vh.per||0}" step="0.5" onchange="hValo('per',this.value,1)"></td><td></td></tr>
     </table>
+    <div class="mut" style="margin-top:4px">EV/EBIT, EV/CA et PER : fourchette ±15 % autour de la valeur centrale.</div>
     <div class="sec-titre">Actif net réévalué — ajustements</div>
     ${ (Vh.anrAjustements||[]).map((x,i)=>`<div class="row" style="margin-bottom:6px">
        <input class="sel" style="flex:1" value="${esc(x.lib)}" onchange="majAnr(${i},'lib',this.value)">
@@ -473,28 +491,38 @@ function vueValo(){
     <tr class="total"><td>FCFF actualisés</td>${AP.map(a=>`<td class="num">${fmt(V.pv[a])}</td>`).join("")}</tr>
     </table></div></div>`;
   /* bridge */
+  const evLbl=V.tvMode==="exit"?"Valeur terminale ("+(Vh.exitMultiple||0)+"× EBITDA terminal)":"Valeur terminale (g = "+pc(V.g)+")";
+  const pontRows=[["Somme des FCFF actualisés",V.sommePv],[evLbl,V.vt],
+     ["Valeur terminale actualisée",V.vtPv],["Valeur d'entreprise (EV)",V.ev],
+     ["(–) Dette nette au "+ETATS.annees[ETATS.annees.length-1],-V.detteNette]];
+  if(Math.abs(V.bridgeAjust)>0.5)pontRows.push(["± Ajustements du pont",V.bridgeAjust]);
+  pontRows.push(["Valeur des fonds propres (DCF)",V.equityDcf]);
   const bridge=`<div class="deux"><div class="card">
     <div class="sec-titre" style="margin-top:0">De la valeur d'entreprise à la valeur des fonds propres</div>
-    <table class="tb">
-    ${[["Somme des FCFF actualisés",V.sommePv],["Valeur terminale (g = "+pc(V.g)+")",V.vt],
-       ["Valeur terminale actualisée",V.vtPv],["Valeur d'entreprise (EV)",V.ev],
-       ["(–) Dette nette au "+ETATS.annees[ETATS.annees.length-1],-V.detteNette],
-       ["Valeur des fonds propres (DCF)",V.equityDcf]].map(([l,x],i)=>
-      `<tr class="${i===3||i===5?"total":""}"${i===5?' style="font-weight:700"':""}><td>${l}</td><td class="num">${fmt(x)}</td></tr>`).join("")}
-    </table></div>
+    <table class="tb">${pontRows.map(([l,x])=>{const tot=/entreprise|fonds propres/.test(l);return `<tr class="${tot?"total":""}"${/fonds propres/.test(l)?' style="font-weight:700"':""}><td>${l}</td><td class="num">${fmt(x)}</td></tr>`;}).join("")}</table>
+    <div class="sec-titre">Pont — ajustements (hors dette nette)</div>
+    ${(Vh.bridge||[]).map((x,i)=>`<div class="row" style="margin-bottom:6px">
+       <input class="sel" style="flex:1" value="${esc(x.lib)}" onchange="majBridge(${i},'lib',this.value)">
+       <input type="text" inputmode="decimal" class="nin large" value="${Math.round((x.montant||0)*u.f*100)/100}" step="any" onchange="majBridge(${i},'montant',this.value)">
+       <span class="mut">${u.lib}</span><button class="btn sm" onclick="supBridge(${i})">✕</button></div>`).join("")}
+    <button class="btn sm" onclick="ajBridge()">+ Ajouter un ajustement</button>
+    <div class="mut" style="margin-top:6px">Ex. : − intérêts minoritaires, − provisions (retraite, litiges), + actifs hors exploitation. VT Gordon ${fmt(V.vtGordon)} · VT multiple de sortie ${fmt(V.vtExit)} ${u.suf}.</div></div>
     <div class="card"><div class="sec-titre" style="margin-top:0">Sensibilité — WACC × croissance g</div>
     <table class="tb"><tr><th>${u.lib}</th>${[-0.01,-0.005,0,0.005,0.01].map(dg=>`<th class="num">g ${pc(V.g+dg)}</th>`).join("")}</tr>
     ${V.sensi.map((ligne,i)=>{const dw=[-0.01,-0.005,0,0.005,0.01][i];
       return `<tr class="${dw===0?"total":""}"><td>WACC ${pc(V.wacc+dw)}</td>${ligne.map((x,j)=>`<td class="num" ${dw===0&&j===2?'style="font-weight:700"':""}>${fmt(x)}</td>`).join("")}</tr>`;}).join("")}
     </table></div></div>`;
   /* football field */
+  const methLabels={dcf:"DCF",comp:"Mult. boursiers",trans:"Mult. transactions",ebit:"EV/EBIT",ca:"EV/CA",per:"PER",anr:"Actif net"};
+  const poidsEd=`<div class="sec-titre">Pondération des méthodes (valeur retenue)</div>
+    <div class="row" style="flex-wrap:wrap;gap:10px">${V.methodes.map(m=>`<span class="ctl-h"><span class="mut" style="margin-right:4px">${methLabels[m.id]||m.id}</span><input type="text" inputmode="decimal" class="nin" style="width:48px" value="${V.poids[m.id]||0}" onchange="hValoM('poids','${m.id}',this.value,1)"><span class="mut">%</span></span>`).join("")}</div>`;
   const ff=`<div class="card">
     <div class="sec-titre" style="margin-top:0">Synthèse des méthodes — fourchette de valorisation</div>
-    <div style="height:${60+V.methodes.length*52}px"><canvas id="gFF"></canvas></div>
+    <div style="height:${60+V.methodes.length*46}px"><canvas id="gFF"></canvas></div>
+    ${poidsEd}
     <div class="row" style="margin-top:10px">
-      <span class="chip" style="background:#172554;color:#fff">Fourchette retenue :
-        ${fmt(V.fourchette.min)} – ${fmt(V.fourchette.max)} ${u.suf}</span>
-      <span class="chip ok">Valeur centrale (DCF/multiples) : ${fmt(V.fourchette.retenue)} ${u.suf}</span></div>
+      <span class="chip" style="background:#172554;color:#fff">Fourchette (méthodes pondérées) : ${fmt(V.fourchette.min)} – ${fmt(V.fourchette.max)} ${u.suf}</span>
+      <span class="chip ok">Valeur retenue (moyenne pondérée) : ${fmt(V.fourchette.retenue)} ${u.suf}</span></div>
   </div>`;
   return `<h1>Valorisation</h1>${pillsScenarios(H)}${resume}${VALO_HYP_OUVERT?capm:""}${fcffT}${bridge}${ff}`;
 }

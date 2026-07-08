@@ -78,12 +78,23 @@ function hypothesesBP(etats, lignesPerso){
     is_taux:born(rao>0?-v.IMPOTS[a1]/rao:0.30,0.15,0.40,0.30),
     /* valorisation */
     valo:{
-      rf:0.06, primeMarche:0.07, beta:1.0, primeSpecifique:0.03,
+      rf:0.06, primeMarche:0.07, beta:1.0,
+      /* build-up du coût des fonds propres adapté PME OHADA : prime de risque pays
+         (spread souverain), prime de taille, prime d'illiquidité (non cotée) */
+      primePays:0.03, primeTaille:0.02, primeIlliquidite:0.015,
       coutDette:born(detteH>0?fraisFinH/detteH:0.08,0.02,0.2,0.08),
       poidsDette:born(detteH/((detteH+Math.max(v.CAPITAUX_PROPRES[a1],1))||1),0,0.8,0.2),
       g:0.03,
+      /* valeur terminale : "gordon" (croissance perpétuelle g) ou "exit" (multiple de sortie EV/EBITDA) */
+      tvMode:"gordon", exitMultiple:5.5,
       multiplesComparables:{min:4,central:5.5,max:7},
       multiplesTransactions:{min:5,central:6.5,max:8},
+      /* multiples élargis (valeur centrale) : EV/EBIT, EV/CA, PER (cours/bénéfice) */
+      multEbit:8, multCA:1.2, per:10,
+      /* pondération des méthodes pour la valeur retenue (en %) */
+      poids:{dcf:40,comp:20,trans:15,ebit:5,ca:0,per:5,anr:15},
+      /* pont valeur d'entreprise → fonds propres (ajustements hors dette nette) */
+      bridge:[],
       anrAjustements:[]
     }
   };
@@ -246,7 +257,8 @@ function valoriserBP(etats,H,P){
   const V=H.valo, v=etats.v, A0=etats.annees, a1=A0[A0.length-1];
   const AP=P.annees, N=AP.length;
   const t=H.is_taux;
-  const ke=V.rf+V.beta*V.primeMarche+V.primeSpecifique;
+  const primeSpe=(V.primePays||0)+(V.primeTaille||0)+(V.primeIlliquidite||0)+((V.primePays===undefined&&V.primeSpecifique)?V.primeSpecifique:0);
+  const ke=V.rf+V.beta*V.primeMarche+primeSpe;
   const kd=V.coutDette*(1-t);
   const wacc=ke*(1-V.poidsDette)+kd*V.poidsDette;
   /* FCFF ligne à ligne */
@@ -263,12 +275,19 @@ function valoriserBP(etats,H,P){
   const pv={};let sommePv=0;
   AP.forEach((a,i)=>{pv[a]=fcff[a]/Math.pow(1+wacc,i+1);sommePv+=pv[a];});
   const fcffN=fcff[AP[N-1]];
-  const vt=wacc>V.g?fcffN*(1+V.g)/(wacc-V.g):0;
+  const ebitdaTerm=P.pl.EBITDA[AP[N-1]];
+  /* valeur terminale : Gordon (croissance g) vs multiple de sortie (EV/EBITDA) */
+  const vtGordon=wacc>V.g?fcffN*(1+V.g)/(wacc-V.g):0;
+  const vtExit=(V.exitMultiple||0)*ebitdaTerm;
+  const tvMode=V.tvMode==="exit"?"exit":"gordon";
+  const vt=tvMode==="exit"?vtExit:vtGordon;
   const vtPv=vt/Math.pow(1+wacc,N);
   const ev=sommePv+vtPv;
   const detteNette=-v.DETTES_FINANCIERES[a1]-v.TRESORERIE_NETTE[a1];
-  const equityDcf=ev-detteNette;
-  /* sensibilité WACC × g */
+  /* pont EV → fonds propres : ajustements hors dette nette (minoritaires, provisions, actifs hors exploitation…) */
+  const bridgeAjust=(V.bridge||[]).reduce((s,x)=>s+(+x.montant||0),0);
+  const equityDcf=ev-detteNette+bridgeAjust;
+  /* sensibilité WACC × g (valeur terminale de Gordon) — pont dette nette + ajustements inclus */
   const sensi=[];
   [-0.01,-0.005,0,0.005,0.01].forEach(dw=>{
     const ligne=[];
@@ -276,29 +295,39 @@ function valoriserBP(etats,H,P){
       const w=wacc+dw,g=V.g+dg;
       let s=0;AP.forEach((a,i)=>s+=fcff[a]/Math.pow(1+w,i+1));
       const tv=w>g?fcffN*(1+g)/(w-g)/Math.pow(1+w,N):0;
-      ligne.push(s+tv-detteNette);
+      ligne.push(s+tv-detteNette+bridgeAjust);
     });
     sensi.push(ligne);
   });
-  /* méthodes complémentaires */
+  /* méthodes analogiques */
   const ebitdaRef=v.EBITDA[a1]+((V.useAdj&&isFinite(V.adjEbitda))?V.adjEbitda:0);
+  const ebitRef=v.EBIT[a1], caRef=v.CA[a1], rnRef=v.RESULTAT_NET[a1];
   const mc=V.multiplesComparables, mt=V.multiplesTransactions;
-  const eqComp=m=>m*ebitdaRef-detteNette;
+  const eqEV=(m,ref)=>m*ref-detteNette+bridgeAjust;   /* multiple d'EV → fonds propres */
+  const eqComp=m=>eqEV(m,ebitdaRef);
+  const band=(f,c)=>({min:f(c*0.85),central:f(c),max:f(c*1.15)});
   const anrBase=v.CAPITAUX_PROPRES[a1];
   const anrAjust=(V.anrAjustements||[]).reduce((s,x)=>s+(+x.montant||0),0);
   const methodes=[
     {id:"dcf",lib:"DCF (flux actualisés)",min:Math.min(...sensi.flat()),max:Math.max(...sensi.flat()),central:equityDcf},
-    {id:"comp",lib:"Multiples boursiers ("+mc.min+"x – "+mc.max+"x EBITDA)",min:eqComp(mc.min),max:eqComp(mc.max),central:eqComp(mc.central)},
-    {id:"trans",lib:"Multiples de transactions ("+mt.min+"x – "+mt.max+"x EBITDA)",min:eqComp(mt.min),max:eqComp(mt.max),central:eqComp(mt.central)},
+    {id:"comp",lib:"Multiples boursiers ("+mc.min+"–"+mc.max+"× EBITDA)",min:eqComp(mc.min),max:eqComp(mc.max),central:eqComp(mc.central)},
+    {id:"trans",lib:"Multiples de transactions ("+mt.min+"–"+mt.max+"× EBITDA)",min:eqComp(mt.min),max:eqComp(mt.max),central:eqComp(mt.central)},
+    Object.assign({id:"ebit",lib:(V.multEbit||0)+"× EV/EBIT"},band(m=>eqEV(m,ebitRef),V.multEbit||0)),
+    Object.assign({id:"ca",lib:(V.multCA||0)+"× EV/chiffre d'affaires"},band(m=>eqEV(m,caRef),V.multCA||0)),
+    Object.assign({id:"per",lib:"PER "+(V.per||0)+"× (cours / bénéfice)"},band(m=>m*rnRef+bridgeAjust,V.per||0)),
     {id:"anr",lib:"Actif net "+(anrAjust?"réévalué":"comptable"),min:anrBase+Math.min(0,anrAjust),max:anrBase+Math.max(0,anrAjust),central:anrBase+anrAjust}
   ];
-  const centraux=methodes.map(m=>m.central);
-  return {ke,kd,wacc,g:V.g,fcff,detailFcff,pv,sommePv,vt,vtPv,ev,detteNette,
-    equityDcf,ebitdaRef,sensi,methodes,
+  /* valeur retenue = moyenne pondérée des valeurs centrales (poids en %) */
+  const poids=V.poids||{dcf:40,comp:20,trans:15,ebit:5,ca:0,per:5,anr:15};
+  const wsum=methodes.reduce((s,m)=>s+(poids[m.id]||0),0);
+  const retenue=wsum>0?methodes.reduce((s,m)=>s+(poids[m.id]||0)*m.central,0)/wsum:(equityDcf+eqComp(mc.central))/2;
+  const ponderees=methodes.filter(m=>(poids[m.id]||0)>0).map(m=>m.central);
+  const centrauxAll=methodes.map(m=>m.central);
+  return {ke,kd,wacc,g:V.g,primeSpe,fcff,detailFcff,pv,sommePv,vt,vtGordon,vtExit,tvMode,ebitdaTerm,vtPv,ev,detteNette,bridgeAjust,
+    equityDcf,ebitdaRef,ebitRef,caRef,rnRef,sensi,methodes,poids,
     multiple:mc.central,equityMult:eqComp(mc.central),
-    eqMin:Math.min(...centraux),eqMax:Math.max(...centraux),
-    fourchette:{min:Math.min(...centraux),max:Math.max(...centraux),
-      retenue:(equityDcf+eqComp(mc.central))/2}};
+    eqMin:Math.min(...centrauxAll),eqMax:Math.max(...centrauxAll),
+    fourchette:{min:Math.min(...(ponderees.length?ponderees:centrauxAll)),max:Math.max(...(ponderees.length?ponderees:centrauxAll)),retenue}};
 }
 
 /* exports Node (tests) */
