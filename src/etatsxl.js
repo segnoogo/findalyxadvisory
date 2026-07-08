@@ -130,11 +130,9 @@ function construireEtatsFormules(wb){
   rB.BFRE=ligneF(wsB,"BFR d'exploitation",
     somme([rB.STK,rB.CLI,rB.AVF,rB.FRN,rB.CAV,rB.DFI,rB.DSO,
       ...persoBA.map((x,k)=>rB["PBA"+k]),...persoBP.map((x,k)=>rB["PBP"+k])]),{st:1});
-  bs("ACR","Autres créances",["AUTRES_CREANCES"]);
-  bs("ADT","Autres dettes",["AUTRES_DETTES"]);
-  bs("HAA","Créances HAO",["HAO_ACTIF"]);
-  bs("HAP","Dettes HAO",["HAO_PASSIF"]);
-  rB.BFRH=ligneF(wsB,"BFR hors exploitation",somme([rB.ACR,rB.ADT,rB.HAA,rB.HAP]),{st:1});
+  bs("ACR","Autres créances",["AUTRES_CREANCES","HAO_ACTIF"]);
+  bs("ADT","Autres dettes",["AUTRES_DETTES","HAO_PASSIF"]);
+  rB.BFRH=ligneF(wsB,"BFR hors exploitation",somme([rB.ACR,rB.ADT]),{st:1});
   rB.BFR=ligneF(wsB,"Besoin en fonds de roulement global",somme([rB.BFRE,rB.BFRH]),{st:1});
   bs("TN","Trésorerie nette",["TRESO_ACTIF","TRESO_PASSIF",...persoDe2("TRESORERIE_NETTE").map(x=>x.code)],"+",{st:1});
   bs("PRV","Provisions pour risques et charges",["PROVISIONS_RC"]);
@@ -182,9 +180,9 @@ function construireEtatsFormules(wb){
       const F=(row,f)=>{const cl=ws.getCell(row,c);cl.value={formula:f};cl.numFmt=NF;};
       F(rt.ZA,i===0?`${refB}!${L(3)}${rB.TN}`:`${L(c-1)}${rt.ZG}`);
       F(rt.FA,`${P_(rP.RN,i)}-${dR(rB.AMC,i)}-${dR(rB.PRV,i)}`);
-      F(rt.VAR_CREANCES,`-(${dR(rB.CLI,i)}+${dR(rB.ACR,i)}+${dR(rB.AVF,i)}+${dR(rB.HAA,i)}${persoBA.map((x,k)=>"+"+dR(rB["PBA"+k],i)).join("")})`);
+      F(rt.VAR_CREANCES,`-(${dR(rB.CLI,i)}+${dR(rB.ACR,i)}+${dR(rB.AVF,i)}${persoBA.map((x,k)=>"+"+dR(rB["PBA"+k],i)).join("")})`);
       F(rt.FC,`-${dR(rB.STK,i)}`);
-      F(rt.FE,`-(${dR(rB.FRN,i)}+${dR(rB.CAV,i)}+${dR(rB.DSO,i)}+${dR(rB.DFI,i)}+${dR(rB.ADT,i)}+${dR(rB.HAP,i)}${persoBP.map((x,k)=>"+"+dR(rB["PBP"+k],i)).join("")})`);
+      F(rt.FE,`-(${dR(rB.FRN,i)}+${dR(rB.CAV,i)}+${dR(rB.DSO,i)}+${dR(rB.DFI,i)}+${dR(rB.ADT,i)}${persoBP.map((x,k)=>"+"+dR(rB["PBP"+k],i)).join("")})`);
       F(rt.ZB,`SUM(${Lc}${rt.FA}:${Lc}${rt.FE})`);
       F(rt.ACQUIS_IMMO,`-(${dR(rB.BRI,i)}+${dR(rB.BRC,i)}+${dR(rB.BRF,i)})`);
       F(rt.CESSION_IMMO,`0`);

@@ -2511,15 +2511,14 @@ const DB_BS=[
  {"code": "CLIENTS", "lib": "Créances clients", "section": "BFR"},
  {"code": "CLIENTS_AVANCES", "lib": "Clients, avances reçues", "section": "BFR"},
  {"code": "AVANCES_FRS", "lib": "Fournisseurs, avances versées", "section": "BFR"},
- {"code": "AUTRES_CREANCES", "lib": "Autres créances", "section": "BFR"},
  {"code": "FOURNISSEURS", "lib": "Dettes fournisseurs", "section": "BFR"},
  {"code": "DETTES_SOCIALES", "lib": "Dettes sociales", "section": "BFR"},
  {"code": "DETTES_FISCALES", "lib": "Dettes fiscales", "section": "BFR"},
- {"code": "AUTRES_DETTES", "lib": "Autres dettes d'exploitation", "section": "BFR"},
- {"code": "BFR_EXPLOITATION", "lib": "BFR d'exploitation", "type": "sous_total", "somme": ["STOCKS", "CLIENTS", "CLIENTS_AVANCES", "AVANCES_FRS", "AUTRES_CREANCES", "FOURNISSEURS", "DETTES_SOCIALES", "DETTES_FISCALES", "AUTRES_DETTES"], "section": "BFR"},
- {"code": "HAO_ACTIF", "lib": "Créances HAO", "section": "BFR"},
- {"code": "HAO_PASSIF", "lib": "Dettes HAO", "section": "BFR"},
- {"code": "BFR_TOTAL", "lib": "Besoin en fonds de roulement total", "type": "sous_total", "somme": ["BFR_EXPLOITATION", "HAO_ACTIF", "HAO_PASSIF"], "section": "BFR"},
+ {"code": "BFR_EXPLOITATION", "lib": "BFR d'exploitation", "type": "sous_total", "somme": ["STOCKS", "CLIENTS", "CLIENTS_AVANCES", "AVANCES_FRS", "FOURNISSEURS", "DETTES_SOCIALES", "DETTES_FISCALES"], "section": "BFR"},
+ {"code": "AUTRES_CREANCES", "lib": "Autres créances", "codes": ["AUTRES_CREANCES", "HAO_ACTIF"], "section": "BFR"},
+ {"code": "AUTRES_DETTES", "lib": "Autres dettes", "codes": ["AUTRES_DETTES", "HAO_PASSIF"], "section": "BFR"},
+ {"code": "BFR_HORS_EXPL", "lib": "BFR hors exploitation", "type": "sous_total", "somme": ["AUTRES_CREANCES", "AUTRES_DETTES"], "section": "BFR"},
+ {"code": "BFR_TOTAL", "lib": "Besoin en fonds de roulement global", "type": "sous_total", "somme": ["BFR_EXPLOITATION", "BFR_HORS_EXPL"], "section": "BFR"},
  {"code": "TRESO_ACTIF", "lib": "Trésorerie - actif (banques, caisse)", "section": "TRESORERIE"},
  {"code": "TRESO_PASSIF", "lib": "Trésorerie - passif (découverts)", "section": "TRESORERIE"},
  {"code": "TRESORERIE_NETTE", "lib": "Trésorerie nette", "type": "sous_total", "somme": ["TRESO_ACTIF", "TRESO_PASSIF"], "section": "TRESORERIE"},
@@ -2779,8 +2778,8 @@ async function genererDatabook(){
     const achats=c=>`(-${PL("COUTS_DIRECTS",c)})`;
     const opex=c=>`(${PL("CHARGES_PERSONNEL",c)}-${PL("FRAIS_GENERAUX",c)})`;   /* = -OPEX (hors personnel) */
     const bfr=c=>BS("BFR_TOTAL",c);
-    const actifCirc=c=>`(${BS("STOCKS",c)}+${BS("CLIENTS",c)}+${BS("AUTRES_CREANCES",c)}+${BS("AVANCES_FRS",c)}+${BS("HAO_ACTIF",c)}+${BS("TRESO_ACTIF",c)})`;
-    const passifCirc=c=>`(-(${BS("FOURNISSEURS",c)}+${BS("CLIENTS_AVANCES",c)}+${BS("DETTES_SOCIALES",c)}+${BS("DETTES_FISCALES",c)}+${BS("AUTRES_DETTES",c)}+${BS("HAO_PASSIF",c)}+${BS("TRESO_PASSIF",c)}))`;
+    const actifCirc=c=>`(${BS("STOCKS",c)}+${BS("CLIENTS",c)}+${BS("AUTRES_CREANCES",c)}+${BS("AVANCES_FRS",c)}+${BS("TRESO_ACTIF",c)})`;
+    const passifCirc=c=>`(-(${BS("FOURNISSEURS",c)}+${BS("CLIENTS_AVANCES",c)}+${BS("DETTES_SOCIALES",c)}+${BS("DETTES_FISCALES",c)}+${BS("AUTRES_DETTES",c)}+${BS("TRESO_PASSIF",c)}))`;
     const totalActif=c=>`(${BS("ACTIFS_IMMOBILISES",c)}+${actifCirc(c)})`;
     const items=[
       {lab:"ROE (rentabilité des capitaux propres)",unit:"%",f:c=>`IF(${cp(c)}<=0,"",${rn(c)}/${cp(c)})`},
@@ -2819,10 +2818,10 @@ async function genererDatabook(){
       ["Capacité d'autofinancement globale (CAFG)",
        j=>`${pl("RESULTAT_NET",j)}-${delta("AMORT_DEPREC",j)}-${delta("PROVISIONS_RC",j)}`],
       ["Variation des créances",
-       j=>`-(${delta("CLIENTS",j)}+${delta("AUTRES_CREANCES",j)}+${delta("AVANCES_FRS",j)}+${delta("HAO_ACTIF",j)})`],
+       j=>`-(${delta("CLIENTS",j)}+${delta("AUTRES_CREANCES",j)}+${delta("AVANCES_FRS",j)})`],
       ["Variation des stocks",j=>`-${delta("STOCKS",j)}`],
       ["Variation des dettes d'exploitation",
-       j=>`-(${delta("FOURNISSEURS",j)}+${delta("CLIENTS_AVANCES",j)}+${delta("DETTES_SOCIALES",j)}+${delta("DETTES_FISCALES",j)}+${delta("AUTRES_DETTES",j)}+${delta("HAO_PASSIF",j)})`],
+       j=>`-(${delta("FOURNISSEURS",j)}+${delta("CLIENTS_AVANCES",j)}+${delta("DETTES_SOCIALES",j)}+${delta("DETTES_FISCALES",j)}+${delta("AUTRES_DETTES",j)})`],
       ["Flux de trésorerie des activités opérationnelles","OP"],
       ["Acquisitions d'immobilisations",
        j=>`-((${bs("ACTIFS_IMMOBILISES",j)}-${bs("AMORT_DEPREC",j)})-(${bs("ACTIFS_IMMOBILISES",j,1)}-${bs("AMORT_DEPREC",j,1)}))`],
@@ -6861,11 +6860,9 @@ function construireEtatsFormules(wb){
   rB.BFRE=ligneF(wsB,"BFR d'exploitation",
     somme([rB.STK,rB.CLI,rB.AVF,rB.FRN,rB.CAV,rB.DFI,rB.DSO,
       ...persoBA.map((x,k)=>rB["PBA"+k]),...persoBP.map((x,k)=>rB["PBP"+k])]),{st:1});
-  bs("ACR","Autres créances",["AUTRES_CREANCES"]);
-  bs("ADT","Autres dettes",["AUTRES_DETTES"]);
-  bs("HAA","Créances HAO",["HAO_ACTIF"]);
-  bs("HAP","Dettes HAO",["HAO_PASSIF"]);
-  rB.BFRH=ligneF(wsB,"BFR hors exploitation",somme([rB.ACR,rB.ADT,rB.HAA,rB.HAP]),{st:1});
+  bs("ACR","Autres créances",["AUTRES_CREANCES","HAO_ACTIF"]);
+  bs("ADT","Autres dettes",["AUTRES_DETTES","HAO_PASSIF"]);
+  rB.BFRH=ligneF(wsB,"BFR hors exploitation",somme([rB.ACR,rB.ADT]),{st:1});
   rB.BFR=ligneF(wsB,"Besoin en fonds de roulement global",somme([rB.BFRE,rB.BFRH]),{st:1});
   bs("TN","Trésorerie nette",["TRESO_ACTIF","TRESO_PASSIF",...persoDe2("TRESORERIE_NETTE").map(x=>x.code)],"+",{st:1});
   bs("PRV","Provisions pour risques et charges",["PROVISIONS_RC"]);
@@ -6913,9 +6910,9 @@ function construireEtatsFormules(wb){
       const F=(row,f)=>{const cl=ws.getCell(row,c);cl.value={formula:f};cl.numFmt=NF;};
       F(rt.ZA,i===0?`${refB}!${L(3)}${rB.TN}`:`${L(c-1)}${rt.ZG}`);
       F(rt.FA,`${P_(rP.RN,i)}-${dR(rB.AMC,i)}-${dR(rB.PRV,i)}`);
-      F(rt.VAR_CREANCES,`-(${dR(rB.CLI,i)}+${dR(rB.ACR,i)}+${dR(rB.AVF,i)}+${dR(rB.HAA,i)}${persoBA.map((x,k)=>"+"+dR(rB["PBA"+k],i)).join("")})`);
+      F(rt.VAR_CREANCES,`-(${dR(rB.CLI,i)}+${dR(rB.ACR,i)}+${dR(rB.AVF,i)}${persoBA.map((x,k)=>"+"+dR(rB["PBA"+k],i)).join("")})`);
       F(rt.FC,`-${dR(rB.STK,i)}`);
-      F(rt.FE,`-(${dR(rB.FRN,i)}+${dR(rB.CAV,i)}+${dR(rB.DSO,i)}+${dR(rB.DFI,i)}+${dR(rB.ADT,i)}+${dR(rB.HAP,i)}${persoBP.map((x,k)=>"+"+dR(rB["PBP"+k],i)).join("")})`);
+      F(rt.FE,`-(${dR(rB.FRN,i)}+${dR(rB.CAV,i)}+${dR(rB.DSO,i)}+${dR(rB.DFI,i)}+${dR(rB.ADT,i)}${persoBP.map((x,k)=>"+"+dR(rB["PBP"+k],i)).join("")})`);
       F(rt.ZB,`SUM(${Lc}${rt.FA}:${Lc}${rt.FE})`);
       F(rt.ACQUIS_IMMO,`-(${dR(rB.BRI,i)}+${dR(rB.BRC,i)}+${dR(rB.BRF,i)})`);
       F(rt.CESSION_IMMO,`0`);
