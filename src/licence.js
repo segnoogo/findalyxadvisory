@@ -118,7 +118,25 @@ function licEcran(r){
     nocrypto:"La clé propriétaire nécessite un navigateur récent (Chrome ou Edge).",
     produit:"Ce code correspond à un autre produit Findalyx (liasse fiscale). Contactez Findalyx pour une licence Conseil ou un bundle."};
   document.getElementById("app").innerHTML=`
-  <div class="lgn" style="--bgL:url('${LOGO_LOGIN_BG}');--bgR:url('${LOGO_LOGIN_BG2}')">
+  <div class="lgn">
+    <svg class="lgn-illus" viewBox="0 0 1440 900" preserveAspectRatio="xMidYMid slice" fill="none" stroke="#172554" aria-hidden="true">
+      <circle cx="150" cy="140" r="70" stroke-width="20" opacity=".5" stroke-dasharray="300 140"/>
+      <circle cx="150" cy="140" r="70" stroke-width="20" stroke="#FA6706" opacity=".7" stroke-dasharray="95 345"/>
+      <circle cx="1295" cy="140" r="64" stroke-width="18" opacity=".45"/>
+      <path d="M1295,140 L1295,76 A64,64 0 0,1 1352,170 Z" fill="#224289" stroke="none" opacity=".22"/>
+      <polyline points="70,520 140,468 195,500 262,430" stroke-width="3.5" opacity=".5"/>
+      <path d="M232,430 262,430 262,460" stroke-width="3.5" opacity=".5"/>
+      <g stroke="#224289" stroke-width="16" opacity=".45">
+        <line x1="110" y1="800" x2="110" y2="712"/><line x1="148" y1="800" x2="148" y2="668"/>
+        <line x1="186" y1="800" x2="186" y2="734"/><line x1="224" y1="800" x2="224" y2="628"/>
+        <line x1="262" y1="800" x2="262" y2="690"/>
+      </g>
+      <line x1="92" y1="800" x2="280" y2="800" stroke-width="2.5" opacity=".4"/>
+      <circle cx="1320" cy="450" r="44" stroke-width="10" opacity=".4"/>
+      <circle cx="1320" cy="450" r="44" stroke-width="10" stroke="#FA6706" opacity=".55" stroke-dasharray="150 130"/>
+      <path d="M960,820 1035,762 1110,790 1185,706 1260,742 1335,662 1400,690" stroke="#224289" stroke-width="3.5" opacity=".5"/>
+      <path d="M960,820 1035,762 1110,790 1185,706 1260,742 1335,662 1400,690 1400,860 960,860 Z" fill="#224289" stroke="none" opacity=".08"/>
+    </svg>
     <div class="lgn-carte">
       <div class="lgn-promo">
         <svg class="lgn-bg" viewBox="0 0 400 640" preserveAspectRatio="xMidYMid slice" fill="none" stroke="#fff" aria-hidden="true">
