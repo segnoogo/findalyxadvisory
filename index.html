@@ -4322,7 +4322,7 @@ function rendre(){
   else if(VUE==="etats") el.innerHTML=vueEtats();
   else if(VUE==="analyse"){el.innerHTML=vueAnalyse();dessinerGraphs();}
   else if(VUE==="ratios") el.innerHTML=vueRatios();
-  else if(VUE==="bp") el.innerHTML=vueBP();
+  else if(VUE==="bp"){el.innerHTML=vueBP();if(SOUS_BP==="analyse")dessinerBPGraphs();}
   else if(VUE==="valo"){el.innerHTML=vueValo();dessinerFootball();}
   else if(VUE==="params") el.innerHTML=vueParams();
   else if(VUE==="licence") el.innerHTML=vueLicence();
@@ -5749,7 +5749,7 @@ function vueBP(){
   if(!ETATS) return '<div class="mut">Importez d\'abord des balances.</div>';
   const H=assurerBP(),P=projeterBP(ETATS,H);
   const A0=ETATS.annees,a1=A0[A0.length-1],AP=P.annees,aF=AP[AP.length-1],v=ETATS.v;
-  const tabs=[["hyp","Hypothèses"],["pl","P&L prévisionnel"],["bs","Bilan prévisionnel"],["tft","Flux de trésorerie"],["dette","Dette"]]
+  const tabs=[["hyp","Hypothèses"],["pl","P&L prévisionnel"],["bs","Bilan prévisionnel"],["tft","Flux de trésorerie"],["dette","Dette"],["analyse","Analyse & covenants"]]
     .map(([id,lab])=>`<button class="btn ${SOUS_BP===id?"primary":""}" onclick="SOUS_BP='${id}';rendre()">${lab}</button>`).join(" ");
   const kpis=`<div class="kpis">
     ${kpiCard("CA fin de plan (FY"+String(aF).slice(-2)+"p)",fmt(P.pl.CA[aF])+" "+uni().suf,"",fdelta(v.CA[a1],P.pl.CA[aF]),"chart","#224289")}
@@ -5762,6 +5762,7 @@ function vueBP(){
   else if(SOUS_BP==="pl") corps=vueBPPl(P);
   else if(SOUS_BP==="bs") corps=vueBPBs(P);
   else if(SOUS_BP==="tft") corps=vueBPTft(P);
+  else if(SOUS_BP==="analyse") corps=vueBPAnalyse(P);
   else corps=vueBPDette(P);
   const vueBtn=SOUS_BP==="pl"?`<div class="segvue">
     <button class="${PL_VUE==="synth"?"on":""}" onclick="PL_VUE='synth';rendre()">Synthétique</button>
@@ -5963,6 +5964,107 @@ function vueBPDette(P){
     ${AP.map(a=>`<th class="num">FY${String(a).slice(-2)}p</th>`).join("")}</tr>${lignes}</table></div></div>
   <div class="mut" style="margin-top:8px">Dette existante amortie sur sa durée résiduelle ; chaque nouvel emprunt est amorti
   linéairement sur sa durée à partir de l'année suivant son tirage. Les dividendes versés apparaissent dans le TFT.</div>`;
+}
+
+/* ---------- Analyse : seuil de rentabilité, covenants, sensibilité ---------- */
+function vueBPAnalyse(P){
+  const AP=P.annees,H=assurerBP(),u=uni(),aF=AP[AP.length-1];
+  const th=`<th>${u.lib}</th>${AP.map(a=>`<th class="num">FY${String(a).slice(-2)}p</th>`).join("")}`;
+  const x1=x=>(x===null||!isFinite(x))?"n.s.":(Math.round(x*100)/100).toLocaleString("fr-FR",{minimumFractionDigits:0,maximumFractionDigits:2})+"×";
+  const pc=x=>(x===null||!isFinite(x))?"n.s.":Math.round(x*100)+" %";
+  const jr=x=>(x===null||!isFinite(x))?"n.s.":Math.round(x)+" j";
+  const cell=(txt,ok)=>`<td class="num"${ok===true?' style="color:#16904E;font-weight:700"':ok===false?' style="color:#c0392b;font-weight:700"':''}>${txt}</td>`;
+
+  /* --- Seuil de rentabilité (point mort d'exploitation, EBIT=0) --- */
+  const sr=a=>{const ca=P.pl.CA[a],taux=ca?P.pl.MARGE_BRUTE[a]/ca:0;
+    const fixes=-(P.pl.AUTRES_PROD[a]+P.pl.OPEX_TOTAL[a]+P.pl.CHARGES_PERSONNEL[a]+P.pl.DA[a]);
+    const seuil=taux?fixes/taux:0;
+    return{ca,taux,fixes,seuil,pm:ca?seuil/ca*360:NaN,marge:ca?(ca-seuil)/ca:NaN,levier:P.pl.EBIT[a]?P.pl.MARGE_BRUTE[a]/P.pl.EBIT[a]:NaN};};
+  const rowSR=(lib,f,fmtf,st)=>`<tr class="${st||""}"><td>${lib}</td>${AP.map(a=>`<td class="num">${fmtf(f(sr(a)))}</td>`).join("")}</tr>`;
+  const tabSR=`<div class="card" style="padding:0">
+    <div class="bande">${esc(DOSSIER.societe.toUpperCase())} — Seuil de rentabilité (point mort d'exploitation)</div>
+    <div class="tscroll"><table class="tb etat"><tr>${th}</tr>
+    ${rowSR("Chiffre d'affaires",x=>x.ca,fmt)}
+    ${rowSR("Taux de marge sur coûts variables",x=>x.taux,pc)}
+    ${rowSR("Charges fixes (nettes des autres produits)",x=>x.fixes,fmt)}
+    ${rowSR("Seuil de rentabilité (CA critique)",x=>x.seuil,fmt,"total")}
+    ${rowSR("Point mort (en jours de CA)",x=>x.pm,jr)}
+    ${rowSR("Marge de sécurité",x=>x.marge,pc)}
+    ${rowSR("Levier opérationnel",x=>x.levier,x1)}
+    </table></div>
+    <div class="mut" style="margin:8px 12px">Point mort où le résultat d'exploitation s'annule : coûts directs = charges variables, tout le reste (frais généraux, personnel, dotations) = charges fixes.</div></div>`;
+
+  /* --- Ratios prévisionnels & covenants bancaires --- */
+  const cov=a=>{
+    const service=(P.dette[a].remboursement||0)+(P.dette[a].interets||0)+(P.dette[a].interetsCT||0);
+    const cfads=P.pl.EBITDA[a]+P.pl.IS[a]+(P.tft[a]?P.tft[a].DBFR:0);
+    const detteFin=P.bs.DETTE[a]+(P.bs.LIGNE_CT[a]||0);
+    const detteNette=detteFin-(P.bs.TRESO_ACTIVE[a]!==undefined?P.bs.TRESO_ACTIVE[a]:Math.max(0,P.bs.TRESO[a]));
+    const acCirc=P.bs.STOCKS[a]+P.bs.CLIENTS[a]+P.bs.AUTRES_CREANCES[a]+(P.bs.TRESO_ACTIVE[a]||Math.max(0,P.bs.TRESO[a]));
+    const paCirc=-(P.bs.FOURNISSEURS[a]+P.bs.DETTES_FISC_SOC[a]+P.bs.AUTRES_DETTES[a])+(P.bs.LIGNE_CT[a]||0);
+    return {dscr:service>0.5?cfads/service:null, lev:P.pl.EBITDA[a]>0?detteNette/P.pl.EBITDA[a]:null,
+      gear:P.bs.CP[a]>0?detteFin/P.bs.CP[a]:null, couv:P.pl.FRAIS_FIN[a]<0?P.pl.EBITDA[a]/-P.pl.FRAIS_FIN[a]:null,
+      liq:paCirc>0?acCirc/paCirc:null};
+  };
+  const rowCov=(lib,key,test)=>`<tr><td>${lib}</td>${AP.map(a=>{const val=cov(a)[key];return cell(x1(val),val==null?null:test(val));}).join("")}</tr>`;
+  const tabCov=`<div class="card" style="padding:0;margin-top:14px">
+    <div class="bande">${esc(DOSSIER.societe.toUpperCase())} — Ratios prévisionnels & covenants bancaires</div>
+    <div class="tscroll"><table class="tb etat"><tr>${th}</tr>
+    ${rowCov("DSCR — couverture du service de la dette","dscr",v=>v>=1.2)}
+    ${rowCov("Dette nette / EBITDA","lev",v=>v<=3.5)}
+    ${rowCov("Gearing (dette fin. / capitaux propres)","gear",v=>v<=1.5)}
+    ${rowCov("Couverture des intérêts (EBITDA / frais fin.)","couv",v=>v>=3)}
+    ${rowCov("Liquidité générale","liq",v=>v>=1)}
+    </table></div>
+    <div class="mut" style="margin:8px 12px">Vert = seuil bancaire usuel respecté (DSCR ≥ 1,2 · dette nette/EBITDA ≤ 3,5 · gearing ≤ 1,5 · couverture des intérêts ≥ 3 · liquidité ≥ 1). CFADS = EBITDA − impôt − variation du BFR ; service de la dette = remboursements + intérêts (dette et découvert).</div></div>`;
+
+  /* --- Sensibilité de la trésorerie fin de plan (tornado) --- */
+  function reproj(mut,s){const H2=JSON.parse(JSON.stringify(H));mut(H2,s);const P2=projeterBP(ETATS,H2);return P2.bs.TRESO[P2.annees[P2.annees.length-1]];}
+  const drivers=[
+    {lib:"Croissance annuelle du CA",unit:"±3 pts",mut:(H2,s)=>H2.caCroiss=H.caCroiss.map(x=>x+s*0.03)},
+    {lib:"Coûts directs (% du CA)",unit:"±2 pts",mut:(H2,s)=>H2.coutsDirects_pct=H.coutsDirects_pct+s*0.02},
+    {lib:"Délai clients (DSO)",unit:"±15 j",mut:(H2,s)=>H2.dso=H.dso+s*15},
+    {lib:"Investissements (CAPEX)",unit:"±20 %",mut:(H2,s)=>H2.capex=H.capex.map(x=>x*(1+s*0.2))},
+    {lib:"Taux d'intérêt de la dette",unit:"±2 pts",mut:(H2,s)=>H2.dette_taux=H.dette_taux+s*0.02}
+  ];
+  const base=P.bs.TRESO[aF];
+  const sens=drivers.map(d=>{const lo=reproj(d.mut,-1),hi=reproj(d.mut,1);return {lib:d.lib,unit:d.unit,mn:Math.min(lo,hi),mx:Math.max(lo,hi),amp:Math.abs(hi-lo)};}).sort((a,b)=>b.amp-a.amp);
+  const tabSens=`<div class="card" style="margin-top:14px">
+    <div class="sec-titre" style="margin-top:0">Sensibilité de la trésorerie fin de plan (FY${String(aF).slice(-2)}p)</div>
+    <div class="mut" style="margin-bottom:8px">Trésorerie nette centrale : <b>${fmt(base)} ${u.suf}</b>. Impact d'une variation isolée de chaque hypothèse (les autres inchangées).</div>
+    <table class="tb"><tr><th>Hypothèse</th><th>Variation</th><th class="num">Trésorerie basse</th><th class="num">Trésorerie haute</th><th class="num">Amplitude</th></tr>
+    ${sens.map(s=>`<tr><td>${s.lib}</td><td class="mut">${s.unit}</td><td class="num">${fmt(s.mn)}</td><td class="num">${fmt(s.mx)}</td><td class="num" style="font-weight:700">${fmt(s.amp)}</td></tr>`).join("")}
+    </table></div>`;
+
+  const graphs=`<div class="deux" style="margin-top:14px">
+    <div class="card"><b>Chiffre d'affaires, EBITDA et résultat net</b><div style="height:260px;margin-top:8px"><canvas id="g_bp1"></canvas></div></div>
+    <div class="card"><b>Trésorerie nette et dette financière</b><div style="height:260px;margin-top:8px"><canvas id="g_bp2"></canvas></div></div>
+  </div>`;
+
+  return tabSR+tabCov+tabSens+graphs;
+}
+function dessinerBPGraphs(){
+  if(!ETATS||typeof Chart==="undefined")return;
+  const H=assurerBP(),P=projeterBP(ETATS,H),v=ETATS.v,u=uni();
+  const A0=ETATS.annees,AP=P.annees,yrs=[...A0,...AP],pr=a=>AP.indexOf(a)>=0;
+  const lab=yrs.map(a=>"FY"+String(a).slice(-2)+(pr(a)?"p":""));
+  const ca=yrs.map(a=>(pr(a)?P.pl.CA[a]:v.CA[a])*u.f);
+  const eb=yrs.map(a=>(pr(a)?P.pl.EBITDA[a]:v.EBITDA[a])*u.f);
+  const rn=yrs.map(a=>(pr(a)?P.pl.RN[a]:v.RESULTAT_NET[a])*u.f);
+  const tr=yrs.map(a=>(pr(a)?P.bs.TRESO[a]:v.TRESORERIE_NETTE[a])*u.f);
+  const det=yrs.map(a=>(pr(a)?P.bs.DETTE[a]+(P.bs.LIGNE_CT[a]||0):-v.DETTES_FINANCIERES[a])*u.f);
+  const opt=t=>({responsive:true,maintainAspectRatio:false,plugins:{legend:{position:"bottom",labels:{boxWidth:12}},title:{display:false}},scales:{y:{ticks:{callback:v2=>v2.toLocaleString("fr-FR")}}}});
+  const g1=document.getElementById("g_bp1");
+  if(g1)charts.push(new Chart(g1,{type:"bar",data:{labels:lab,datasets:[
+    {label:"Chiffre d'affaires",data:ca,backgroundColor:"#c9d6ef",order:3},
+    {type:"line",label:"EBITDA",data:eb,borderColor:"#FA6706",backgroundColor:"#FA6706",tension:.3,order:1},
+    {type:"line",label:"Résultat net",data:rn,borderColor:"#16904E",backgroundColor:"#16904E",tension:.3,order:0}
+  ]},options:opt()}));
+  const g2=document.getElementById("g_bp2");
+  if(g2)charts.push(new Chart(g2,{type:"line",data:{labels:lab,datasets:[
+    {label:"Trésorerie nette",data:tr,borderColor:"#16904E",backgroundColor:"rgba(22,144,78,.12)",fill:true,tension:.3},
+    {label:"Dette financière (incl. découvert)",data:det,borderColor:"#c0392b",backgroundColor:"#c0392b",tension:.3}
+  ]},options:opt()}));
 }
 
 /* ---------- Valorisation ---------- */

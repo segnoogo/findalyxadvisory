@@ -231,7 +231,7 @@ function rendre(){
   else if(VUE==="etats") el.innerHTML=vueEtats();
   else if(VUE==="analyse"){el.innerHTML=vueAnalyse();dessinerGraphs();}
   else if(VUE==="ratios") el.innerHTML=vueRatios();
-  else if(VUE==="bp") el.innerHTML=vueBP();
+  else if(VUE==="bp"){el.innerHTML=vueBP();if(SOUS_BP==="analyse")dessinerBPGraphs();}
   else if(VUE==="valo"){el.innerHTML=vueValo();dessinerFootball();}
   else if(VUE==="params") el.innerHTML=vueParams();
   else if(VUE==="licence") el.innerHTML=vueLicence();
