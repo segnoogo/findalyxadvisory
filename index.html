@@ -1418,6 +1418,10 @@ function calculerEtats(tbagr,lignesPerso){
   v.BFR_EXPL=somme(["STOCKS","CLIENTS","CLIENTS_AVANCES","AVANCES_FRS",
                "FOURNISSEURS","DETTES_SOCIALES","DETTES_FISCALES",...P("BFR_ACTIF"),...P("BFR_PASSIF")]);
   v.BFR_HE=somme(["AUTRES_CREANCES","AUTRES_DETTES","HAO_ACTIF","HAO_PASSIF"]);
+  /* le HAO est une notion de résultat (Résultat HAO au P&L) ; au bilan, créances/dettes HAO
+     sont de même nature que les autres créances/dettes → on les y fusionne pour la présentation */
+  v.AUTRES_CREANCES_HE=somme(["AUTRES_CREANCES","HAO_ACTIF"]);
+  v.AUTRES_DETTES_HE=somme(["AUTRES_DETTES","HAO_PASSIF"]);
   v.BFR=somme(["BFR_EXPL","BFR_HE"]);
   v.TRESORERIE_NETTE=somme(["TRESO_ACTIF","TRESO_PASSIF",...P("TRESORERIE_NETTE")]);
   v.ACTIF_NET=somme(["ACTIFS_IMMOBILISES","BFR","TRESORERIE_NETTE","PROVISIONS_RC","DETTES_FINANCIERES",...P("FINANCEMENT")]);
@@ -2232,8 +2236,12 @@ function hypothesesBP(etats, lignesPerso){
     dso:born(v.CLIENTS[a1]/ca1*360,0,360,45),
     dio:born(cd?v.STOCKS[a1]/Math.abs(cd)*360:0,0,360,30),
     dpo:born((cd+op)?-v.FOURNISSEURS[a1]/Math.abs(cd+op)*360:0,0,360,30),
-    autresCreances_pct:born(ca1?(v.AUTRES_CREANCES[a1]+v.AVANCES_FRS[a1])/ca1:0.05,0,1,0.05),
-    autresDettes_pct:born(ca1?-(v.DETTES_SOCIALES[a1]+v.DETTES_FISCALES[a1]+v.AUTRES_DETTES[a1]+v.CLIENTS_AVANCES[a1])/ca1:0.05,0,1,0.05),
+    /* dettes fiscales & sociales = exploitation → projetées en % du CA (croissent avec l'activité) */
+    dettesFiscSoc_pct:born(ca1?-(v.DETTES_SOCIALES[a1]+v.DETTES_FISCALES[a1])/ca1:0.03,0,1,0.03),
+    /* autres créances/dettes = hors exploitation (HAO inclus) → FIGÉES à leur niveau historique.
+       Un BP projette le cycle d'exploitation, pas le résiduel non piloté par l'activité. */
+    autresCreances_fixe:v.AUTRES_CREANCES[a1]+v.AVANCES_FRS[a1]+v.HAO_ACTIF[a1],
+    autresDettes_fixe:v.AUTRES_DETTES[a1]+v.CLIENTS_AVANCES[a1]+v.HAO_PASSIF[a1],
     /* financement */
     dette_taux:born(detteH>0?fraisFinH/detteH:0.08,0.02,0.2,0.08),
     dette_dureeResiduelle:5,
@@ -2270,7 +2278,7 @@ function projeterBP(etats,H,scenario){
   P.pl.OPEX_DETAIL={};
   H.opex.forEach(o=>P.pl.OPEX_DETAIL[o.code]={lib:o.lib,vals:{}});
   ["IMMO_BRUT","AMORT_CUM","IMMO_NET","STOCKS","CLIENTS","AUTRES_CREANCES",
-   "FOURNISSEURS","AUTRES_DETTES","BFR","CP","DETTE","PROVISIONS","TRESO"].forEach(bs);
+   "FOURNISSEURS","DETTES_FISC_SOC","AUTRES_DETTES","BFR","CP","DETTE","PROVISIONS","TRESO"].forEach(bs);
 
   /* point de départ (dernier exercice réel) */
   let caP=v.CA[a1];
@@ -2334,9 +2342,10 @@ function projeterBP(etats,H,scenario){
     const clients=caP*(H.dso+sc.dJours)/360;
     const stocks=Math.abs(cd)*H.dio/360;
     const fournisseurs=-(Math.abs(cd)+Math.abs(opexTot))*H.dpo/360;
-    const autresCr=caP*H.autresCreances_pct;
-    const autresDet=-caP*H.autresDettes_pct;
-    const bfr=clients+stocks+fournisseurs+autresCr+autresDet;
+    const dettesFiscSoc=-caP*H.dettesFiscSoc_pct;   /* exploitation : croît avec le CA */
+    const autresCr=H.autresCreances_fixe;            /* hors exploitation : figé (HAO inclus) */
+    const autresDet=H.autresDettes_fixe;             /* hors exploitation : figé (HAO inclus) */
+    const bfr=clients+stocks+fournisseurs+dettesFiscSoc+autresCr+autresDet;
     /* --- capitaux propres & dividendes --- */
     const div=H.dividendes_payout>0&&rnPrec>0?H.dividendes_payout*rnPrec:0;
     cp=cp+rn-div;
@@ -2356,12 +2365,12 @@ function projeterBP(etats,H,scenario){
     const t=P.tft[a];
     t.FD=-((clients+autresCr)-((P.bs.CLIENTS[AP[i-1]]!==undefined)
         ?(P.bs.CLIENTS[AP[i-1]]+P.bs.AUTRES_CREANCES[AP[i-1]])
-        :(v.CLIENTS[a1]+v.AUTRES_CREANCES[a1]+v.AVANCES_FRS[a1])));
-    t.FE=-(((fournisseurs+autresDet))-((P.bs.FOURNISSEURS[AP[i-1]]!==undefined)
-        ?(P.bs.FOURNISSEURS[AP[i-1]]+P.bs.AUTRES_DETTES[AP[i-1]])
-        :(v.FOURNISSEURS[a1]+v.DETTES_SOCIALES[a1]+v.DETTES_FISCALES[a1]+v.AUTRES_DETTES[a1]+v.CLIENTS_AVANCES[a1])));
-    /* FB : bascule HAO du réel vers 0 en première année de plan */
-    t.FB=i===0?-(0-(v.HAO_ACTIF[a1]+v.HAO_PASSIF[a1])):0;
+        :(v.CLIENTS[a1]+v.AUTRES_CREANCES[a1]+v.AVANCES_FRS[a1]+v.HAO_ACTIF[a1])));
+    t.FE=-(((fournisseurs+dettesFiscSoc+autresDet))-((P.bs.FOURNISSEURS[AP[i-1]]!==undefined)
+        ?(P.bs.FOURNISSEURS[AP[i-1]]+P.bs.DETTES_FISC_SOC[AP[i-1]]+P.bs.AUTRES_DETTES[AP[i-1]])
+        :(v.FOURNISSEURS[a1]+v.DETTES_SOCIALES[a1]+v.DETTES_FISCALES[a1]+v.AUTRES_DETTES[a1]+v.CLIENTS_AVANCES[a1]+v.HAO_PASSIF[a1])));
+    /* autres créances/dettes (HAO inclus) figées → aucune bascule HAO à opérer */
+    t.FB=0;
     t.ZB=t.FA+t.FB+t.FC+t.FD+t.FE;
     t.ZF=t.ZB+t.ZC+t.ZD+t.ZE;
     t.ZG=t.ZA+t.ZF;
@@ -2377,7 +2386,7 @@ function projeterBP(etats,H,scenario){
     P.pl.EBT[a]=ebt;P.pl.IS[a]=impots;P.pl.RN[a]=rn;
     P.bs.IMMO_BRUT[a]=brut;P.bs.AMORT_CUM[a]=-amortCum;P.bs.IMMO_NET[a]=immoNet;
     P.bs.STOCKS[a]=stocks;P.bs.CLIENTS[a]=clients;P.bs.AUTRES_CREANCES[a]=autresCr;
-    P.bs.FOURNISSEURS[a]=fournisseurs;P.bs.AUTRES_DETTES[a]=autresDet;P.bs.BFR[a]=bfr;
+    P.bs.FOURNISSEURS[a]=fournisseurs;P.bs.DETTES_FISC_SOC[a]=dettesFiscSoc;P.bs.AUTRES_DETTES[a]=autresDet;P.bs.BFR[a]=bfr;
     P.bs.CP[a]=cp;P.bs.DETTE[a]=dette;P.bs.PROVISIONS[a]=provisions;P.bs.TRESO[a]=treso;
     P.dette[a]={ouverture:soldeExistDebut+ (soldeNouv+rembNouv-nouveau),tirage:nouveau,
       remboursement:rembExist+rembNouv,interets,cloture:dette,div};
@@ -3734,7 +3743,8 @@ function construireBP(pptx){
     ["Créances clients",...ap.map(a=>rpFmt(proj.bs.CLIENTS[a]))],
     ["Autres créances",...ap.map(a=>rpFmt(proj.bs.AUTRES_CREANCES[a]))],
     ["Dettes fournisseurs",...ap.map(a=>rpFmt(proj.bs.FOURNISSEURS[a]))],
-    ["Autres dettes d'exploitation",...ap.map(a=>rpFmt(proj.bs.AUTRES_DETTES[a]))],
+    ["Dettes fiscales et sociales",...ap.map(a=>rpFmt(proj.bs.DETTES_FISC_SOC[a]))],
+    ["Autres dettes",...ap.map(a=>rpFmt(proj.bs.AUTRES_DETTES[a]))],
     ["Besoin en fonds de roulement",...ap.map(a=>rpFmt(proj.bs.BFR[a]))],
     ["Trésorerie nette",...ap.map(a=>rpFmt(proj.bs.TRESO_NETTE[a]))],
     ["Capitaux propres",...ap.map(a=>rpFmt(proj.bs.CP[a]))],
@@ -5032,9 +5042,8 @@ const DEF_BS=[
   {code:"DETTES_FISCALES",lib:"Dettes fiscales"},
   {code:"DETTES_SOCIALES",lib:"Dettes sociales"},
   {code:"BFR_EXPL",lib:"BFR d'exploitation",st:"total",toujours:true},
-  {code:"AUTRES_CREANCES",lib:"Autres créances"},
-  {code:"AUTRES_DETTES",lib:"Autres dettes"},
-  {code:"HAO_ACTIF",lib:"Créances HAO"},{code:"HAO_PASSIF",lib:"Dettes HAO"},
+  {code:"AUTRES_CREANCES_HE",lib:"Autres créances"},
+  {code:"AUTRES_DETTES_HE",lib:"Autres dettes"},
   {code:"BFR_HE",lib:"BFR hors exploitation",st:"total",toujours:true},
   {code:"BFR",lib:"Besoin en fonds de roulement global",st:"total",toujours:true},
   {code:"TRESORERIE_NETTE",lib:"Trésorerie nette",st:"total",toujours:true},
@@ -5777,8 +5786,9 @@ function vueBPHyp(H){
     ${hypLigne("Délai clients — DSO",inJ("hBP.bind(null,'dso')",H.dso))}
     ${hypLigne("Rotation des stocks — DIO",inJ("hBP.bind(null,'dio')",H.dio))}
     ${hypLigne("Délai fournisseurs — DPO",inJ("hBP.bind(null,'dpo')",H.dpo))}
-    ${hypLigne("Autres créances (% du CA)",inPct("hBP.bind(null,'autresCreances_pct')",H.autresCreances_pct))}
-    ${hypLigne("Autres dettes (% du CA)",inPct("hBP.bind(null,'autresDettes_pct')",H.autresDettes_pct))}
+    ${hypLigne("Dettes fiscales & sociales (% du CA)",inPct("hBP.bind(null,'dettesFiscSoc_pct')",H.dettesFiscSoc_pct))}
+    ${hypLigne("Autres créances — hors exploitation (figées)",inK("hBP.bind(null,'autresCreances_fixe')",H.autresCreances_fixe))}
+    ${hypLigne("Autres dettes — hors exploitation (figées)",inK("hBP.bind(null,'autresDettes_fixe')",H.autresDettes_fixe))}
     <div class="sec-titre">Investissements</div>
     ${anneesIn("capex",H.capex,true)}
     ${hypLigne("Taux d'amortissement (sur brut)",inPct("hBP.bind(null,'amort_taux')",H.amort_taux))}
@@ -5866,16 +5876,15 @@ function vueBPPl(P){
   return tableBP(P,defs,"Compte de résultat prévisionnel");
 }
 function vueBPBs(P){
-  /* MÊME présentation que la Due Diligence (actif net = capitaux propres), en agrégé :
-     le prévisionnel ne projette pas les sous-postes fins du SYSCOHADA (dettes fiscales/sociales,
-     HAO, décomposition des capitaux propres). Signes : provisions et dettes financières négatives. */
+  /* MÊME présentation que la Due Diligence (actif net = capitaux propres), en agrégé.
+     Créances/dettes HAO fusionnées dans les autres créances/dettes (le HAO reste au P&L).
+     Signes : provisions et dettes financières négatives. */
   const v=ETATS.v,a1=ETATS.annees[ETATS.annees.length-1];
   const hAutresCr=v.AUTRES_CREANCES[a1]+v.AVANCES_FRS[a1]+v.HAO_ACTIF[a1];
-  const hAutresDet=v.DETTES_SOCIALES[a1]+v.DETTES_FISCALES[a1]+v.AUTRES_DETTES[a1]+v.CLIENTS_AVANCES[a1]+v.HAO_PASSIF[a1];
-  /* le prévisionnel projette "autres dettes" en un agrégat (% du CA) ; on le répartit
-     en dettes fiscales / sociales / autres selon leur poids historique (= projeter chacune
-     en % du CA, l'agrégat croissant avec le CA) */
-  const fiscFrac=hAutresDet?v.DETTES_FISCALES[a1]/hAutresDet:0, socFrac=hAutresDet?v.DETTES_SOCIALES[a1]/hAutresDet:0;
+  /* dettes fiscales & sociales = exploitation : le prévisionnel projette leur agrégat
+     (% du CA) ; on le répartit fiscales / sociales selon leur poids historique */
+  const socfisc=v.DETTES_FISCALES[a1]+v.DETTES_SOCIALES[a1];
+  const fiscFrac=socfisc?v.DETTES_FISCALES[a1]/socfisc:0, socFrac=socfisc?v.DETTES_SOCIALES[a1]/socfisc:0;
   const hActifNet=v.ACTIFS_IMMOBILISES[a1]+v.BFR[a1]+v.TRESORERIE_NETTE[a1]+v.PROVISIONS_RC[a1]+v.DETTES_FINANCIERES[a1];
   const defs=[
     {lib:"Actifs immobilisés",st:"total",hist:v.ACTIFS_IMMOBILISES[a1],proj:a=>P.bs.IMMO_NET[a]},
@@ -5883,9 +5892,9 @@ function vueBPBs(P){
     {lib:"Créances clients",hist:v.CLIENTS[a1],proj:a=>P.bs.CLIENTS[a]},
     {lib:"Autres créances",hist:hAutresCr,proj:a=>P.bs.AUTRES_CREANCES[a]},
     {lib:"Dettes fournisseurs",hist:v.FOURNISSEURS[a1],proj:a=>P.bs.FOURNISSEURS[a]},
-    {lib:"Dettes fiscales",hist:v.DETTES_FISCALES[a1],proj:a=>P.bs.AUTRES_DETTES[a]*fiscFrac},
-    {lib:"Dettes sociales",hist:v.DETTES_SOCIALES[a1],proj:a=>P.bs.AUTRES_DETTES[a]*socFrac},
-    {lib:"Autres dettes",hist:v.AUTRES_DETTES[a1]+v.CLIENTS_AVANCES[a1]+v.HAO_PASSIF[a1],proj:a=>P.bs.AUTRES_DETTES[a]*(1-fiscFrac-socFrac)},
+    {lib:"Dettes fiscales",hist:v.DETTES_FISCALES[a1],proj:a=>P.bs.DETTES_FISC_SOC[a]*fiscFrac},
+    {lib:"Dettes sociales",hist:v.DETTES_SOCIALES[a1],proj:a=>P.bs.DETTES_FISC_SOC[a]*socFrac},
+    {lib:"Autres dettes",hist:v.AUTRES_DETTES[a1]+v.CLIENTS_AVANCES[a1]+v.HAO_PASSIF[a1],proj:a=>P.bs.AUTRES_DETTES[a]},
     {lib:"Besoin en fonds de roulement global",st:"total",hist:v.BFR[a1],proj:a=>P.bs.BFR[a]},
     {lib:"Trésorerie nette",st:"total",hist:v.TRESORERIE_NETTE[a1],proj:a=>P.bs.TRESO[a]},
     {lib:"Provisions pour risques et charges",hist:v.PROVISIONS_RC[a1],proj:a=>-P.bs.PROVISIONS[a]},
@@ -5901,7 +5910,7 @@ function vueBPBs(P){
     {lib:"Résultat net de l'exercice",hist:v.RESULTAT_NET[a1],proj:a=>P.pl.RN[a]},
     {lib:"Capitaux propres",st:"titre",hist:v.CAPITAUX_PROPRES[a1],proj:a=>P.bs.CP[a]}];
   return tableBP(P,defs,"Bilan prévisionnel")+
-  `<div class="mut" style="margin-top:8px">Présentation en actif net, identique à la due diligence : Actifs immobilisés + BFR + trésorerie − provisions − dettes financières = Actif net = Capitaux propres (la trésorerie boucle le bilan).</div>`;
+  `<div class="mut" style="margin-top:8px">Présentation en actif net, identique à la due diligence : Actifs immobilisés + BFR + trésorerie − provisions − dettes financières = Actif net = Capitaux propres (la trésorerie boucle le bilan). BFR d'exploitation projeté (stocks, clients, fournisseurs, dettes fiscales et sociales) ; autres créances et dettes hors exploitation (HAO inclus) figées à leur niveau historique.</div>`;
 }
 function vueBPTft(P){
   const AP=P.annees;
@@ -6378,8 +6387,8 @@ function construireFeuillesBP(wb){
   hRow(hy.dso,"Délai clients — DSO (jours)");hVal(hy.dso,H.dso+sc.dJours,"0");
   hRow(hy.dio,"Rotation des stocks — DIO (jours)");hVal(hy.dio,H.dio,"0");
   hRow(hy.dpo,"Délai fournisseurs — DPO (jours)");hVal(hy.dpo,H.dpo,"0");
-  hRow(hy.ac,"Autres créances (% du CA)");hVal(hy.ac,H.autresCreances_pct,PCT2);
-  hRow(hy.ad,"Autres dettes (% du CA)");hVal(hy.ad,H.autresDettes_pct,PCT2);
+  hRow(hy.ac,"Autres créances hors exploitation (figées)");hVal(hy.ac,mnt(H.autresCreances_fixe),NF);
+  hRow(hy.ad,"Autres dettes hors exploitation (figées)");hVal(hy.ad,mnt(H.autresDettes_fixe),NF);
   hRow(hy.capex,"Investissements (CAPEX) par année");hSer(hy.capex,H.capex,NF,true);
   hRow(hy.amort,"Taux d'amortissement (sur brut)");hVal(hy.amort,H.amort_taux,PCT2);
   hRow(hy.tauxEx,"Taux d'intérêt — dette existante");hVal(hy.tauxEx,H.dette_taux,PCT2);

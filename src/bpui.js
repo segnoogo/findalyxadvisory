@@ -152,8 +152,9 @@ function vueBPHyp(H){
     ${hypLigne("Délai clients — DSO",inJ("hBP.bind(null,'dso')",H.dso))}
     ${hypLigne("Rotation des stocks — DIO",inJ("hBP.bind(null,'dio')",H.dio))}
     ${hypLigne("Délai fournisseurs — DPO",inJ("hBP.bind(null,'dpo')",H.dpo))}
-    ${hypLigne("Autres créances (% du CA)",inPct("hBP.bind(null,'autresCreances_pct')",H.autresCreances_pct))}
-    ${hypLigne("Autres dettes (% du CA)",inPct("hBP.bind(null,'autresDettes_pct')",H.autresDettes_pct))}
+    ${hypLigne("Dettes fiscales & sociales (% du CA)",inPct("hBP.bind(null,'dettesFiscSoc_pct')",H.dettesFiscSoc_pct))}
+    ${hypLigne("Autres créances — hors exploitation (figées)",inK("hBP.bind(null,'autresCreances_fixe')",H.autresCreances_fixe))}
+    ${hypLigne("Autres dettes — hors exploitation (figées)",inK("hBP.bind(null,'autresDettes_fixe')",H.autresDettes_fixe))}
     <div class="sec-titre">Investissements</div>
     ${anneesIn("capex",H.capex,true)}
     ${hypLigne("Taux d'amortissement (sur brut)",inPct("hBP.bind(null,'amort_taux')",H.amort_taux))}
@@ -241,16 +242,15 @@ function vueBPPl(P){
   return tableBP(P,defs,"Compte de résultat prévisionnel");
 }
 function vueBPBs(P){
-  /* MÊME présentation que la Due Diligence (actif net = capitaux propres), en agrégé :
-     le prévisionnel ne projette pas les sous-postes fins du SYSCOHADA (dettes fiscales/sociales,
-     HAO, décomposition des capitaux propres). Signes : provisions et dettes financières négatives. */
+  /* MÊME présentation que la Due Diligence (actif net = capitaux propres), en agrégé.
+     Créances/dettes HAO fusionnées dans les autres créances/dettes (le HAO reste au P&L).
+     Signes : provisions et dettes financières négatives. */
   const v=ETATS.v,a1=ETATS.annees[ETATS.annees.length-1];
   const hAutresCr=v.AUTRES_CREANCES[a1]+v.AVANCES_FRS[a1]+v.HAO_ACTIF[a1];
-  const hAutresDet=v.DETTES_SOCIALES[a1]+v.DETTES_FISCALES[a1]+v.AUTRES_DETTES[a1]+v.CLIENTS_AVANCES[a1]+v.HAO_PASSIF[a1];
-  /* le prévisionnel projette "autres dettes" en un agrégat (% du CA) ; on le répartit
-     en dettes fiscales / sociales / autres selon leur poids historique (= projeter chacune
-     en % du CA, l'agrégat croissant avec le CA) */
-  const fiscFrac=hAutresDet?v.DETTES_FISCALES[a1]/hAutresDet:0, socFrac=hAutresDet?v.DETTES_SOCIALES[a1]/hAutresDet:0;
+  /* dettes fiscales & sociales = exploitation : le prévisionnel projette leur agrégat
+     (% du CA) ; on le répartit fiscales / sociales selon leur poids historique */
+  const socfisc=v.DETTES_FISCALES[a1]+v.DETTES_SOCIALES[a1];
+  const fiscFrac=socfisc?v.DETTES_FISCALES[a1]/socfisc:0, socFrac=socfisc?v.DETTES_SOCIALES[a1]/socfisc:0;
   const hActifNet=v.ACTIFS_IMMOBILISES[a1]+v.BFR[a1]+v.TRESORERIE_NETTE[a1]+v.PROVISIONS_RC[a1]+v.DETTES_FINANCIERES[a1];
   const defs=[
     {lib:"Actifs immobilisés",st:"total",hist:v.ACTIFS_IMMOBILISES[a1],proj:a=>P.bs.IMMO_NET[a]},
@@ -258,9 +258,9 @@ function vueBPBs(P){
     {lib:"Créances clients",hist:v.CLIENTS[a1],proj:a=>P.bs.CLIENTS[a]},
     {lib:"Autres créances",hist:hAutresCr,proj:a=>P.bs.AUTRES_CREANCES[a]},
     {lib:"Dettes fournisseurs",hist:v.FOURNISSEURS[a1],proj:a=>P.bs.FOURNISSEURS[a]},
-    {lib:"Dettes fiscales",hist:v.DETTES_FISCALES[a1],proj:a=>P.bs.AUTRES_DETTES[a]*fiscFrac},
-    {lib:"Dettes sociales",hist:v.DETTES_SOCIALES[a1],proj:a=>P.bs.AUTRES_DETTES[a]*socFrac},
-    {lib:"Autres dettes",hist:v.AUTRES_DETTES[a1]+v.CLIENTS_AVANCES[a1]+v.HAO_PASSIF[a1],proj:a=>P.bs.AUTRES_DETTES[a]*(1-fiscFrac-socFrac)},
+    {lib:"Dettes fiscales",hist:v.DETTES_FISCALES[a1],proj:a=>P.bs.DETTES_FISC_SOC[a]*fiscFrac},
+    {lib:"Dettes sociales",hist:v.DETTES_SOCIALES[a1],proj:a=>P.bs.DETTES_FISC_SOC[a]*socFrac},
+    {lib:"Autres dettes",hist:v.AUTRES_DETTES[a1]+v.CLIENTS_AVANCES[a1]+v.HAO_PASSIF[a1],proj:a=>P.bs.AUTRES_DETTES[a]},
     {lib:"Besoin en fonds de roulement global",st:"total",hist:v.BFR[a1],proj:a=>P.bs.BFR[a]},
     {lib:"Trésorerie nette",st:"total",hist:v.TRESORERIE_NETTE[a1],proj:a=>P.bs.TRESO[a]},
     {lib:"Provisions pour risques et charges",hist:v.PROVISIONS_RC[a1],proj:a=>-P.bs.PROVISIONS[a]},
@@ -276,7 +276,7 @@ function vueBPBs(P){
     {lib:"Résultat net de l'exercice",hist:v.RESULTAT_NET[a1],proj:a=>P.pl.RN[a]},
     {lib:"Capitaux propres",st:"titre",hist:v.CAPITAUX_PROPRES[a1],proj:a=>P.bs.CP[a]}];
   return tableBP(P,defs,"Bilan prévisionnel")+
-  `<div class="mut" style="margin-top:8px">Présentation en actif net, identique à la due diligence : Actifs immobilisés + BFR + trésorerie − provisions − dettes financières = Actif net = Capitaux propres (la trésorerie boucle le bilan).</div>`;
+  `<div class="mut" style="margin-top:8px">Présentation en actif net, identique à la due diligence : Actifs immobilisés + BFR + trésorerie − provisions − dettes financières = Actif net = Capitaux propres (la trésorerie boucle le bilan). BFR d'exploitation projeté (stocks, clients, fournisseurs, dettes fiscales et sociales) ; autres créances et dettes hors exploitation (HAO inclus) figées à leur niveau historique.</div>`;
 }
 function vueBPTft(P){
   const AP=P.annees;

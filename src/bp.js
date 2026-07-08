@@ -55,8 +55,12 @@ function hypothesesBP(etats, lignesPerso){
     dso:born(v.CLIENTS[a1]/ca1*360,0,360,45),
     dio:born(cd?v.STOCKS[a1]/Math.abs(cd)*360:0,0,360,30),
     dpo:born((cd+op)?-v.FOURNISSEURS[a1]/Math.abs(cd+op)*360:0,0,360,30),
-    autresCreances_pct:born(ca1?(v.AUTRES_CREANCES[a1]+v.AVANCES_FRS[a1])/ca1:0.05,0,1,0.05),
-    autresDettes_pct:born(ca1?-(v.DETTES_SOCIALES[a1]+v.DETTES_FISCALES[a1]+v.AUTRES_DETTES[a1]+v.CLIENTS_AVANCES[a1])/ca1:0.05,0,1,0.05),
+    /* dettes fiscales & sociales = exploitation → projetées en % du CA (croissent avec l'activité) */
+    dettesFiscSoc_pct:born(ca1?-(v.DETTES_SOCIALES[a1]+v.DETTES_FISCALES[a1])/ca1:0.03,0,1,0.03),
+    /* autres créances/dettes = hors exploitation (HAO inclus) → FIGÉES à leur niveau historique.
+       Un BP projette le cycle d'exploitation, pas le résiduel non piloté par l'activité. */
+    autresCreances_fixe:v.AUTRES_CREANCES[a1]+v.AVANCES_FRS[a1]+v.HAO_ACTIF[a1],
+    autresDettes_fixe:v.AUTRES_DETTES[a1]+v.CLIENTS_AVANCES[a1]+v.HAO_PASSIF[a1],
     /* financement */
     dette_taux:born(detteH>0?fraisFinH/detteH:0.08,0.02,0.2,0.08),
     dette_dureeResiduelle:5,
@@ -93,7 +97,7 @@ function projeterBP(etats,H,scenario){
   P.pl.OPEX_DETAIL={};
   H.opex.forEach(o=>P.pl.OPEX_DETAIL[o.code]={lib:o.lib,vals:{}});
   ["IMMO_BRUT","AMORT_CUM","IMMO_NET","STOCKS","CLIENTS","AUTRES_CREANCES",
-   "FOURNISSEURS","AUTRES_DETTES","BFR","CP","DETTE","PROVISIONS","TRESO"].forEach(bs);
+   "FOURNISSEURS","DETTES_FISC_SOC","AUTRES_DETTES","BFR","CP","DETTE","PROVISIONS","TRESO"].forEach(bs);
 
   /* point de départ (dernier exercice réel) */
   let caP=v.CA[a1];
@@ -157,9 +161,10 @@ function projeterBP(etats,H,scenario){
     const clients=caP*(H.dso+sc.dJours)/360;
     const stocks=Math.abs(cd)*H.dio/360;
     const fournisseurs=-(Math.abs(cd)+Math.abs(opexTot))*H.dpo/360;
-    const autresCr=caP*H.autresCreances_pct;
-    const autresDet=-caP*H.autresDettes_pct;
-    const bfr=clients+stocks+fournisseurs+autresCr+autresDet;
+    const dettesFiscSoc=-caP*H.dettesFiscSoc_pct;   /* exploitation : croît avec le CA */
+    const autresCr=H.autresCreances_fixe;            /* hors exploitation : figé (HAO inclus) */
+    const autresDet=H.autresDettes_fixe;             /* hors exploitation : figé (HAO inclus) */
+    const bfr=clients+stocks+fournisseurs+dettesFiscSoc+autresCr+autresDet;
     /* --- capitaux propres & dividendes --- */
     const div=H.dividendes_payout>0&&rnPrec>0?H.dividendes_payout*rnPrec:0;
     cp=cp+rn-div;
@@ -179,12 +184,12 @@ function projeterBP(etats,H,scenario){
     const t=P.tft[a];
     t.FD=-((clients+autresCr)-((P.bs.CLIENTS[AP[i-1]]!==undefined)
         ?(P.bs.CLIENTS[AP[i-1]]+P.bs.AUTRES_CREANCES[AP[i-1]])
-        :(v.CLIENTS[a1]+v.AUTRES_CREANCES[a1]+v.AVANCES_FRS[a1])));
-    t.FE=-(((fournisseurs+autresDet))-((P.bs.FOURNISSEURS[AP[i-1]]!==undefined)
-        ?(P.bs.FOURNISSEURS[AP[i-1]]+P.bs.AUTRES_DETTES[AP[i-1]])
-        :(v.FOURNISSEURS[a1]+v.DETTES_SOCIALES[a1]+v.DETTES_FISCALES[a1]+v.AUTRES_DETTES[a1]+v.CLIENTS_AVANCES[a1])));
-    /* FB : bascule HAO du réel vers 0 en première année de plan */
-    t.FB=i===0?-(0-(v.HAO_ACTIF[a1]+v.HAO_PASSIF[a1])):0;
+        :(v.CLIENTS[a1]+v.AUTRES_CREANCES[a1]+v.AVANCES_FRS[a1]+v.HAO_ACTIF[a1])));
+    t.FE=-(((fournisseurs+dettesFiscSoc+autresDet))-((P.bs.FOURNISSEURS[AP[i-1]]!==undefined)
+        ?(P.bs.FOURNISSEURS[AP[i-1]]+P.bs.DETTES_FISC_SOC[AP[i-1]]+P.bs.AUTRES_DETTES[AP[i-1]])
+        :(v.FOURNISSEURS[a1]+v.DETTES_SOCIALES[a1]+v.DETTES_FISCALES[a1]+v.AUTRES_DETTES[a1]+v.CLIENTS_AVANCES[a1]+v.HAO_PASSIF[a1])));
+    /* autres créances/dettes (HAO inclus) figées → aucune bascule HAO à opérer */
+    t.FB=0;
     t.ZB=t.FA+t.FB+t.FC+t.FD+t.FE;
     t.ZF=t.ZB+t.ZC+t.ZD+t.ZE;
     t.ZG=t.ZA+t.ZF;
@@ -200,7 +205,7 @@ function projeterBP(etats,H,scenario){
     P.pl.EBT[a]=ebt;P.pl.IS[a]=impots;P.pl.RN[a]=rn;
     P.bs.IMMO_BRUT[a]=brut;P.bs.AMORT_CUM[a]=-amortCum;P.bs.IMMO_NET[a]=immoNet;
     P.bs.STOCKS[a]=stocks;P.bs.CLIENTS[a]=clients;P.bs.AUTRES_CREANCES[a]=autresCr;
-    P.bs.FOURNISSEURS[a]=fournisseurs;P.bs.AUTRES_DETTES[a]=autresDet;P.bs.BFR[a]=bfr;
+    P.bs.FOURNISSEURS[a]=fournisseurs;P.bs.DETTES_FISC_SOC[a]=dettesFiscSoc;P.bs.AUTRES_DETTES[a]=autresDet;P.bs.BFR[a]=bfr;
     P.bs.CP[a]=cp;P.bs.DETTE[a]=dette;P.bs.PROVISIONS[a]=provisions;P.bs.TRESO[a]=treso;
     P.dette[a]={ouverture:soldeExistDebut+ (soldeNouv+rembNouv-nouveau),tirage:nouveau,
       remboursement:rembExist+rembNouv,interets,cloture:dette,div};

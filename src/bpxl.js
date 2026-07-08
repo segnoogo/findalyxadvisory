@@ -73,8 +73,8 @@ function construireFeuillesBP(wb){
   hRow(hy.dso,"Délai clients — DSO (jours)");hVal(hy.dso,H.dso+sc.dJours,"0");
   hRow(hy.dio,"Rotation des stocks — DIO (jours)");hVal(hy.dio,H.dio,"0");
   hRow(hy.dpo,"Délai fournisseurs — DPO (jours)");hVal(hy.dpo,H.dpo,"0");
-  hRow(hy.ac,"Autres créances (% du CA)");hVal(hy.ac,H.autresCreances_pct,PCT2);
-  hRow(hy.ad,"Autres dettes (% du CA)");hVal(hy.ad,H.autresDettes_pct,PCT2);
+  hRow(hy.ac,"Autres créances hors exploitation (figées)");hVal(hy.ac,mnt(H.autresCreances_fixe),NF);
+  hRow(hy.ad,"Autres dettes hors exploitation (figées)");hVal(hy.ad,mnt(H.autresDettes_fixe),NF);
   hRow(hy.capex,"Investissements (CAPEX) par année");hSer(hy.capex,H.capex,NF,true);
   hRow(hy.amort,"Taux d'amortissement (sur brut)");hVal(hy.amort,H.amort_taux,PCT2);
   hRow(hy.tauxEx,"Taux d'intérêt — dette existante");hVal(hy.tauxEx,H.dette_taux,PCT2);

@@ -468,6 +468,10 @@ function calculerEtats(tbagr,lignesPerso){
   v.BFR_EXPL=somme(["STOCKS","CLIENTS","CLIENTS_AVANCES","AVANCES_FRS",
                "FOURNISSEURS","DETTES_SOCIALES","DETTES_FISCALES",...P("BFR_ACTIF"),...P("BFR_PASSIF")]);
   v.BFR_HE=somme(["AUTRES_CREANCES","AUTRES_DETTES","HAO_ACTIF","HAO_PASSIF"]);
+  /* le HAO est une notion de résultat (Résultat HAO au P&L) ; au bilan, créances/dettes HAO
+     sont de même nature que les autres créances/dettes → on les y fusionne pour la présentation */
+  v.AUTRES_CREANCES_HE=somme(["AUTRES_CREANCES","HAO_ACTIF"]);
+  v.AUTRES_DETTES_HE=somme(["AUTRES_DETTES","HAO_PASSIF"]);
   v.BFR=somme(["BFR_EXPL","BFR_HE"]);
   v.TRESORERIE_NETTE=somme(["TRESO_ACTIF","TRESO_PASSIF",...P("TRESORERIE_NETTE")]);
   v.ACTIF_NET=somme(["ACTIFS_IMMOBILISES","BFR","TRESORERIE_NETTE","PROVISIONS_RC","DETTES_FINANCIERES",...P("FINANCEMENT")]);
