@@ -6341,9 +6341,9 @@ function construireFeuillesBP(wb){
   /* ---------- cartes de lignes (déterministes) ---------- */
   const hy={caCroiss:5,cd:6,apMont:7,apCroiss:8,pers:9,infl:10,is:11,opex0:12};
   const hb=12+m;
-  Object.assign(hy,{dso:hb,dio:hb+1,dpo:hb+2,ac:hb+3,ad:hb+4,capex:hb+5,amort:hb+6,
-    tauxEx:hb+7,durEx:hb+8,empr:hb+9,tauxN:hb+10,durN:hb+11,pfin:hb+12,payout:hb+13,
-    rf:hb+15,pm:hb+16,beta:hb+17,ps:hb+18,kd:hb+19,wd:hb+20,g:hb+21,mc:hb+22,mt:hb+23,adjE:hb+24});
+  Object.assign(hy,{dso:hb,dio:hb+1,dpo:hb+2,ac:hb+3,ad:hb+4,dfs:hb+5,capex:hb+6,amort:hb+7,
+    tauxEx:hb+8,durEx:hb+9,empr:hb+10,tauxN:hb+11,durN:hb+12,pfin:hb+13,payout:hb+14,
+    rf:hb+16,pm:hb+17,beta:hb+18,ps:hb+19,kd:hb+20,wd:hb+21,g:hb+22,mc:hb+23,mt:hb+24,adjE:hb+25});
   const rp={CA:5,CD:6,MB:7,PMB:8,AP_:9,SEC:10,opex0:11,TFG:11+m,PERS:12+m,EBITDA:13+m,
     PEB:14+m,DA:15+m,EBIT:16+m,PF:17+m,FF:18+m,EBT:19+m,IS:20+m,RN:21+m};
   const rb={BRUT:5,AMC:6,IMN:7,STK:8,CLI:9,ACR:10,FRN:11,ADT:12,BFR:13,CP:14,DIV:15,
@@ -6390,6 +6390,7 @@ function construireFeuillesBP(wb){
   hRow(hy.dpo,"Délai fournisseurs — DPO (jours)");hVal(hy.dpo,H.dpo,"0");
   hRow(hy.ac,"Autres créances hors exploitation (figées)");hVal(hy.ac,mnt(H.autresCreances_fixe),NF);
   hRow(hy.ad,"Autres dettes hors exploitation (figées)");hVal(hy.ad,mnt(H.autresDettes_fixe),NF);
+  hRow(hy.dfs,"Dettes fiscales & sociales (% du CA)");hVal(hy.dfs,H.dettesFiscSoc_pct,PCT2);
   hRow(hy.capex,"Investissements (CAPEX) par année");hSer(hy.capex,H.capex,NF,true);
   hRow(hy.amort,"Taux d'amortissement (sur brut)");hVal(hy.amort,H.amort_taux,PCT2);
   hRow(hy.tauxEx,"Taux d'intérêt — dette existante");hVal(hy.tauxEx,H.dette_taux,PCT2);
@@ -6399,7 +6400,7 @@ function construireFeuillesBP(wb){
   hRow(hy.durN,"Durée des nouveaux emprunts (ans)");hVal(hy.durN,H.emprunt_duree,"0");
   hRow(hy.pfin,"Produits financiers annuels");hVal(hy.pfin,mnt(H.produitsFin_montant),NF);
   hRow(hy.payout,"Dividendes (% du résultat N-1)");hVal(hy.payout,H.dividendes_payout,PCT);
-  cellV(wsH,hb+14,2,"— Valorisation —").font={bold:true,color:{argb:"FF172554"}};
+  cellV(wsH,hb+15,2,"— Valorisation —").font={bold:true,color:{argb:"FF172554"}};
   hRow(hy.rf,"Taux sans risque");hVal(hy.rf,H.valo.rf,PCT2);
   hRow(hy.pm,"Prime de risque marché");hVal(hy.pm,H.valo.primeMarche,PCT2);
   hRow(hy.beta,"Beta");hVal(hy.beta,H.valo.beta,"0.00");
@@ -6518,11 +6519,11 @@ function construireFeuillesBP(wb){
    {rn:rb.CLI,lib:"Créances clients",hist:a=>v.CLIENTS[a],
     f:i=>`${P(rp.CA,i)}*${h1(hy.dso)}/360`},
    {rn:rb.ACR,lib:"Autres créances",hist:a=>v.AUTRES_CREANCES[a]+v.AVANCES_FRS[a]+v.HAO_ACTIF[a],
-    f:i=>`${P(rp.CA,i)}*${h1(hy.ac)}`},
+    f:i=>`${h1(hy.ac)}`},
    {rn:rb.FRN,lib:"Dettes fournisseurs",hist:a=>v.FOURNISSEURS[a],
     f:i=>`(${P(rp.CD,i)}+${P(rp.TFG,i)})*${h1(hy.dpo)}/360`},
-   {rn:rb.ADT,lib:"Autres dettes",hist:a=>v.DETTES_SOCIALES[a]+v.DETTES_FISCALES[a]+v.AUTRES_DETTES[a]+v.CLIENTS_AVANCES[a]+v.HAO_PASSIF[a],
-    f:i=>`-${P(rp.CA,i)}*${h1(hy.ad)}`},
+   {rn:rb.ADT,lib:"Dettes fiscales, sociales et autres",hist:a=>v.DETTES_SOCIALES[a]+v.DETTES_FISCALES[a]+v.AUTRES_DETTES[a]+v.CLIENTS_AVANCES[a]+v.HAO_PASSIF[a],
+    f:i=>`-${P(rp.CA,i)}*${h1(hy.dfs)}+${h1(hy.ad)}`},
    {rn:rb.BFR,lib:"Besoin en fonds de roulement",st:1,hist:a=>v.BFR[a],
     f:i=>`SUM(${L(cP(i))}${rb.STK}:${L(cP(i))}${rb.ADT})`},
    {rn:rb.CP,lib:"Capitaux propres",hist:a=>v.CAPITAUX_PROPRES[a],
