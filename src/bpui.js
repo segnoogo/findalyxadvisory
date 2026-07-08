@@ -175,50 +175,44 @@ function vueBPHyp(H){
   </div>`;
 }
 function vueBPPl(P){
+  /* MÊME structure que la Due Diligence : on réutilise DEF_PL (vue synthétique) et on
+     mappe chaque agrégat vers sa projection. Cascade identique (RAO, HAO, etc.). */
   const v=ETATS.v,a1=ETATS.annees[ETATS.annees.length-1];
-  const defs=[
-    {lib:"Chiffre d'affaires",st:"titre",hist:v.CA[a1],proj:a=>P.pl.CA[a]},
-    {lib:"Coûts directs",hist:v.COUTS_DIRECTS[a1],proj:a=>P.pl.COUTS_DIRECTS[a]},
-    {lib:"Marge brute",st:"total",hist:v.MARGE_BRUTE[a1],proj:a=>P.pl.MARGE_BRUTE[a]},
-    {lib:"% Marge brute / CA",type:"pct",hist:v.CA[a1]?v.MARGE_BRUTE[a1]/v.CA[a1]:null,proj:a=>P.pl.CA[a]?P.pl.MARGE_BRUTE[a]/P.pl.CA[a]:null},
-    {lib:"Autres produits",hist:v.AUTRES_PROD[a1],proj:a=>P.pl.AUTRES_PROD[a]},
-    {sec:"Frais généraux"},
-    ...Object.entries(P.pl.OPEX_DETAIL).map(([c,o])=>({lib:o.lib,hist:v[c]?v[c][a1]:0,proj:a=>o.vals[a]})),
-    {lib:"Charges de personnel",hist:v.CHARGES_PERSONNEL[a1],proj:a=>P.pl.CHARGES_PERSONNEL[a]},
-    {lib:"Total frais généraux",st:"total",hist:v.FRAIS_GENERAUX[a1],proj:a=>P.pl.OPEX_TOTAL[a]+P.pl.CHARGES_PERSONNEL[a]},
-    {sec:""},
-    {lib:"EBITDA",st:"total",hist:v.EBITDA[a1],proj:a=>P.pl.EBITDA[a]},
-    {lib:"% EBITDA / CA",type:"pct",hist:v.CA[a1]?v.EBITDA[a1]/v.CA[a1]:null,proj:a=>P.pl.CA[a]?P.pl.EBITDA[a]/P.pl.CA[a]:null},
-    {lib:"Dotations aux amortissements",hist:v.DA[a1],proj:a=>P.pl.DA[a]},
-    {lib:"EBIT",st:"total",hist:v.EBIT[a1],proj:a=>P.pl.EBIT[a]},
-    {lib:"Produits financiers",hist:v.RESULTAT_FIN[a1]>0?v.RESULTAT_FIN[a1]:0,proj:a=>P.pl.PRODUITS_FIN[a]},
-    {lib:"Frais financiers",hist:v.RESULTAT_FIN[a1]<0?v.RESULTAT_FIN[a1]:0,proj:a=>P.pl.FRAIS_FIN[a]},
-    {lib:"Résultat financier",st:"total",hist:v.RESULTAT_FIN[a1],proj:a=>(P.pl.PRODUITS_FIN[a]||0)+(P.pl.FRAIS_FIN[a]||0)},
-    {lib:"Résultat avant impôt",st:"total",hist:v.EBIT[a1]+v.RESULTAT_FIN[a1],proj:a=>P.pl.EBT[a]},
-    {lib:"Impôt sur les sociétés",hist:v.IMPOTS[a1],proj:a=>P.pl.IS[a]},
-    {lib:"Résultat net",st:"total",hist:v.RESULTAT_NET[a1],proj:a=>P.pl.RN[a]}];
+  const rf=a=>(P.pl.PRODUITS_FIN[a]||0)+(P.pl.FRAIS_FIN[a]||0);
+  const proj={
+    CA:a=>P.pl.CA[a], COUTS_DIRECTS:a=>P.pl.COUTS_DIRECTS[a], MARGE_BRUTE:a=>P.pl.MARGE_BRUTE[a],
+    AUTRES_PROD:a=>P.pl.AUTRES_PROD[a],
+    FRAIS_GENERAUX:a=>(P.pl.OPEX_TOTAL[a]||0)+(P.pl.CHARGES_PERSONNEL[a]||0),
+    EBITDA:a=>P.pl.EBITDA[a], DA:a=>P.pl.DA[a], EBIT:a=>P.pl.EBIT[a],
+    RESULTAT_FIN:rf, RAO:a=>P.pl.EBIT[a]+rf(a), RESULTAT_HAO:a=>0,
+    RESULTAT_AVANT_IMPOT:a=>P.pl.EBT[a], IMPOTS:a=>P.pl.IS[a], RESULTAT_NET:a=>P.pl.RN[a]};
+  const defs=DEF_PL.filter(d=>!d.detail).map(d=>({lib:d.lib,st:d.st,
+    hist:(v[d.code]&&v[d.code][a1])||0, proj:proj[d.code]||(a=>0)}));
   return tableBP(P,defs,"Compte de résultat prévisionnel");
 }
 function vueBPBs(P){
+  /* MÊME présentation que la Due Diligence (actif net = capitaux propres), en agrégé :
+     le prévisionnel ne projette pas les sous-postes fins du SYSCOHADA (dettes fiscales/sociales,
+     HAO, décomposition des capitaux propres). Signes : provisions et dettes financières négatives. */
   const v=ETATS.v,a1=ETATS.annees[ETATS.annees.length-1];
+  const hAutresCr=v.AUTRES_CREANCES[a1]+v.AVANCES_FRS[a1]+v.HAO_ACTIF[a1];
+  const hAutresDet=v.DETTES_SOCIALES[a1]+v.DETTES_FISCALES[a1]+v.AUTRES_DETTES[a1]+v.CLIENTS_AVANCES[a1]+v.HAO_PASSIF[a1];
+  const hActifNet=v.ACTIFS_IMMOBILISES[a1]+v.BFR[a1]+v.TRESORERIE_NETTE[a1]+v.PROVISIONS_RC[a1]+v.DETTES_FINANCIERES[a1];
   const defs=[
-    {lib:"Immobilisations brutes",hist:v.ACTIFS_IMMOBILISES[a1]-v.AMORT_DEPREC[a1],proj:a=>P.bs.IMMO_BRUT[a]},
-    {lib:"Amortissements cumulés",hist:v.AMORT_DEPREC[a1],proj:a=>P.bs.AMORT_CUM[a]},
-    {lib:"Immobilisations nettes",st:"total",hist:v.ACTIFS_IMMOBILISES[a1],proj:a=>P.bs.IMMO_NET[a]},
-    {sec:"Besoin en fonds de roulement"},
+    {lib:"Actifs immobilisés",st:"total",hist:v.ACTIFS_IMMOBILISES[a1],proj:a=>P.bs.IMMO_NET[a]},
     {lib:"Stocks",hist:v.STOCKS[a1],proj:a=>P.bs.STOCKS[a]},
     {lib:"Créances clients",hist:v.CLIENTS[a1],proj:a=>P.bs.CLIENTS[a]},
-    {lib:"Autres créances",hist:v.AUTRES_CREANCES[a1]+v.AVANCES_FRS[a1]+v.HAO_ACTIF[a1],proj:a=>P.bs.AUTRES_CREANCES[a]},
+    {lib:"Autres créances",hist:hAutresCr,proj:a=>P.bs.AUTRES_CREANCES[a]},
     {lib:"Dettes fournisseurs",hist:v.FOURNISSEURS[a1],proj:a=>P.bs.FOURNISSEURS[a]},
-    {lib:"Autres dettes",hist:v.DETTES_SOCIALES[a1]+v.DETTES_FISCALES[a1]+v.AUTRES_DETTES[a1]+v.CLIENTS_AVANCES[a1]+v.HAO_PASSIF[a1],proj:a=>P.bs.AUTRES_DETTES[a]},
-    {lib:"Besoin en fonds de roulement",st:"total",hist:v.BFR[a1],proj:a=>P.bs.BFR[a]},
-    {sec:"Financement"},
-    {lib:"Capitaux propres",hist:v.CAPITAUX_PROPRES[a1],proj:a=>P.bs.CP[a]},
-    {lib:"Dettes financières",hist:-v.DETTES_FINANCIERES[a1],proj:a=>P.bs.DETTE[a]},
-    {lib:"Provisions pour risques et charges",hist:-v.PROVISIONS_RC[a1],proj:a=>P.bs.PROVISIONS[a]},
-    {lib:"Trésorerie nette (bouclage)",st:"total",hist:v.TRESORERIE_NETTE[a1],proj:a=>P.bs.TRESO[a]}];
+    {lib:"Autres dettes",hist:hAutresDet,proj:a=>P.bs.AUTRES_DETTES[a]},
+    {lib:"Besoin en fonds de roulement global",st:"total",hist:v.BFR[a1],proj:a=>P.bs.BFR[a]},
+    {lib:"Trésorerie nette",st:"total",hist:v.TRESORERIE_NETTE[a1],proj:a=>P.bs.TRESO[a]},
+    {lib:"Provisions pour risques et charges",hist:v.PROVISIONS_RC[a1],proj:a=>-P.bs.PROVISIONS[a]},
+    {lib:"Dettes financières",hist:v.DETTES_FINANCIERES[a1],proj:a=>-P.bs.DETTE[a]},
+    {lib:"Actif net",st:"titre",hist:hActifNet,proj:a=>P.bs.IMMO_NET[a]+P.bs.BFR[a]+P.bs.TRESO[a]-P.bs.PROVISIONS[a]-P.bs.DETTE[a]},
+    {lib:"Capitaux propres",st:"titre",hist:v.CAPITAUX_PROPRES[a1],proj:a=>P.bs.CP[a]}];
   return tableBP(P,defs,"Bilan prévisionnel")+
-  `<div class="mut" style="margin-top:8px">La trésorerie boucle le bilan : actifs = capitaux propres + dette + provisions, à zéro près sur tout le plan.</div>`;
+  `<div class="mut" style="margin-top:8px">Présentation en actif net, identique à la due diligence : Actifs immobilisés + BFR + trésorerie − provisions − dettes financières = Actif net = Capitaux propres (la trésorerie boucle le bilan).</div>`;
 }
 function vueBPTft(P){
   const AP=P.annees;
