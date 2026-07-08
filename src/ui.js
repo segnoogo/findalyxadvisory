@@ -1189,15 +1189,15 @@ function vueAnalyse(){
   const bar=(lab,val)=>`<div class="sc-dim"><span>${lab}</span><div class="sc-dbar"><span style="width:${Math.max(0,Math.min(100,val))}%"></span></div><b>${val}</b></div>`;
   const N=Sc.notation, Z=Sc.altman, B=Sc.bceao;
   const carteScore=`<div class="scores3">
-    <div class="card sc"><div class="sc-haut"><div><div class="sc-lab">Notation financière</div><div class="sc-sub">Profitabilité · Liquidité · Solvabilité</div></div>
+    <div class="card sc"><div class="sc-haut"><div><div class="sc-lab">Notation Findalyx <span class="sc-info" data-tip="Score propriétaire Findalyx sur 100 : moyenne pondérée de la Profitabilité (30 %), la Liquidité (30 %) et la Solvabilité (40 %). Chaque dimension agrège ses ratios, normalisés sur le benchmark sectoriel ou, à défaut, des seuils internes. Note de A (excellent) à E (critique).">!</span></div><div class="sc-sub">Profitabilité · Liquidité · Solvabilité</div></div>
       <div class="sc-grade ${N.ton}">${N.grade}<span>${N.global}/100</span></div></div>
       <div class="sc-mention ${N.ton}">${N.mention}</div>
       ${bar("Profitabilité",N.prof)}${bar("Liquidité",N.liq)}${bar("Solvabilité",N.solv)}</div>
-    <div class="card sc"><div class="sc-haut"><div><div class="sc-lab">Altman Z-Score</div><div class="sc-sub">Risque de défaillance (EMS 1995)</div></div>
+    <div class="card sc"><div class="sc-haut"><div><div class="sc-lab">Altman Z-Score <span class="sc-info" data-tip="Modèle d'Altman version marchés émergents (Z'' 1995), estime le risque de défaillance : Z = 3,25 + 6,56·X1 + 3,26·X2 + 6,72·X3 + 1,05·X4, où X1 = fonds de roulement / actif, X2 = report à nouveau / actif, X3 = EBIT / actif, X4 = capitaux propres / dettes. Zone sûre au-delà de 2,6 ; grise de 1,1 à 2,6 ; détresse en-deçà.">!</span></div><div class="sc-sub">Risque de défaillance (EMS 1995)</div></div>
       <div class="sc-grade ${Z.ton}">${Z.grade}<span>Z = ${Z.z}</span></div></div>
       <div class="sc-mention ${Z.ton}">Zone ${Z.zone}</div>
       ${Z.comp.map(c=>`<div class="sc-dim"><span>${c.k}</span><b>${(Math.round(c.v*100)/100).toFixed(2)}</b></div>`).join("")}</div>
-    <div class="card sc"><div class="sc-haut"><div><div class="sc-lab">Cotation BCEAO</div><div class="sc-sub">Bankabilité — normes UEMOA</div></div>
+    <div class="card sc"><div class="sc-haut"><div><div class="sc-lab">Cotation BCEAO <span class="sc-info" data-tip="Grille de bankabilité inspirée des normes BCEAO / UEMOA : 4 critères — liquidité générale ≥ 1, capacité de remboursement ≤ 4 ans, marge nette positive, autonomie financière ≥ 20 %. La cote (A à E) correspond au nombre de critères respectés (4 à 0).">!</span></div><div class="sc-sub">Bankabilité — normes UEMOA</div></div>
       <div class="sc-grade ${B.ton}">${B.cote}<span>${B.nOk}/4</span></div></div>
       <div class="sc-mention ${B.ton}">${B.mention}</div>
       ${B.crit.map(c=>`<div class="sc-crit"><span>${c.ok?"✓":"✕"} ${c.lib}</span><em>${c.seuil}</em></div>`).join("")}</div>
