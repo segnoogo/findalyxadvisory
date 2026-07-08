@@ -5820,9 +5820,16 @@ function vueBPPl(P){
   const defs=[];
   DEF_PL.filter(d=>!d.detail).forEach(d=>{
     if(det&&d.code==="FRAIS_GENERAUX"){
-      Object.entries(P.pl.OPEX_DETAIL||{}).forEach(([c,o])=>
-        defs.push({lib:o.lib,st:"det",hist:(v[c]&&v[c][a1])||0,proj:a=>o.vals[a]}));
-      defs.push({lib:"Charges de personnel",st:"det",hist:v.CHARGES_PERSONNEL[a1],proj:a=>P.pl.CHARGES_PERSONNEL[a]});
+      /* mêmes 6 catégories que la DD (les services extérieurs sont REGROUPÉS en une ligne,
+         pas dépliés) : Services extérieurs = OPEX total − autres achats − transports − impôts&taxes − autres charges */
+      const OD=P.pl.OPEX_DETAIL||{}, od=(c,a)=>OD[c]?(OD[c].vals[a]||0):0;
+      [["AUTRES_ACHATS","Autres achats",a=>od("AUTRES_ACHATS",a)],
+       ["TRANSPORTS","Transports",a=>od("TRANSPORTS",a)],
+       ["SERVICES_EXT","Services extérieurs",a=>(P.pl.OPEX_TOTAL[a]||0)-od("AUTRES_ACHATS",a)-od("TRANSPORTS",a)-od("IMPOTS_TAXES",a)-od("AUTRES_CHARGES",a)],
+       ["IMPOTS_TAXES","Impôts et taxes",a=>od("IMPOTS_TAXES",a)],
+       ["AUTRES_CHARGES","Autres charges",a=>od("AUTRES_CHARGES",a)],
+       ["CHARGES_PERSONNEL","Charges de personnel",a=>P.pl.CHARGES_PERSONNEL[a]]
+      ].forEach(function(x){defs.push({lib:x[1],st:"det",hist:(v[x[0]]&&v[x[0]][a1])||0,proj:x[2]});});
     }
     if(det&&d.code==="RESULTAT_FIN"){
       defs.push({lib:"Produits financiers",st:"det",hist:(v.REVENUS_FIN&&v.REVENUS_FIN[a1])||0,proj:a=>P.pl.PRODUITS_FIN[a]});
