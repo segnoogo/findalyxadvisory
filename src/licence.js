@@ -118,7 +118,7 @@ function licEcran(r){
     nocrypto:"La clé propriétaire nécessite un navigateur récent (Chrome ou Edge).",
     produit:"Ce code correspond à un autre produit Findalyx (liasse fiscale). Contactez Findalyx pour une licence Conseil ou un bundle."};
   document.getElementById("app").innerHTML=`
-  <div class="lgn">
+  <div class="lgn" style="background-image:linear-gradient(135deg,rgba(237,241,248,.82),rgba(226,233,244,.9)),url('${LOGO_LOGIN_BG}');background-size:cover;background-position:center">
     <div class="lgn-carte">
       <div class="lgn-promo">
         <svg class="lgn-bg" viewBox="0 0 400 640" preserveAspectRatio="xMidYMid slice" fill="none" stroke="#fff" aria-hidden="true">
