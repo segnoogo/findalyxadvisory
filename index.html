@@ -7229,6 +7229,7 @@ function construireEtatsFormules(wb){
       rc[l.code]=rn;
     });
     rP.RN=rc["RESULTAT_NET"];
+    ["CA","EBITDA","EBIT","FRAIS_FIN","COUTS_DIRECTS","CHARGES_PERSONNEL","FRAIS_GENERAUX"].forEach(k=>{if(rc[k])rP[k]=rc[k];});
     /* bloc ratios de marge en bas de la feuille P&L */
     wsP._rn++;
     const rhn=wsP._rn++;
@@ -7293,6 +7294,33 @@ function construireEtatsFormules(wb){
   rB.CP=ligneF(wsB,"Capitaux propres",
     somme([rB.CAP,rB.PRI,rB.RAN,rB.SUB,...persoCP.map((x,k)=>rB["PCP"+k]),rB.RNB]),{st:1});
   ligneF(wsB,"Contrôle : actif net - capitaux propres (doit être 0)",somme([rB.AN]).length?i=>`${L(3+i)}${rB.AN}-${L(3+i)}${rB.CP}`:null,{pct:0});
+  {
+    const PL=(row,c)=>`${refP}!${c}${row}`, BS=(row,c)=>`${c}${row}`;
+    const ca=c=>PL(rP.CA,c), ebitda=c=>PL(rP.EBITDA,c), ebit=c=>PL(rP.EBIT,c), rnr=c=>PL(rP.RN,c);
+    const cp=c=>BS(rB.CP,c), dfin=c=>`(-${BS(rB.DET,c)})`, dnet=c=>`(-${BS(rB.DET,c)}-${BS(rB.TN,c)})`;
+    const achats=c=>`(-${PL(rP.COUTS_DIRECTS,c)})`, opex=c=>`(${PL(rP.CHARGES_PERSONNEL,c)}-${PL(rP.FRAIS_GENERAUX,c)})`;
+    const actC=c=>`(${BS(rB.STK,c)}+${BS(rB.CLI,c)}+${BS(rB.AVF,c)}+${BS(rB.ACR,c)}+MAX(0,${BS(rB.TN,c)}))`;
+    const pasC=c=>`(-(${BS(rB.FRN,c)}+${BS(rB.CAV,c)}+${BS(rB.DSO,c)}+${BS(rB.DFI,c)}+${BS(rB.ADT,c)})+MAX(0,-${BS(rB.TN,c)}))`;
+    const totA=c=>`(${BS(rB.IMN,c)}+${actC(c)})`;
+    const items=[
+      {lab:"ROE (rentabilité des capitaux propres)",unit:"%",f:c=>`IF(${cp(c)}<=0,"",${rnr(c)}/${cp(c)})`},
+      {lab:"ROA (rentabilité de l'actif)",unit:"%",f:c=>`IF(${totA(c)}<=0,"",${rnr(c)}/${totA(c)})`},
+      {lab:"ROCE (rentabilité des capitaux employés)",unit:"%",f:c=>`IF((${cp(c)}+${dfin(c)})<=0,"",${ebit(c)}/(${cp(c)}+${dfin(c)}))`},
+      {lab:"Liquidité générale",unit:"x",f:c=>`IF(${pasC(c)}<=0,"",${actC(c)}/${pasC(c)})`},
+      {lab:"Liquidité réduite",unit:"x",f:c=>`IF(${pasC(c)}<=0,"",(${actC(c)}-${BS(rB.STK,c)})/${pasC(c)})`},
+      {lab:"Liquidité immédiate",unit:"x",f:c=>`IF(${pasC(c)}<=0,"",MAX(0,${BS(rB.TN,c)})/${pasC(c)})`},
+      {lab:"BFR en jours de CA",unit:"j",f:c=>`IF(${ca(c)}=0,"",${BS(rB.BFR,c)}*360/${ca(c)})`},
+      {lab:"Délai clients (DSO)",unit:"j",f:c=>`IF(${ca(c)}=0,"",${BS(rB.CLI,c)}*360/(${ca(c)}*1.18))`},
+      {lab:"Délai fournisseurs (DPO)",unit:"j",f:c=>`IF((${achats(c)}+${opex(c)})<=0,"",(-${BS(rB.FRN,c)})*360/((${achats(c)}+${opex(c)})*1.18))`},
+      {lab:"Gearing (dette fin. / capitaux propres)",unit:"x",f:c=>`IF(${cp(c)}<=0,"",${dfin(c)}/${cp(c)})`},
+      {lab:"Leverage (dette nette / EBITDA)",unit:"x",f:c=>`IF(${ebitda(c)}<=0,"",${dnet(c)}/${ebitda(c)})`},
+      {lab:"Couverture des intérêts (EBITDA / frais fin.)",unit:"x",f:c=>`IF((-${PL(rP.FRAIS_FIN,c)})<=0,"",${ebitda(c)}/(-${PL(rP.FRAIS_FIN,c)}))`},
+      {lab:"Autonomie financière (CP / total actif)",unit:"%",f:c=>`IF(${totA(c)}<=0,"",${cp(c)}/${totA(c)})`}
+    ];
+    const show=A.map((a,j)=>({col:L(3+j),cell:3+j}));
+    const deltas=A.slice(1).map((a,i)=>({cell:3+n+i,c1:L(3+i),c2:L(4+i)}));
+    dbBlocRatios(wsB,"Ratios de structure, rentabilité et liquidité",items,show,deltas);
+  }
   wsB.columns=[{width:3},{width:44},...Array(n).fill({width:14}),...Array(n-1).fill({width:9}),...(avecCagr?[{width:9}]:[])];
   const refB="'"+nomOnglet("Bilan").replace(/'/g,"''")+"'";
 
@@ -7353,6 +7381,18 @@ function construireEtatsFormules(wb){
         cl.numFmt='0%;(0%)';cl.alignment={horizontal:"right"};
       });
     });
+    {
+      const items=[
+        {lab:"CAFG / CA",unit:"%",f:c=>{const p=String.fromCharCode(c.charCodeAt(0)+1);return `IF(${refP}!${p}${rP.CA}=0,"",${c}${rt.FA}/${refP}!${p}${rP.CA})`;}},
+        {lab:"Conversion en cash (flux d'exploitation / EBITDA)",unit:"%",f:c=>{const p=String.fromCharCode(c.charCodeAt(0)+1);return `IF(${refP}!${p}${rP.EBITDA}=0,"",${c}${rt.ZB}/${refP}!${p}${rP.EBITDA})`;}},
+        {lab:"Free cash flow / CA (exploitation + investissement)",unit:"%",f:c=>{const p=String.fromCharCode(c.charCodeAt(0)+1);return `IF(${refP}!${p}${rP.CA}=0,"",(${c}${rt.ZB}+${c}${rt.ZC})/${refP}!${p}${rP.CA})`;}},
+        {lab:"Capacité de remboursement (dette fin. / CAFG)",unit:"x",f:c=>{const p=String.fromCharCode(c.charCodeAt(0)+1);return `IF(${c}${rt.FA}<=0,"",(-${refB}!${p}${rB.DET})/${c}${rt.FA})`;}},
+        {lab:"Couverture des investissements (flux exploit. / invest.)",unit:"x",f:c=>`IF(${c}${rt.ZC}=0,"",${c}${rt.ZB}/ABS(${c}${rt.ZC}))`}
+      ];
+      const show=cols.map((a,i)=>({col:L(3+i),cell:3+i}));
+      const deltas=cols.slice(1).map((a,i)=>({cell:3+m+i,c1:L(3+i),c2:L(4+i)}));
+      dbBlocRatios(ws,"Ratios de flux et de trésorerie",items,show,deltas);
+    }
     ws.columns=[{width:3},{width:56},...Array(m).fill({width:14}),...Array(m-1).fill({width:9})];
   }
 }
