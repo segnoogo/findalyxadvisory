@@ -5885,6 +5885,14 @@ function vueBPBs(P){
     {lib:"Provisions pour risques et charges",hist:v.PROVISIONS_RC[a1],proj:a=>-P.bs.PROVISIONS[a]},
     {lib:"Dettes financières",hist:v.DETTES_FINANCIERES[a1],proj:a=>-P.bs.DETTE[a]},
     {lib:"Actif net",st:"titre",hist:hActifNet,proj:a=>P.bs.IMMO_NET[a]+P.bs.BFR[a]+P.bs.TRESO[a]-P.bs.PROVISIONS[a]-P.bs.DETTE[a]},
+    /* capitaux propres décomposés comme la DD : capital/primes/subventions constants
+       (pas d'augmentation de capital ni nouvelle subvention modélisée), report à nouveau
+       qui accumule les résultats mis en réserve, résultat net = résultat de l'exercice projeté */
+    {lib:"Capital social",hist:v.CAPITAL[a1],proj:a=>v.CAPITAL[a1]},
+    {lib:"Primes et réserves",hist:v.PRIMES_RESERVES[a1],proj:a=>v.PRIMES_RESERVES[a1]},
+    {lib:"Report à nouveau et résultats antérieurs",hist:v.RAN_RESULTATS_ANT[a1],proj:a=>P.bs.CP[a]-v.CAPITAL[a1]-v.PRIMES_RESERVES[a1]-v.SUBV_PROV_REGL[a1]-P.pl.RN[a]},
+    {lib:"Subventions et provisions réglementées",hist:v.SUBV_PROV_REGL[a1],proj:a=>v.SUBV_PROV_REGL[a1]},
+    {lib:"Résultat net de l'exercice",hist:v.RESULTAT_NET[a1],proj:a=>P.pl.RN[a]},
     {lib:"Capitaux propres",st:"titre",hist:v.CAPITAUX_PROPRES[a1],proj:a=>P.bs.CP[a]}];
   return tableBP(P,defs,"Bilan prévisionnel")+
   `<div class="mut" style="margin-top:8px">Présentation en actif net, identique à la due diligence : Actifs immobilisés + BFR + trésorerie − provisions − dettes financières = Actif net = Capitaux propres (la trésorerie boucle le bilan).</div>`;
