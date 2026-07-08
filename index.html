@@ -6615,7 +6615,8 @@ function construireFeuillesBP(wb){
   const hb=12+m;
   Object.assign(hy,{dso:hb,dio:hb+1,dpo:hb+2,ac:hb+3,ad:hb+4,dfs:hb+5,capex:hb+6,amort:hb+7,
     tauxEx:hb+8,durEx:hb+9,empr:hb+10,tauxN:hb+11,durN:hb+12,pfin:hb+13,payout:hb+14,
-    rf:hb+16,pm:hb+17,beta:hb+18,ps:hb+19,kd:hb+20,wd:hb+21,g:hb+22,mc:hb+23,mt:hb+24,adjE:hb+25});
+    rf:hb+16,pm:hb+17,beta:hb+18,ppays:hb+19,ptaille:hb+20,pilliq:hb+21,kd:hb+22,wd:hb+23,g:hb+24,mc:hb+25,mt:hb+26,adjE:hb+27,
+    exitM:hb+28,mEbit:hb+29,mCA:hb+30,per:hb+31,pdcf:hb+32,pcomp:hb+33,ptrans:hb+34,pebit:hb+35,pca:hb+36,pper:hb+37,panr:hb+38});
   const rp={CA:5,CD:6,MB:7,PMB:8,AP_:9,SEC:10,opex0:11,TFG:11+m,PERS:12+m,EBITDA:13+m,
     PEB:14+m,DA:15+m,EBIT:16+m,PF:17+m,FF:18+m,EBT:19+m,IS:20+m,RN:21+m};
   const rb={BRUT:5,AMC:6,IMN:7,STK:8,CLI:9,ACR:10,FRN:11,ADT:12,BFR:13,CP:14,DIV:15,
@@ -6676,7 +6677,9 @@ function construireFeuillesBP(wb){
   hRow(hy.rf,"Taux sans risque");hVal(hy.rf,H.valo.rf,PCT2);
   hRow(hy.pm,"Prime de risque marché");hVal(hy.pm,H.valo.primeMarche,PCT2);
   hRow(hy.beta,"Beta");hVal(hy.beta,H.valo.beta,"0.00");
-  hRow(hy.ps,"Prime spécifique");hVal(hy.ps,H.valo.primeSpecifique,PCT2);
+  hRow(hy.ppays,"Prime de risque pays");hVal(hy.ppays,H.valo.primePays||0,PCT2);
+  hRow(hy.ptaille,"Prime de taille");hVal(hy.ptaille,H.valo.primeTaille||0,PCT2);
+  hRow(hy.pilliq,"Prime d'illiquidité");hVal(hy.pilliq,H.valo.primeIlliquidite||0,PCT2);
   hRow(hy.kd,"Coût de la dette (brut)");hVal(hy.kd,H.valo.coutDette,PCT2);
   hRow(hy.wd,"Poids de la dette");hVal(hy.wd,H.valo.poidsDette,PCT);
   hRow(hy.g,"Croissance à l'infini (g)");hVal(hy.g,H.valo.g,PCT2);
@@ -6686,6 +6689,14 @@ function construireFeuillesBP(wb){
   ["min","central","max"].forEach((k,i)=>{const c=cellV(wsH,hy.mt,3+i,H.valo.multiplesTransactions[k],"0.0");c.fill=JAUNE;});
   hRow(hy.adjE,"Ajustement d'EBITDA (référence des multiples)");
   hVal(hy.adjE,mnt((H.valo.useAdj&&H.valo.adjEbitda)?H.valo.adjEbitda:0),NF);
+  hRow(hy.exitM,"Multiple de sortie (× EBITDA terminal)");hVal(hy.exitM,H.valo.exitMultiple||0,"0.0");
+  hRow(hy.mEbit,"Multiple EV/EBIT");hVal(hy.mEbit,H.valo.multEbit||0,"0.0");
+  hRow(hy.mCA,"Multiple EV/CA");hVal(hy.mCA,H.valo.multCA||0,"0.00");
+  hRow(hy.per,"PER (cours / bénéfice)");hVal(hy.per,H.valo.per||0,"0.0");
+  const _pds=H.valo.poids||{};
+  [["pdcf","Poids DCF","dcf"],["pcomp","Poids multiples boursiers","comp"],["ptrans","Poids multiples transactions","trans"],
+   ["pebit","Poids EV/EBIT","ebit"],["pca","Poids EV/CA","ca"],["pper","Poids PER","per"],["panr","Poids actif net","anr"]]
+    .forEach(([k,lib,pk])=>{hRow(hy[k],lib+" (%)");hVal(hy[k],(_pds[pk]||0)/100,PCT2);});
   wsH.columns=[{width:3},{width:46},...Array(nH).fill({width:12}),...AP.map(()=>({width:12}))];
 
   /* références Hypothèses */
@@ -6915,9 +6926,9 @@ function construireFeuillesBP(wb){
   const wsV=wb.addWorksheet(nomV);
   titreLiasse(wsV,"Valorisation — FORMULES — DCF, multiples, ANR — "+u.lib);
   const rv={KE:5,KD:6,WACC:7,SEC:9,EBIT:10,IMP:11,NOP:12,DOT:13,DBF:14,CPX:15,FCF:16,PV:17,
-    SPV:19,VT:20,VTP:21,EV:22,DN:23,EQ:24};
-  cellV(wsV,rv.KE,2,"Coût des fonds propres (CAPM)");
-  cellF(wsV,rv.KE,3,`${h1(hy.rf)}+${h1(hy.beta)}*${h1(hy.pm)}+${h1(hy.ps)}`,PCT2);
+    SPV:19,VTG:20,VTX:21,VT:22,VTP:23,EV:24,DN:25,BRG:26,EQ:27};
+  cellV(wsV,rv.KE,2,"Coût des fonds propres (build-up : rf + β·prime marché + pays + taille + illiquidité)");
+  cellF(wsV,rv.KE,3,`${h1(hy.rf)}+${h1(hy.beta)}*${h1(hy.pm)}+${h1(hy.ppays)}+${h1(hy.ptaille)}+${h1(hy.pilliq)}`,PCT2);
   cellV(wsV,rv.KD,2,"Coût de la dette net d'IS");
   cellF(wsV,rv.KD,3,`${h1(hy.kd)}*(1-${h1(hy.is)})`,PCT2);
   cellV(wsV,rv.WACC,2,"WACC");
@@ -6946,17 +6957,32 @@ function construireFeuillesBP(wb){
   totalRow(wsV,rv.FCF,3+N);
   const fcffRange=`${L(4)}${rv.FCF}:${L(3+N)}${rv.FCF}`;
   const lastF=`${L(3+N)}${rv.FCF}`;
+  const ebitdaTerm=`${P(rp.EBITDA,N-1)}`;                 /* EBITDA du dernier exercice projeté */
+  const tvSel=H.valo.tvMode==="exit"?`C${rv.VTX}`:`C${rv.VTG}`;
+  const brdg=H.valo.bridge||[];
+  const rBr0=rv.EQ+2;                                     /* liste des ajustements du pont */
+  const brgSum=brdg.length?`SUM($C$${rBr0+1}:$C$${rBr0+brdg.length})`:"0";
   const bridge=[[rv.SPV,"Somme des FCFF actualisés",`SUM(${L(4)}${rv.PV}:${L(3+N)}${rv.PV})`],
-    [rv.VT,"Valeur terminale",`${lastF}*(1+${G})/(${W}-${G})`],
+    [rv.VTG,"Valeur terminale — Gordon (g)",`${lastF}*(1+${G})/(${W}-${G})`],
+    [rv.VTX,"Valeur terminale — multiple de sortie",`${h1(hy.exitM)}*${ebitdaTerm}`],
+    [rv.VT,"Valeur terminale retenue ("+(H.valo.tvMode==="exit"?"multiple de sortie":"Gordon")+")",tvSel],
     [rv.VTP,"Valeur terminale actualisée",`C${rv.VT}/(1+${W})^${N}`],
     [rv.EV,"Valeur d'entreprise (EV)",`C${rv.SPV}+C${rv.VTP}`],
-    [rv.DN,"Dette nette (dernier exercice réel)",`${rB}!${L(cHL)}${rb.DET}-${rB}!${L(cHL)}${rb.TRES}`],
-    [rv.EQ,"Valeur des fonds propres (DCF)",`C${rv.EV}-C${rv.DN}`]];
+    [rv.DN,"(–) Dette nette (dernier exercice réel)",`${rB}!${L(cHL)}${rb.DET}-${rB}!${L(cHL)}${rb.TRES}`],
+    [rv.BRG,"± Ajustements du pont (hors dette nette)",brgSum],
+    [rv.EQ,"Valeur des fonds propres (DCF)",`C${rv.EV}-C${rv.DN}+C${rv.BRG}`]];
   bridge.forEach(([rn,lib,f])=>{cellV(wsV,rn,2,lib);cellF(wsV,rn,3,f,NF);});
   totalRow(wsV,rv.EV,3);totalRow(wsV,rv.EQ,3);
-  /* sensibilité */
-  const rs=rv.EQ+2;
-  cellV(wsV,rs,2,"Sensibilité (fonds propres)").font={bold:true,color:{argb:"FF172554"}};
+  let rBr=rBr0;
+  if(brdg.length){
+    cellV(wsV,rBr,2,"Ajustements du pont (modifiables) :").font={italic:true};
+    brdg.forEach((x,i)=>{cellV(wsV,rBr+1+i,2,x.lib);const c=cellV(wsV,rBr+1+i,3,mnt(x.montant||0),NF);c.fill=JAUNE;});
+    rBr=rBr+brdg.length;
+  }
+  const dnB=`-$C$${rv.DN}+$C$${rv.BRG}`;
+  /* sensibilité WACC × g (Gordon) — dette nette + pont inclus */
+  const rs=rBr+2;
+  cellV(wsV,rs,2,"Sensibilité — fonds propres (WACC × g)").font={bold:true,color:{argb:"FF172554"}};
   [-0.01,-0.005,0,0.005,0.01].forEach((dg,jx)=>{
     const c=cellF(wsV,rs,3+jx,`"g "&TEXT(${G}+${dg},"0.0%")`,undefined);
     c.font={bold:true,color:{argb:"FF172554"}};c.alignment={horizontal:"right"};
@@ -6968,40 +6994,44 @@ function construireFeuillesBP(wb){
       const w=`(${W}+${dw})`,g=`(${G}+${dg})`;
       cellF(wsV,rn,3+jx,
         `SUMPRODUCT(${fcffRange}*(1+${w})^-(COLUMN(${fcffRange})-COLUMN(${L(4)}${rv.FCF})+1))`+
-        `+${lastF}*(1+${g})/(${w}-${g})/(1+${w})^${N}-$C$${rv.DN}`,NF);
+        `+${lastF}*(1+${g})/(${w}-${g})/(1+${w})^${N}${dnB}`,NF);
     });
   });
-  /* méthodes */
+  /* méthodes + pondération */
   const rm=rs+7;
   cellV(wsV,rm,2,"Méthode").font={bold:true,color:{argb:"FF172554"}};
-  ["Bas","Central","Haut"].forEach((t,i)=>{const c=cellV(wsV,rm,3+i,t);
+  ["Bas","Central","Haut","Poids"].forEach((t,i)=>{const c=cellV(wsV,rm,3+i,t);
     c.font={bold:true,color:{argb:"FF172554"}};c.alignment={horizontal:"right"};});
   const ebR=`(${rP}!${L(cHL)}$${rp.EBITDA}+${h1(hy.adjE)})`;
-  cellV(wsV,rm+1,2,"DCF (sensibilité min / central / max)");
-  cellF(wsV,rm+1,3,`MIN(${L(3)}${rs+1}:${L(7)}${rs+5})`,NF);
-  cellF(wsV,rm+1,4,`C${rv.EQ}`,NF);
-  cellF(wsV,rm+1,5,`MAX(${L(3)}${rs+1}:${L(7)}${rs+5})`,NF);
-  cellV(wsV,rm+2,2,"Multiples boursiers (× EBITDA)");
-  ["C","D","E"].forEach((col,i)=>cellF(wsV,rm+2,3+i,`${rH}!$${col}$${hy.mc}*${ebR}-$C$${rv.DN}`,NF));
-  cellV(wsV,rm+3,2,"Multiples de transactions (× EBITDA)");
-  ["C","D","E"].forEach((col,i)=>cellF(wsV,rm+3,3+i,`${rH}!$${col}$${hy.mt}*${ebR}-$C$${rv.DN}`,NF));
+  const ebitR=`${rP}!${L(cHL)}$${rp.EBIT}`, caR=`${rP}!${L(cHL)}$${rp.CA}`, rnR=`${rP}!${L(cHL)}$${rp.RN}`;
   const nAdj=(H.valo.anrAjustements||[]).length;
-  cellV(wsV,rm+4,2,"Actif net réévalué (CP + ajustements ci-dessous)");
-  cellF(wsV,rm+4,4,`${rB}!${L(cHL)}${rb.CP}${nAdj?`+SUM($C$${rm+7}:$C$${rm+6+nAdj})`:""}`,NF);
-  const rF2=rm+5;
-  cellV(wsV,rF2,2,"Fourchette retenue (min / moyenne DCF-multiples / max)");
-  cellF(wsV,rF2,3,`MIN(D${rm+1}:D${rm+4})`,NF);
-  cellF(wsV,rF2,4,`(D${rm+1}+D${rm+2})/2`,NF);
-  cellF(wsV,rF2,5,`MAX(D${rm+1}:D${rm+4})`,NF);
+  const rAnr=rm+9;                                        /* liste des ajustements ANR */
+  const anrCentral=`${rB}!${L(cHL)}${rb.CP}${nAdj?`+SUM($C$${rAnr+1}:$C$${rAnr+nAdj})`:""}`;
+  const meth=[
+    ["DCF (sensibilité min/central/max)",`MIN(${L(3)}${rs+1}:${L(7)}${rs+5})`,`C${rv.EQ}`,`MAX(${L(3)}${rs+1}:${L(7)}${rs+5})`,hy.pdcf],
+    ["Multiples boursiers (× EBITDA)",`${rH}!$C$${hy.mc}*${ebR}${dnB}`,`${rH}!$D$${hy.mc}*${ebR}${dnB}`,`${rH}!$E$${hy.mc}*${ebR}${dnB}`,hy.pcomp],
+    ["Multiples de transactions (× EBITDA)",`${rH}!$C$${hy.mt}*${ebR}${dnB}`,`${rH}!$D$${hy.mt}*${ebR}${dnB}`,`${rH}!$E$${hy.mt}*${ebR}${dnB}`,hy.ptrans],
+    ["EV / EBIT",`${h1(hy.mEbit)}*0.85*${ebitR}${dnB}`,`${h1(hy.mEbit)}*${ebitR}${dnB}`,`${h1(hy.mEbit)}*1.15*${ebitR}${dnB}`,hy.pebit],
+    ["EV / Chiffre d'affaires",`${h1(hy.mCA)}*0.85*${caR}${dnB}`,`${h1(hy.mCA)}*${caR}${dnB}`,`${h1(hy.mCA)}*1.15*${caR}${dnB}`,hy.pca],
+    ["PER (cours / bénéfice)",`${h1(hy.per)}*0.85*${rnR}+$C$${rv.BRG}`,`${h1(hy.per)}*${rnR}+$C$${rv.BRG}`,`${h1(hy.per)}*1.15*${rnR}+$C$${rv.BRG}`,hy.pper],
+    ["Actif net réévalué (CP + ajustements)","",anrCentral,"",hy.panr]];
+  meth.forEach((row,i)=>{const rn=rm+1+i;cellV(wsV,rn,2,row[0]);
+    if(row[1])cellF(wsV,rn,3,row[1],NF); if(row[2])cellF(wsV,rn,4,row[2],NF); if(row[3])cellF(wsV,rn,5,row[3],NF);
+    cellF(wsV,rn,6,h1(row[4]),PCT);});
+  const rF2=rm+8, cD=`D${rm+1}:D${rm+7}`, cW=`F${rm+1}:F${rm+7}`;
+  cellV(wsV,rF2,2,"Valeur retenue (fourchette pondérée min / moyenne / max)");
+  cellF(wsV,rF2,3,`MIN(${cD})`,NF);
+  cellF(wsV,rF2,4,`IF(SUM(${cW})=0,AVERAGE(${cD}),SUMPRODUCT(${cD},${cW})/SUM(${cW}))`,NF);
+  cellF(wsV,rF2,5,`MAX(${cD})`,NF);
   totalRow(wsV,rF2,5);
   if(nAdj){
-    cellV(wsV,rm+6,2,"Ajustements ANR (modifiables) :").font={italic:true};
+    cellV(wsV,rAnr,2,"Ajustements ANR (modifiables) :").font={italic:true};
     (H.valo.anrAjustements||[]).forEach((x,i)=>{
-      cellV(wsV,rm+7+i,2,x.lib);
-      const c=cellV(wsV,rm+7+i,3,mnt(x.montant||0),NF);c.fill=JAUNE;
+      cellV(wsV,rAnr+1+i,2,x.lib);
+      const c=cellV(wsV,rAnr+1+i,3,mnt(x.montant||0),NF);c.fill=JAUNE;
     });
   }
-  wsV.columns=[{width:3},{width:46},...Array(Math.max(N+1,6)).fill({width:14})];
+  wsV.columns=[{width:3},{width:52},...Array(Math.max(N+1,6)).fill({width:13})];
 }
 /* ============================================================
    États HISTORIQUES en formules vivantes (classeur états + BP)
