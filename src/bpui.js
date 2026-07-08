@@ -81,7 +81,7 @@ function tableBP(P,defs,titre){
       return `<tr class="pct"><td>${d.lib}</td>${cells}</tr>`;
     }
     const hist=d.hist!==undefined&&d.hist!==null?fmt(d.hist):"-";
-    return `<tr class="${d.st||""}"><td>${d.lib}</td><td class="num" style="opacity:.75">${hist}</td>
+    return `<tr class="${d.st||""}${d.clic?" cliquable":""}"${d.clic?` onclick="${d.clic}" title="Voir le détail"`:""}><td>${d.lib}${d.clic?' <span class="chev">›</span>':""}</td><td class="num" style="opacity:.75">${hist}</td>
       ${AP.map(a=>`<td class="num">${fmt(d.proj(a))}</td>`).join("")}</tr>`;
   }).join("");
   return `<div class="card" style="padding:0">
@@ -177,6 +177,29 @@ function vueBPHyp(H){
    ${anneesIn("nouveauxEmprunts",H.nouveauxEmprunts,true)}
   </div>`;
 }
+/* postes de frais généraux (mêmes codes que bp.js OPEX_STD / moteur SERVICES_EXT) */
+const BP_OPEX_STD=["AUTRES_ACHATS","SOUS_TRAITANCE","LOCATIONS","ENTRETIEN","ASSURANCES","PUBLICITE","TELECOM","FRAIS_BANCAIRES","HONORAIRES","PERSONNEL_EXT","TRANSPORTS","AUTRES_SERV_EXT","IMPOTS_TAXES","AUTRES_CHARGES"];
+const BP_SERVICES_EXT=["SOUS_TRAITANCE","LOCATIONS","ENTRETIEN","ASSURANCES","PUBLICITE","TELECOM","FRAIS_BANCAIRES","HONORAIRES","PERSONNEL_EXT","AUTRES_SERV_EXT"];
+/* détail (modale) des services extérieurs prévisionnels — chaque sous-poste modélisé séparément */
+function detailBPServices(){
+  const H=assurerBP(),P=projeterBP(ETATS,H),v=ETATS.v;
+  const a1=ETATS.annees[ETATS.annees.length-1],AP=P.annees,OD=P.pl.OPEX_DETAIL||{};
+  const th=`<th class="num">FY${String(a1).slice(-2)}</th>`+AP.map(a=>`<th class="num">FY${String(a).slice(-2)}p</th>`).join("");
+  const lignes=BP_SERVICES_EXT.filter(c=>OD[c]).map(c=>`<tr><td>${esc(OD[c].lib)}</td>
+    <td class="num" style="opacity:.75">${fmt((v[c]&&v[c][a1])||0)}</td>
+    ${AP.map(a=>`<td class="num">${fmt(OD[c].vals[a])}</td>`).join("")}</tr>`).join("");
+  const tot=a=>BP_SERVICES_EXT.reduce((s,c)=>s+(OD[c]?(OD[c].vals[a]||0):0),0);
+  document.getElementById("modal").innerHTML=`<div class="voile" onclick="fermerModal(event)">
+    <div class="fenetre card" onclick="event.stopPropagation()">
+      <div class="f-titre"><b>Services extérieurs — détail prévisionnel</b>
+        <button class="btn sm" style="float:right" onclick="fermerModal()">Fermer ✕</button></div>
+      <div class="mut" style="margin:4px 0 10px">Chaque sous-poste est modélisé séparément (onglet Hypothèses → Frais généraux ligne par ligne). Montants en ${uni().lib}.</div>
+      <div style="overflow:auto;max-height:60vh"><table class="tb"><tr><th>Poste</th>${th}</tr>
+      ${lignes||'<tr><td colspan="9" class="mut">Aucun sous-poste.</td></tr>'}
+      <tr style="font-weight:700"><td>Services extérieurs</td><td class="num">${fmt((v.SERVICES_EXT&&v.SERVICES_EXT[a1])||0)}</td>${AP.map(a=>`<td class="num">${fmt(tot(a))}</td>`).join("")}</tr>
+      </table></div>
+    </div></div>`;
+}
 function vueBPPl(P){
   /* MÊME structure que la Due Diligence : on réutilise DEF_PL (vue synthétique) et on
      mappe chaque agrégat vers sa projection. Cascade identique (RAO, HAO, etc.).
@@ -195,16 +218,19 @@ function vueBPPl(P){
   const defs=[];
   DEF_PL.filter(d=>!d.detail).forEach(d=>{
     if(det&&d.code==="FRAIS_GENERAUX"){
-      /* mêmes 6 catégories que la DD (les services extérieurs sont REGROUPÉS en une ligne,
-         pas dépliés) : Services extérieurs = OPEX total − autres achats − transports − impôts&taxes − autres charges */
+      /* mêmes catégories que la DD : les services extérieurs sont REGROUPÉS en une ligne
+         (cliquable pour voir les sous-postes), pas dépliés. Les lignes personnalisées OPEX
+         sont montrées séparément (pas fondues dans les services extérieurs). */
       const OD=P.pl.OPEX_DETAIL||{}, od=(c,a)=>OD[c]?(OD[c].vals[a]||0):0;
-      [["AUTRES_ACHATS","Autres achats",a=>od("AUTRES_ACHATS",a)],
-       ["TRANSPORTS","Transports",a=>od("TRANSPORTS",a)],
-       ["SERVICES_EXT","Services extérieurs",a=>(P.pl.OPEX_TOTAL[a]||0)-od("AUTRES_ACHATS",a)-od("TRANSPORTS",a)-od("IMPOTS_TAXES",a)-od("AUTRES_CHARGES",a)],
-       ["IMPOTS_TAXES","Impôts et taxes",a=>od("IMPOTS_TAXES",a)],
-       ["AUTRES_CHARGES","Autres charges",a=>od("AUTRES_CHARGES",a)],
-       ["CHARGES_PERSONNEL","Charges de personnel",a=>P.pl.CHARGES_PERSONNEL[a]]
-      ].forEach(function(x){defs.push({lib:x[1],st:"det",hist:(v[x[0]]&&v[x[0]][a1])||0,proj:x[2]});});
+      const push=(code,lib,pr,clic)=>defs.push({lib:lib,st:"det",clic:clic,hist:(v[code]&&v[code][a1])||0,proj:pr});
+      push("AUTRES_ACHATS","Autres achats",a=>od("AUTRES_ACHATS",a));
+      push("TRANSPORTS","Transports",a=>od("TRANSPORTS",a));
+      push("SERVICES_EXT","Services extérieurs",a=>BP_SERVICES_EXT.reduce((s,c)=>s+od(c,a),0),"detailBPServices()");
+      push("IMPOTS_TAXES","Impôts et taxes",a=>od("IMPOTS_TAXES",a));
+      push("AUTRES_CHARGES","Autres charges",a=>od("AUTRES_CHARGES",a));
+      Object.keys(OD).filter(c=>BP_OPEX_STD.indexOf(c)<0).forEach(c=>
+        defs.push({lib:OD[c].lib,st:"det",hist:(v[c]&&v[c][a1])||0,proj:a=>od(c,a)}));
+      defs.push({lib:"Charges de personnel",st:"det",hist:v.CHARGES_PERSONNEL[a1],proj:a=>P.pl.CHARGES_PERSONNEL[a]});
     }
     if(det&&d.code==="RESULTAT_FIN"){
       defs.push({lib:"Produits financiers",st:"det",hist:(v.REVENUS_FIN&&v.REVENUS_FIN[a1])||0,proj:a=>P.pl.PRODUITS_FIN[a]});
