@@ -5732,8 +5732,11 @@ function vueBP(){
   else if(SOUS_BP==="bs") corps=vueBPBs(P);
   else if(SOUS_BP==="tft") corps=vueBPTft(P);
   else corps=vueBPDette(P);
+  const vueBtn=SOUS_BP==="pl"?`<div class="segvue">
+    <button class="${PL_VUE==="synth"?"on":""}" onclick="PL_VUE='synth';rendre()">Synthétique</button>
+    <button class="${PL_VUE==="detail"?"on":""}" onclick="PL_VUE='detail';rendre()">Détaillée</button></div>`:"";
   return `<h1>Business plan</h1>${pillsScenarios(H)}${kpis}
-  <div class="row" style="margin:14px 0 12px">${tabs}</div>${corps}`;
+  <div class="row" style="margin:14px 0 12px;align-items:center">${tabs}${vueBtn}</div>${corps}`;
 }
 
 function vueBPHyp(H){
@@ -5801,7 +5804,9 @@ function vueBPHyp(H){
 }
 function vueBPPl(P){
   /* MÊME structure que la Due Diligence : on réutilise DEF_PL (vue synthétique) et on
-     mappe chaque agrégat vers sa projection. Cascade identique (RAO, HAO, etc.). */
+     mappe chaque agrégat vers sa projection. Cascade identique (RAO, HAO, etc.).
+     Bascule Synthétique/Détaillée partagée (PL_VUE) : en Détaillée on déplie les frais
+     généraux (ligne par ligne, comme dans les hypothèses) et le résultat financier. */
   const v=ETATS.v,a1=ETATS.annees[ETATS.annees.length-1];
   const rf=a=>(P.pl.PRODUITS_FIN[a]||0)+(P.pl.FRAIS_FIN[a]||0);
   const proj={
@@ -5811,8 +5816,20 @@ function vueBPPl(P){
     EBITDA:a=>P.pl.EBITDA[a], DA:a=>P.pl.DA[a], EBIT:a=>P.pl.EBIT[a],
     RESULTAT_FIN:rf, RAO:a=>P.pl.EBIT[a]+rf(a), RESULTAT_HAO:a=>0,
     RESULTAT_AVANT_IMPOT:a=>P.pl.EBT[a], IMPOTS:a=>P.pl.IS[a], RESULTAT_NET:a=>P.pl.RN[a]};
-  const defs=DEF_PL.filter(d=>!d.detail).map(d=>({lib:d.lib,st:d.st,
-    hist:(v[d.code]&&v[d.code][a1])||0, proj:proj[d.code]||(a=>0)}));
+  const det=(typeof PL_VUE!=="undefined"&&PL_VUE==="detail");
+  const defs=[];
+  DEF_PL.filter(d=>!d.detail).forEach(d=>{
+    if(det&&d.code==="FRAIS_GENERAUX"){
+      Object.entries(P.pl.OPEX_DETAIL||{}).forEach(([c,o])=>
+        defs.push({lib:o.lib,st:"det",hist:(v[c]&&v[c][a1])||0,proj:a=>o.vals[a]}));
+      defs.push({lib:"Charges de personnel",st:"det",hist:v.CHARGES_PERSONNEL[a1],proj:a=>P.pl.CHARGES_PERSONNEL[a]});
+    }
+    if(det&&d.code==="RESULTAT_FIN"){
+      defs.push({lib:"Produits financiers",st:"det",hist:(v.REVENUS_FIN&&v.REVENUS_FIN[a1])||0,proj:a=>P.pl.PRODUITS_FIN[a]});
+      defs.push({lib:"Charges financières",st:"det",hist:(v.FRAIS_FIN&&v.FRAIS_FIN[a1])||0,proj:a=>P.pl.FRAIS_FIN[a]});
+    }
+    defs.push({lib:d.lib,st:d.st,hist:(v[d.code]&&v[d.code][a1])||0,proj:proj[d.code]||(a=>0)});
+  });
   return tableBP(P,defs,"Compte de résultat prévisionnel");
 }
 function vueBPBs(P){
