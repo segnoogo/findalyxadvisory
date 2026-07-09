@@ -9,12 +9,22 @@ let charts=[];
 /* ---------- persistance (localStorage) ---------- */
 const ACTIF_KEY="fx_conseil_actif";
 function chargerDossiers(){try{return JSON.parse(localStorage.getItem("fx_conseil_dossiers")||"[]");}catch(e){return [];}}
-function sauverDossiers(l){localStorage.setItem("fx_conseil_dossiers",JSON.stringify(l));}
+function sauverDossiers(l){
+  try{localStorage.setItem("fx_conseil_dossiers",JSON.stringify(l));return true;}
+  catch(e){
+    /* QuotaExceededError (ou stockage indisponible) : ne pas perdre le travail en silence */
+    if(typeof toast==="function")toast("⚠ Sauvegarde impossible : espace de stockage saturé. Exportez une sauvegarde (Paramètres) puis supprimez d'anciens dossiers.");
+    try{console.error("localStorage indisponible/saturé",e);}catch(_){}
+    return false;
+  }
+}
 function sauverDossier(){
   if(!DOSSIER) return;
   const l=chargerDossiers();
   const i=l.findIndex(d=>d.id===DOSSIER.id);
-  if(i>=0) l[i]=DOSSIER; else l.push(DOSSIER);
+  /* tbagr est dérivé (reconstruit par recalculer au chargement) : on ne le sérialise pas (évite le double-persist) */
+  const {tbagr,...persistable}=DOSSIER;
+  if(i>=0) l[i]=persistable; else l.push(persistable);
   sauverDossiers(l);
 }
 
@@ -29,11 +39,13 @@ const fmt=v=>{if(v===null||v===undefined)return "-";
   return x<0?`(${s})`:s;};
 const fpct=v=>{if(v===null||!isFinite(v))return "-";if(Math.abs(v)>9.99)return "n.s.";
   const s=Math.round(Math.abs(v*100))+"%";return v<0?`(${s})`:s;};
-const esc=s=>String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+const esc=s=>String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");
 
 /* ---------- calcul ---------- */
 function recalculer(){
-  if(!DOSSIER||!DOSSIER.balances.length){ETATS=null;return;}
+  if(!DOSSIER)  {ETATS=null;return;}
+  if(!Array.isArray(DOSSIER.balances)) DOSSIER.balances=[];   /* dossier legacy/corrompu : pas d'écran blanc */
+  if(!DOSSIER.balances.length){ETATS=null;return;}
   const tb=appliquerMapping(construireTbagr(DOSSIER.balances),DOSSIER.overrides||{});
   DOSSIER.tbagr=tb;
   ETATS=calculerEtats(tb,DOSSIER.lignesPerso||[]);
@@ -69,7 +81,7 @@ function shell(){
     <div class="top">
       <div><div class="name">${DOSSIER?esc(DOSSIER.societe):"Aucun dossier ouvert"}</div>
       <div class="sub">${DOSSIER&&DOSSIER.balances.length?DOSSIER.balances.map(b=>"FY"+b.annee).join(" · ")+" — montants en "+uni().lib:"créez ou ouvrez un dossier"}</div></div>
-      <div class="right">${DOSSIER?selecteurUnite():""}${selecteurSocietes()}${(()=>{const c=chipMapping();return c?`<span class="chip ${c.cls}">${c.txt}</span>`:"";})()}${avatarMenu()}</div>
+      <div class="right">${barreDroite()}</div>
     </div>
     <div class="view" id="vue"></div>
   </div><div id="modal"></div>`;
@@ -96,6 +108,12 @@ function chipMapping(){
   if(!DOSSIER||!DOSSIER.tbagr) return null;
   const nm=DOSSIER.tbagr.lignes.filter(l=>l.mapping==="NON_MAPPE").length;
   return nm? {cls:"bad",txt:nm+" compte(s) à mapper"} : null;   /* rien quand tout est mappé */
+}
+/* contenu de la barre d'outils (.top .right) : sélecteurs + chip mapping + avatar.
+   Factorisé pour que la mise à jour après un reclassement ne détruise pas les sélecteurs/avatar. */
+function barreDroite(){
+  const c=chipMapping();
+  return `${DOSSIER?selecteurUnite():""}${selecteurSocietes()}${c?`<span class="chip ${c.cls}">${c.txt}</span>`:""}${avatarMenu()}`;
 }
 /* jours restants avant expiration de la licence */
 function licJoursRestants(exp){
@@ -783,7 +801,8 @@ function corrigerMapping(compte,ligne){
   DOSSIER.overrides[compte]=ligne;
   recalculer();sauverDossier();
   toast(compte+" → "+ligne);
-  document.querySelector(".top .right").innerHTML=`<span class="chip ${chipMapping().cls}">${chipMapping().txt}</span>`;
+  const br=document.querySelector(".top .right");   /* rebâtir toute la barre (chip gardé) sans effacer sélecteurs/avatar */
+  if(br)br.innerHTML=barreDroite();
 }
 function filtrerMapping(){
   const q=document.getElementById("mRech").value.toLowerCase();
