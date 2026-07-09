@@ -7094,12 +7094,12 @@ function construireFeuillesBP(wb){
   const rs=rBr+2;
   cellV(wsV,rs,2,"Sensibilité — fonds propres (WACC × g)").font={bold:true,color:{argb:"FF172554"}};
   [-0.01,-0.005,0,0.005,0.01].forEach((dg,jx)=>{
-    const c=cellF(wsV,rs,3+jx,`"g "&TEXT(${G}+${dg},"0.0%")`,undefined);
+    const c=cellF(wsV,rs,3+jx,`"g "&ROUND((${G}+${dg})*100,1)&" %"`,undefined);
     c.font={bold:true,color:{argb:"FF172554"}};c.alignment={horizontal:"right"};
   });
   [-0.01,-0.005,0,0.005,0.01].forEach((dw,ix)=>{
     const rn=rs+1+ix;
-    cellF(wsV,rn,2,`"WACC "&TEXT(${W}+${dw},"0.0%")`).font={bold:true,color:{argb:"FF172554"}};
+    cellF(wsV,rn,2,`"WACC "&ROUND((${W}+${dw})*100,2)&" %"`).font={bold:true,color:{argb:"FF172554"}};
     [-0.01,-0.005,0,0.005,0.01].forEach((dg,jx)=>{
       const w=`(${W}+${dw})`,g=`(${G}+${dg})`;
       cellF(wsV,rn,3+jx,
