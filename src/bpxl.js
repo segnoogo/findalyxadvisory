@@ -29,8 +29,8 @@ function construireFeuillesBP(wb){
   Object.assign(hy,{dso:hb,dio:hb+1,dpo:hb+2,ac:hb+3,ad:hb+4,dfs:hb+5,capex:hb+6,amort:hb+7,
     tauxEx:hb+8,durEx:hb+9,empr:hb+10,tauxN:hb+11,durN:hb+12,pfin:hb+13,payout:hb+14,
     rf:hb+16,pm:hb+17,beta:hb+18,ppays:hb+19,ptaille:hb+20,pilliq:hb+21,kd:hb+22,wd:hb+23,g:hb+24,mc:hb+25,mt:hb+26,adjE:hb+27,
-    exitM:hb+28,mEbit:hb+29,mCA:hb+30,per:hb+31,pdcf:hb+32,pcomp:hb+33,ptrans:hb+34,pebit:hb+35,pca:hb+36,pper:hb+37,panr:hb+38,
-    seuil:hb+39,repdef:hb+40,decouvert:hb+41});
+    exitM:hb+28,pdcf:hb+29,pcomp:hb+30,ptrans:hb+31,panr:hb+32,
+    seuil:hb+33,repdef:hb+34,decouvert:hb+35});
   const rp={CA:5,CD:6,MB:7,PMB:8,AP_:9,SEC:10,opex0:11,TFG:11+m,PERS:12+m,EBITDA:13+m,
     PEB:14+m,DA:15+m,EBIT:16+m,PF:17+m,FF:18+m,RFIN:19+m,RAO:20+m,HAO:21+m,EBT:22+m,IS:23+m,RN:24+m,REPDEF:25+m};
   const rb={BRUT:5,AMC:6,IMN:7,STK:8,CLI:9,ACR:10,FRN:11,DFI:12,DSO:13,ADT:14,BFR:15,
@@ -107,12 +107,9 @@ function construireFeuillesBP(wb){
   hRow(hy.adjE,"Ajustement d'EBITDA (référence des multiples)");
   hVal(hy.adjE,mnt((H.valo.useAdj&&H.valo.adjEbitda)?H.valo.adjEbitda:0),NF);
   hRow(hy.exitM,"Multiple de sortie (× EBITDA terminal)");hVal(hy.exitM,H.valo.exitMultiple||0,"0.0");
-  hRow(hy.mEbit,"Multiple EV/EBIT");hVal(hy.mEbit,H.valo.multEbit||0,"0.0");
-  hRow(hy.mCA,"Multiple EV/CA");hVal(hy.mCA,H.valo.multCA||0,"0.00");
-  hRow(hy.per,"PER (cours / bénéfice)");hVal(hy.per,H.valo.per||0,"0.0");
   const _pds=H.valo.poids||{};
   [["pdcf","Poids DCF","dcf"],["pcomp","Poids multiples boursiers","comp"],["ptrans","Poids multiples transactions","trans"],
-   ["pebit","Poids EV/EBIT","ebit"],["pca","Poids EV/CA","ca"],["pper","Poids PER","per"],["panr","Poids actif net","anr"]]
+   ["panr","Poids actif net","anr"]]
     .forEach(([k,lib,pk])=>{hRow(hy[k],lib+" (%)");hVal(hy[k],(_pds[pk]||0)/100,PCT2);});
   wsH.columns=[{width:3},{width:46},...Array(nH).fill({width:12}),...AP.map(()=>({width:12}))];
 
@@ -513,20 +510,17 @@ function construireFeuillesBP(wb){
   const ebR=`(${rP}!${L(cHL)}$${rp.EBITDA}+${h1(hy.adjE)})`;
   const ebitR=`${rP}!${L(cHL)}$${rp.EBIT}`, caR=`${rP}!${L(cHL)}$${rp.CA}`, rnR=`${rP}!${L(cHL)}$${rp.RN}`;
   const nAdj=(H.valo.anrAjustements||[]).length;
-  const rAnr=rm+9;                                        /* liste des ajustements ANR */
+  const rAnr=rm+6;                                        /* liste des ajustements ANR (4 méthodes) */
   const anrCentral=`${rB}!${L(cHL)}${rb.CP}${nAdj?`+SUM($C$${rAnr+1}:$C$${rAnr+nAdj})`:""}`;
   const meth=[
     ["DCF (sensibilité min/central/max)",`MIN(${L(3)}${rs+1}:${L(7)}${rs+5})`,`C${rv.EQ}`,`MAX(${L(3)}${rs+1}:${L(7)}${rs+5})`,hy.pdcf],
     ["Multiples boursiers (× EBITDA)",`${rH}!$C$${hy.mc}*${ebR}${dnB}`,`${rH}!$D$${hy.mc}*${ebR}${dnB}`,`${rH}!$E$${hy.mc}*${ebR}${dnB}`,hy.pcomp],
     ["Multiples de transactions (× EBITDA)",`${rH}!$C$${hy.mt}*${ebR}${dnB}`,`${rH}!$D$${hy.mt}*${ebR}${dnB}`,`${rH}!$E$${hy.mt}*${ebR}${dnB}`,hy.ptrans],
-    ["EV / EBIT",`${h1(hy.mEbit)}*0.85*${ebitR}${dnB}`,`${h1(hy.mEbit)}*${ebitR}${dnB}`,`${h1(hy.mEbit)}*1.15*${ebitR}${dnB}`,hy.pebit],
-    ["EV / Chiffre d'affaires",`${h1(hy.mCA)}*0.85*${caR}${dnB}`,`${h1(hy.mCA)}*${caR}${dnB}`,`${h1(hy.mCA)}*1.15*${caR}${dnB}`,hy.pca],
-    ["PER (cours / bénéfice)",`${h1(hy.per)}*0.85*${rnR}+$C$${rv.BRG}`,`${h1(hy.per)}*${rnR}+$C$${rv.BRG}`,`${h1(hy.per)}*1.15*${rnR}+$C$${rv.BRG}`,hy.pper],
     ["Actif net réévalué (CP + ajustements)","",anrCentral,"",hy.panr]];
   meth.forEach((row,i)=>{const rn=rm+1+i;cellV(wsV,rn,2,row[0]);
     if(row[1])cellF(wsV,rn,3,row[1],NF); if(row[2])cellF(wsV,rn,4,row[2],NF); if(row[3])cellF(wsV,rn,5,row[3],NF);
     cellF(wsV,rn,6,h1(row[4]),PCT);});
-  const rF2=rm+8, cD=`D${rm+1}:D${rm+7}`, cW=`F${rm+1}:F${rm+7}`;
+  const rF2=rm+5, cD=`D${rm+1}:D${rm+4}`, cW=`F${rm+1}:F${rm+4}`;
   cellV(wsV,rF2,2,"Valeur retenue (fourchette pondérée min / moyenne / max)");
   cellF(wsV,rF2,3,`MIN(${cD})`,NF);
   cellF(wsV,rF2,4,`IF(SUM(${cW})=0,AVERAGE(${cD}),SUMPRODUCT(${cD},${cW})/SUM(${cW}))`,NF);

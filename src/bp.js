@@ -94,10 +94,8 @@ function hypothesesBP(etats, lignesPerso){
       tvMode:"gordon", exitMultiple:5.5,
       multiplesComparables:{min:4,central:5.5,max:7},
       multiplesTransactions:{min:5,central:6.5,max:8},
-      /* multiples élargis (valeur centrale) : EV/EBIT, EV/CA, PER (cours/bénéfice) */
-      multEbit:8, multCA:1.2, per:10,
-      /* pondération des méthodes pour la valeur retenue (en %) */
-      poids:{dcf:40,comp:20,trans:15,ebit:5,ca:0,per:5,anr:15},
+      /* pondération des méthodes retenues (DCF, comparables, transactions, actif net) — en % */
+      poids:{dcf:45,comp:20,trans:20,anr:15},
       /* pont valeur d'entreprise → fonds propres (ajustements hors dette nette).
          Pré-rempli avec les provisions R&C (dette-like) ; l'utilisateur peut l'éditer/retirer. */
       bridge: provRC>0.5?[{lib:"Provisions pour risques & charges",montant:-Math.round(provRC)}]:[],
@@ -325,13 +323,11 @@ function valoriserBP(etats,H,P){
   const band=(f,c)=>({min:f(c*0.85),central:f(c),max:f(c*1.15)});
   const anrBase=v.CAPITAUX_PROPRES[a1];
   const anrAjust=(V.anrAjustements||[]).reduce((s,x)=>s+(+x.montant||0),0);
+  /* méthodes retenues = les plus utilisées : DCF, multiples boursiers, multiples de transactions, actif net */
   const methodes=[
     {id:"dcf",lib:"DCF (flux actualisés)",min:Math.min(...sensi.flat()),max:Math.max(...sensi.flat()),central:equityDcf},
     {id:"comp",lib:"Multiples boursiers ("+mc.min+"–"+mc.max+"× EBITDA)",min:eqComp(mc.min),max:eqComp(mc.max),central:eqComp(mc.central)},
     {id:"trans",lib:"Multiples de transactions ("+mt.min+"–"+mt.max+"× EBITDA)",min:eqComp(mt.min),max:eqComp(mt.max),central:eqComp(mt.central)},
-    Object.assign({id:"ebit",lib:(V.multEbit||0)+"× EV/EBIT"},band(m=>eqEV(m,ebitRef),V.multEbit||0)),
-    Object.assign({id:"ca",lib:(V.multCA||0)+"× EV/chiffre d'affaires"},band(m=>eqEV(m,caRef),V.multCA||0)),
-    Object.assign({id:"per",lib:"PER "+(V.per||0)+"× (cours / bénéfice)"},band(m=>m*rnRef+bridgeAjust,V.per||0)),
     {id:"anr",lib:"Actif net "+(anrAjust?"réévalué":"comptable"),min:anrBase+Math.min(0,anrAjust),max:anrBase+Math.max(0,anrAjust),central:anrBase+anrAjust}
   ];
   /* valeur retenue = moyenne pondérée des valeurs centrales (poids en %) */

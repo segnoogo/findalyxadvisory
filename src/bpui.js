@@ -472,11 +472,8 @@ function vueValo(){
       ${["min","central","max"].map(k=>`<td class="num"><input type="text" inputmode="decimal" class="nin" value="${Vh.multiplesComparables[k]}" step="0.5" onchange="hValoM('multiplesComparables','${k}',this.value,1)"></td>`).join("")}</tr>
     <tr><td>Multiples de transactions (× EBITDA)</td>
       ${["min","central","max"].map(k=>`<td class="num"><input type="text" inputmode="decimal" class="nin" value="${Vh.multiplesTransactions[k]}" step="0.5" onchange="hValoM('multiplesTransactions','${k}',this.value,1)"></td>`).join("")}</tr>
-    <tr><td>EV / EBIT (×)</td><td></td><td class="num"><input type="text" inputmode="decimal" class="nin" value="${Vh.multEbit||0}" step="0.5" onchange="hValo('multEbit',this.value,1)"></td><td></td></tr>
-    <tr><td>EV / Chiffre d'affaires (×)</td><td></td><td class="num"><input type="text" inputmode="decimal" class="nin" value="${Vh.multCA||0}" step="0.1" onchange="hValo('multCA',this.value,1)"></td><td></td></tr>
-    <tr><td>PER — cours / bénéfice (×)</td><td></td><td class="num"><input type="text" inputmode="decimal" class="nin" value="${Vh.per||0}" step="0.5" onchange="hValo('per',this.value,1)"></td><td></td></tr>
     </table>
-    <div class="mut" style="margin-top:4px">EV/EBIT, EV/CA et PER : fourchette ±15 % autour de la valeur centrale.</div>
+    <div class="mut" style="margin-top:4px">Multiples appliqués à l'EBITDA de référence ; fourchette bas / central / haut.</div>
     <div class="sec-titre">Actif net réévalué — ajustements</div>
     ${ (Vh.anrAjustements||[]).map((x,i)=>`<div class="row" style="margin-bottom:6px">
        <input class="sel" style="flex:1" value="${esc(x.lib)}" onchange="majAnr(${i},'lib',this.value)">
