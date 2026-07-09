@@ -163,7 +163,9 @@ function vueBPHyp(H){
     ${hypLigne("Taux d'inflation (défaut des frais généraux)",inPct("hBP.bind(null,'inflation')",H.inflation||0.03))}
     ${hypLigne("Croissance des charges de personnel",inPct("hBP.bind(null,'personnel_croiss')",H.personnel_croiss))}
     ${hypLigne("Taux d'IS effectif",inPct("hBP.bind(null,'is_taux')",H.is_taux))}
+    ${hypLigne("Impôt minimum forfaitaire (% du CA)",inPct("hBP.bind(null,'imf_taux')",H.imf_taux!==undefined?H.imf_taux:0.005))}
     ${hypLigne("Déficits reportables — stock initial",inK("hBP.bind(null,'reportDeficitaire')",H.reportDeficitaire||0))}
+    ${hypLigne("Déficits reportables — durée (années)",`<input type="text" inputmode="numeric" class="nin" value="${H.reportDef_horizon||3}" onchange="hBP('reportDef_horizon',this.value,1)"> ans`)}
   </div>
   <div class="card"><div class="sec-titre" style="margin-top:0">Besoin en fonds de roulement</div>
     ${hypLigne("Délai clients — DSO",inJ("hBP.bind(null,'dso')",H.dso))}

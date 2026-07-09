@@ -70,6 +70,8 @@ function hypothesesBP(etats, lignesPerso){
     decouvert_taux:born((detteH>0?fraisFinH/detteH:0.08)+0.03,0.03,0.25,0.12),
     /* report déficitaire : stock initial de déficits imputables sur les bénéfices futurs */
     reportDeficitaire:0,
+    reportDef_horizon:3,   /* péremption : les déficits ordinaires se reportent sur 3 exercices (UEMOA/OHADA) */
+    imf_taux:0.005,        /* impôt minimum forfaitaire (part du CA HT) — dû même en cas de perte */
     /* financement */
     dette_taux:born(detteH>0?fraisFinH/detteH:0.08,0.02,0.2,0.08),
     dette_dureeResiduelle:5,
@@ -139,7 +141,9 @@ function projeterBP(etats,H,scenario){
   const emprunts=[];                        /* {solde,taux,amort} des nouveaux emprunts */
   let ligneCT=0;                            /* concours bancaires courants (découvert), positif */
   const seuilCash=H.seuilCash||0;
-  let reportDef=Math.max(0,H.reportDeficitaire||0); /* stock de déficits reportables imputables */
+  /* déficits reportables avec péremption : chaque poche garde son nombre d'exercices restants */
+  const horizonDef=H.reportDef_horizon||3;
+  let deficits=(H.reportDeficitaire>0)?[{montant:H.reportDeficitaire,resteAns:horizonDef}]:[];
 
   AP.forEach((a,i)=>{
     /* --- P&L --- */
@@ -181,12 +185,21 @@ function projeterBP(etats,H,scenario){
     const pf=H.produitsFin_montant;
     const rf=pf-interets-interetsCT;
     const ebt=ebit+rf;
-    /* report déficitaire : impute les pertes antérieures sur le bénéfice imposable */
+    /* report déficitaire : impute les pertes antérieures (FIFO) sur le bénéfice imposable */
     let baseIS=ebt;
-    if(ebt>0){const imput=Math.min(ebt,reportDef);baseIS=ebt-imput;reportDef-=imput;}
-    else{reportDef+=-ebt;}
-    const impots=baseIS>0?-H.is_taux*baseIS:0;
+    if(ebt>0){let dispo=ebt;
+      deficits.forEach(d=>{const im=Math.min(d.montant,dispo);d.montant-=im;dispo-=im;});
+      deficits=deficits.filter(d=>d.montant>0.01);baseIS=dispo;}
+    /* impôt dû = max(IS sur le bénéfice imposable, impôt minimum forfaitaire sur le CA) :
+       l'IMF est un plancher qui s'applique même en exercice déficitaire */
+    const isBenef=baseIS>0?H.is_taux*baseIS:0;
+    const imf=(H.imf_taux||0)*caP;
+    const impots=-Math.max(isBenef,imf);
     const rn=ebt+impots;
+    /* vieillissement : les poches perdent un exercice et périment ; la perte de l'année entre après */
+    deficits.forEach(d=>d.resteAns--);
+    deficits=deficits.filter(d=>d.resteAns>0);
+    if(ebt<0)deficits.push({montant:-ebt,resteAns:horizonDef});
     /* --- BFR --- */
     const clients=caP*(H.dso+sc.dJours)/360;
     const stocks=Math.abs(cd)*H.dio/360;

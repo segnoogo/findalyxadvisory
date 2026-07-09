@@ -93,6 +93,8 @@ ok(Pbp.annees.length === (Hbp.nb || 5), `${Hbp.nb || 5} années projetées (obte
 Pbp.annees.forEach(a => near(Pbp.tft[a].ECART, 0, 0.01, `BP bouclé ${a} (ECART TFT ≈ 0)`));
 // INVARIANT 4 — TFT prévisionnel réconcilié : clôture (ZG) = trésorerie nette du bilan
 Pbp.annees.forEach(a => near(Pbp.tft[a].ZG, Pbp.bs.TRESO[a], 0.01, `TFT prévisionnel ${a} (ZG = trésorerie de clôture)`));
+// impôt minimum forfaitaire : l'impôt payé est au moins l'IMF (part du CA), chaque année
+Pbp.annees.forEach(a => ok(Pbp.pl.IS[a] <= -((Hbp.imf_taux || 0) * Pbp.pl.CA[a]) + 1e-6, `impôt ≥ IMF ${a} (IS ${Math.round(Pbp.pl.IS[a])})`));
 const valBp = BP.valoriserBP(etats, Hbp, Pbp);
 ok(isFinite(valBp.wacc) && valBp.wacc > 0 && valBp.wacc < 1, `WACC dans ]0,1[ (obtenu ${(valBp.wacc * 100).toFixed(1)} %)`);
 ok(valBp.ke >= valBp.kd, `coût des fonds propres ≥ coût de la dette après IS (${(valBp.ke * 100).toFixed(1)} % ≥ ${(valBp.kd * 100).toFixed(1)} %)`);
