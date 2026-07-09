@@ -411,7 +411,26 @@ function vueBPAnalyse(P){
     <div class="card"><b>Trésorerie nette et dette financière</b><div style="height:260px;margin-top:8px"><canvas id="g_bp2"></canvas></div></div>
   </div>`;
 
-  return tabSR+tabCov+tabSens+graphs;
+  /* --- Comparaison des scénarios (prudent / central / optimiste) --- */
+  const ordreScen=[["bas","Prudent"],["base","Central"],["haut","Optimiste"]];
+  const colsScen=ordreScen.map(([id,lab])=>{
+    const Pi=projeterBP(ETATS,H,id), Vi=valoriserBP(ETATS,H,Pi), aL=Pi.annees[Pi.annees.length-1];
+    return {lab,caF:Pi.pl.CA[aL],ebF:Pi.pl.EBITDA[aL],rnCum:Pi.annees.reduce((s,a)=>s+Pi.pl.RN[a],0),
+      trF:Pi.bs.TRESO[aL],eq:Vi.fourchette.retenue};
+  });
+  const rowScen=(lib,f)=>`<tr><td>${lib}</td>${colsScen.map(c=>`<td class="num">${fmt(f(c))}</td>`).join("")}</tr>`;
+  const tabScen=`<div class="card" style="padding:0;margin-top:14px">
+    <div class="bande">${esc(DOSSIER.societe.toUpperCase())} — Comparaison des scénarios</div>
+    <div class="tscroll"><table class="tb etat"><tr><th>${u.lib}</th>${colsScen.map(c=>`<th class="num">${c.lab}</th>`).join("")}</tr>
+    ${rowScen("Chiffre d'affaires (FY"+String(aF).slice(-2)+"p)",c=>c.caF)}
+    ${rowScen("EBITDA (FY"+String(aF).slice(-2)+"p)",c=>c.ebF)}
+    ${rowScen("Résultat net cumulé sur l'horizon",c=>c.rnCum)}
+    ${rowScen("Trésorerie nette finale",c=>c.trF)}
+    ${rowScen("Valeur des fonds propres (retenue)",c=>c.eq)}
+    </table></div>
+    <div class="mut" style="margin:8px 12px">Scénarios paramétrés dans les hypothèses (variation du CA, de la marge et des délais). Le scénario actif pour les autres vues reste « ${(H.scenarios[H.scenario]||H.scenarios.base).lab} ».</div></div>`;
+
+  return tabSR+tabCov+tabScen+tabSens+graphs;
 }
 function dessinerBPGraphs(){
   if(!ETATS||typeof Chart==="undefined")return;
