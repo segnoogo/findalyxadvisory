@@ -5039,7 +5039,12 @@ function importerBalance(){
     }
     DOSSIER.balances=DOSSIER.balances.filter(x=>x.annee!==annee);
     DOSSIER.balances.push(b);
-    recalculer();sauverDossier();shell();
+    recalculer();sauverDossier();
+    /* le business plan est calibré sur l'historique : s'il a changé, proposer de le recalculer */
+    if(typeof bpDesynchronise==="function"&&bpDesynchronise()&&confirm("Les données historiques ont changé. Recalculer les hypothèses du business plan depuis le nouvel historique ?\n\n(Vos éventuelles saisies manuelles du BP seront remplacées ; sinon un rappel restera dans l'onglet Business plan.)")){
+      DOSSIER.bp=null;assurerBP();sauverDossier();
+    }
+    shell();
     toast("Balance FY"+annee+" importée ("+res.controle.nb+" comptes)"+msgIgnorees(res.controle));
   }catch(err){toast("Erreur : "+err.message);}
 }
@@ -6101,8 +6106,17 @@ function assurerBP(){
   const aA=ETATS?ETATS.annees[ETATS.annees.length-1]:null;
   if(aA!==null&&DOSSIER.adj&&DOSSIER.adj.ebitda&&DOSSIER.tbagr)
     DOSSIER.bp.valo.adjEbitda=DOSSIER.adj.ebitda.reduce((s2,l)=>s2+valeurAdj(l,aA),0);
+  /* empreinte de l'historique ayant servi à calibrer le BP : sert à détecter un ré-import de balances */
+  if(DOSSIER.bp._sig===undefined) DOSSIER.bp._sig=histSig();
   return DOSSIER.bp;
 }
+/* signature de l'historique (années + CA/EBITDA/actif net arrondis) — change dès qu'une balance est ré-importée ou re-mappée */
+function histSig(){
+  if(!ETATS) return "";
+  const v=ETATS.v;
+  return ETATS.annees.map(a=>a+":"+Math.round(v.CA[a]||0)+"/"+Math.round(v.EBITDA[a]||0)+"/"+Math.round(v.ACTIF_NET[a]||0)).join("|");
+}
+function bpDesynchronise(){return !!(DOSSIER&&DOSSIER.bp&&DOSSIER.bp._sig&&DOSSIER.bp._sig!==histSig());}
 function resetBP(){if(!confirm("Réinitialiser toutes les hypothèses depuis l'historique ?"))return;
   DOSSIER.bp=null;assurerBP();sauverDossier();rendre();}
 function hBP(k,val,div){const H=assurerBP();const x=numFR(val);
@@ -6202,7 +6216,10 @@ function vueBP(){
   const vueBtn=SOUS_BP==="pl"?`<div class="segvue">
     <button class="${PL_VUE==="synth"?"on":""}" onclick="PL_VUE='synth';rendre()">Synthétique</button>
     <button class="${PL_VUE==="detail"?"on":""}" onclick="PL_VUE='detail';rendre()">Détaillée</button></div>`:"";
-  return `<h1>Business plan</h1>${pillsScenarios(H)}${kpis}
+  const banner=bpDesynchronise()?`<div class="card" style="border-left:4px solid #b26b00;background:#fff8ec;display:flex;align-items:center;gap:12px;justify-content:space-between;flex-wrap:wrap">
+    <span>⚠ Les hypothèses de ce business plan ont été calculées sur un historique antérieur ; des balances ont changé depuis. Elles ne se recalculent pas automatiquement pour préserver vos saisies.</span>
+    <button class="btn sm primary" onclick="resetBP()">Recalculer depuis l'historique</button></div>`:"";
+  return `<h1>Business plan</h1>${banner}${pillsScenarios(H)}${kpis}
   <div class="row" style="margin:14px 0 12px;align-items:center">${tabs}${vueBtn}</div>${corps}`;
 }
 

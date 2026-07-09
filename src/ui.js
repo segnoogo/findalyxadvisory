@@ -619,7 +619,12 @@ function importerBalance(){
     }
     DOSSIER.balances=DOSSIER.balances.filter(x=>x.annee!==annee);
     DOSSIER.balances.push(b);
-    recalculer();sauverDossier();shell();
+    recalculer();sauverDossier();
+    /* le business plan est calibré sur l'historique : s'il a changé, proposer de le recalculer */
+    if(typeof bpDesynchronise==="function"&&bpDesynchronise()&&confirm("Les données historiques ont changé. Recalculer les hypothèses du business plan depuis le nouvel historique ?\n\n(Vos éventuelles saisies manuelles du BP seront remplacées ; sinon un rappel restera dans l'onglet Business plan.)")){
+      DOSSIER.bp=null;assurerBP();sauverDossier();
+    }
+    shell();
     toast("Balance FY"+annee+" importée ("+res.controle.nb+" comptes)"+msgIgnorees(res.controle));
   }catch(err){toast("Erreur : "+err.message);}
 }
