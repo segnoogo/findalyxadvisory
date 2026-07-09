@@ -913,7 +913,7 @@ function construireValo(pptx){
   rpCadreComment(sl,0.55,5.5,7.0,1.35);
   rpPied(sl,mention,++page);
   /* ---------- 2. DCF : coût du capital, flux, passage aux fonds propres ---------- */
-  const sousDcf=gordon?["Coût du capital et flux actualisés","Analyse de sensibilité"]:["Coût du capital et flux actualisés"];
+  const sousDcf=["Coût du capital et flux actualisés","Analyse de sensibilité"];
   rpSection(pptx,2,"Approche par les flux (DCF)",sousDcf,mention,++page);
   sl=pptx.addSlide();
   rpEnTete(sl,B.societe,"Approche par les flux (DCF)");
@@ -945,17 +945,18 @@ function construireValo(pptx){
     new Set(),[4.4,1.9],8.5);
   rpCadreComment(sl,0.55,4.15,5.7,2.35);
   rpPied(sl,mention,++page);
-  /* sensibilité (uniquement en mode Gordon : la grille WACC×g est cohérente avec la valeur centrale) */
-  if(gordon){
+  /* sensibilité : WACC × pilote de la valeur terminale (g en Gordon, multiple de sortie en exit) */
+  {
     sl=pptx.addSlide();
     rpEnTete(sl,B.societe,"Approche par les flux (DCF)");
     rpTitre(sl,"Sensibilité de la valeur des fonds propres");
-    const dws=[-0.01,-0.005,0,0.005,0.01];
-    const entS=["WACC \\ g",...dws.map(dg=>pct1(val.g+dg))];
-    const rowsS=(val.sensi||[]).map((ligne,i)=>[pct1(val.wacc+dws[i]),...ligne.map(x=>rpFmt(x))]);
-    rpTable(sl,0.55,2.2,12.25,B.societe.toUpperCase()+" - Valeur des fonds propres selon le WACC et la croissance perpétuelle g",
+    const axes=val.sensiAxes||{wacc:[-0.01,-0.005,0,0.005,0.01].map(d=>val.wacc+d),colType:"g",col:[-0.01,-0.005,0,0.005,0.01].map(d=>val.g+d)};
+    const colLbl=x=>axes.colType==="multiple"?(Math.round(x*10)/10)+"×":pct1(x);
+    const entS=[gordon?"WACC \\ g":"WACC \\ mult.",...axes.col.map(colLbl)];
+    const rowsS=(val.sensi||[]).map((ligne,i)=>[pct1(axes.wacc[i]),...ligne.map(x=>rpFmt(x))]);
+    rpTable(sl,0.55,2.2,12.25,B.societe.toUpperCase()+" - Valeur des fonds propres selon le WACC et "+(gordon?"la croissance perpétuelle g":"le multiple de sortie"),
       entS,rowsS,rowsS.map((r,i)=>i===2?"sous_total":"detail"),new Set([3]),
-      [1.7,...dws.map(()=>1.0)],9,"Chaque cellule = valeur des fonds propres (EV actualisée − dette nette + ajustements du pont).");
+      [1.7,...axes.col.map(()=>1.0)],9,"Chaque cellule = valeur des fonds propres (EV actualisée − dette nette + ajustements du pont).");
     rpCadreComment(sl,0.55,4.6,12.25,1.9);
     rpPied(sl,mention,++page);
   }

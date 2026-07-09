@@ -4,6 +4,15 @@ function assurerBP(){
   const base=hypothesesBP(ETATS,DOSSIER.lignesPerso||[]);
   if(!DOSSIER.bp){DOSSIER.bp=base;}
   else{
+    /* migration DSO/DPO : anciens dossiers stockaient les délais en jours HT ; on passe en TTC
+       (÷1,18) pour aligner l'affichage sur les ratios. La projection est inchangée : projeterBP
+       multiplie désormais par 1,18, les deux facteurs se compensent. DOIT précéder la copie des
+       clés (sinon convTTC serait recopié depuis la base et la migration serait sautée). */
+    if(!DOSSIER.bp.convTTC){
+      if(typeof DOSSIER.bp.dso==="number") DOSSIER.bp.dso/=1.18;
+      if(typeof DOSSIER.bp.dpo==="number") DOSSIER.bp.dpo/=1.18;
+      DOSSIER.bp.convTTC=true;
+    }
     if(DOSSIER.bp.inflation===undefined){
       DOSSIER.bp.inflation=0.03;
       (DOSSIER.bp.opex||[]).forEach(o=>{if(o.mode==="pctCA")o.mode="inflation";});
@@ -512,8 +521,8 @@ function vueValo(){
        <span class="mut">${u.lib}</span><button class="btn sm" onclick="supBridge(${i})">✕</button></div>`).join("")}
     <button class="btn sm" onclick="ajBridge()">+ Ajouter un ajustement</button>
     <div class="mut" style="margin-top:6px">Ex. : − intérêts minoritaires, − provisions (retraite, litiges), + actifs hors exploitation. VT Gordon ${fmt(V.vtGordon)} · VT multiple de sortie ${fmt(V.vtExit)} ${u.suf}.</div></div>
-    <div class="card"><div class="sec-titre" style="margin-top:0">Sensibilité — WACC × croissance g</div>
-    <table class="tb"><tr><th>${u.lib}</th>${[-0.01,-0.005,0,0.005,0.01].map(dg=>`<th class="num">g ${pc(V.g+dg)}</th>`).join("")}</tr>
+    <div class="card"><div class="sec-titre" style="margin-top:0">Sensibilité — WACC × ${V.tvMode==="exit"?"multiple de sortie":"croissance g"}</div>
+    <table class="tb"><tr><th>${u.lib}</th>${(V.sensiAxes?V.sensiAxes.col:[-0.01,-0.005,0,0.005,0.01].map(dg=>V.g+dg)).map(cv=>`<th class="num">${V.tvMode==="exit"?(Math.round(cv*10)/10)+"×":"g "+pc(cv)}</th>`).join("")}</tr>
     ${V.sensi.map((ligne,i)=>{const dw=[-0.01,-0.005,0,0.005,0.01][i];
       return `<tr class="${dw===0?"total":""}"><td>WACC ${pc(V.wacc+dw)}</td>${ligne.map((x,j)=>`<td class="num" ${dw===0&&j===2?'style="font-weight:700"':""}>${fmt(x)}</td>`).join("")}</tr>`;}).join("")}
     </table></div></div>`;

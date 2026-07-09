@@ -54,10 +54,12 @@ function hypothesesBP(etats, lignesPerso){
     /* investissement & amortissements */
     capex:Array(5).fill(Math.round(Math.max(dotHist,0))),
     amort_taux:born(brut>0?dotHist/brut:0.1,0.02,0.4,0.10),
-    /* BFR en jours */
-    dso:born(v.CLIENTS[a1]/ca1*360,0,360,45),
+    /* BFR en jours. DSO/DPO exprimés en jours de CA/achats TTC (TVA 18 %), cohérents avec
+       les ratios affichés et l'ancien moteur ; DIO en jours de coûts HT (stocks au coût). */
+    convTTC:true,
+    dso:born(v.CLIENTS[a1]/(ca1*1.18)*360,0,360,45),
     dio:born(cd?v.STOCKS[a1]/Math.abs(cd)*360:0,0,360,30),
-    dpo:born((cd+op)?-v.FOURNISSEURS[a1]/Math.abs(cd+op)*360:0,0,360,30),
+    dpo:born((cd+op)?-v.FOURNISSEURS[a1]/(Math.abs(cd+op)*1.18)*360:0,0,360,30),
     /* dettes fiscales & sociales = exploitation → projetées en % du CA (croissent avec l'activité) */
     dettesFiscSoc_pct:born(ca1?-(v.DETTES_SOCIALES[a1]+v.DETTES_FISCALES[a1])/ca1:0.03,0,1,0.03),
     /* autres créances/dettes = hors exploitation (HAO inclus) → FIGÉES à leur niveau historique.
@@ -199,9 +201,9 @@ function projeterBP(etats,H,scenario){
     deficits=deficits.filter(d=>d.resteAns>0);
     if(ebt<0)deficits.push({montant:-ebt,resteAns:horizonDef});
     /* --- BFR --- */
-    const clients=caP*(H.dso+sc.dJours)/360;
-    const stocks=Math.abs(cd)*H.dio/360;
-    const fournisseurs=-(Math.abs(cd)+Math.abs(opexTot))*H.dpo/360;
+    const clients=caP*1.18*(H.dso+sc.dJours)/360;                    /* DSO en jours de CA TTC (TVA 18 %) */
+    const stocks=Math.abs(cd)*H.dio/360;                             /* DIO en jours de coûts HT (stocks au coût) */
+    const fournisseurs=-(Math.abs(cd)+Math.abs(opexTot))*1.18*H.dpo/360;  /* DPO en jours d'achats TTC */
     const dettesFiscSoc=-caP*H.dettesFiscSoc_pct;   /* exploitation : croît avec le CA */
     const autresCr=H.autresCreances_fixe;            /* hors exploitation : figé (HAO inclus) */
     const autresDet=H.autresDettes_fixe;             /* hors exploitation : figé (HAO inclus) */
@@ -302,18 +304,27 @@ function valoriserBP(etats,H,P){
   /* pont EV → fonds propres : ajustements hors dette nette (minoritaires, provisions, actifs hors exploitation…) */
   const bridgeAjust=(V.bridge||[]).reduce((s,x)=>s+(+x.montant||0),0);
   const equityDcf=ev-detteNette+bridgeAjust;
-  /* sensibilité WACC × g (valeur terminale de Gordon) — pont dette nette + ajustements inclus */
+  /* sensibilité : lignes = WACC ; colonnes = le pilote de la valeur terminale actif —
+     la croissance g en mode Gordon, le multiple de sortie en mode exit (faire varier g
+     en exit serait sans effet sur la VT et rendrait la valeur centrale hors fourchette).
+     Pont dette nette + ajustements inclus, donc cohérent avec equityDcf. */
+  const dwAxis=[-0.01,-0.005,0,0.005,0.01];
+  const colAxis=tvMode==="exit"?[-1,-0.5,0,0.5,1]:[-0.01,-0.005,0,0.005,0.01];
   const sensi=[];
-  [-0.01,-0.005,0,0.005,0.01].forEach(dw=>{
+  dwAxis.forEach(dw=>{
     const ligne=[];
-    [-0.01,-0.005,0,0.005,0.01].forEach(dg=>{
-      const w=wacc+dw,g=V.g+dg;
+    colAxis.forEach(dx=>{
+      const w=wacc+dw;
       let s=0;AP.forEach((a,i)=>s+=fcff[a]/Math.pow(1+w,i+1));
-      const tv=w>g?fcffN*(1+g)/(w-g)/Math.pow(1+w,N):0;
+      let tv;
+      if(tvMode==="exit"){const mm=(V.exitMultiple||0)+dx;tv=mm*ebitdaTerm/Math.pow(1+w,N);}
+      else{const g=V.g+dx;tv=w>g?fcffN*(1+g)/(w-g)/Math.pow(1+w,N):0;}
       ligne.push(s+tv-detteNette+bridgeAjust);
     });
     sensi.push(ligne);
   });
+  const sensiAxes={wacc:dwAxis.map(d=>wacc+d),colType:tvMode==="exit"?"multiple":"g",
+    col:colAxis.map(d=>tvMode==="exit"?(V.exitMultiple||0)+d:V.g+d)};
   /* méthodes analogiques */
   const ebitdaRef=v.EBITDA[a1]+((V.useAdj&&isFinite(V.adjEbitda))?V.adjEbitda:0);
   const ebitRef=v.EBIT[a1], caRef=v.CA[a1], rnRef=v.RESULTAT_NET[a1];
@@ -337,7 +348,7 @@ function valoriserBP(etats,H,P){
   const ponderees=methodes.filter(m=>(poids[m.id]||0)>0).map(m=>m.central);
   const centrauxAll=methodes.map(m=>m.central);
   return {ke,kd,wacc,g:V.g,primeSpe,fcff,detailFcff,pv,sommePv,vt,vtGordon,vtExit,tvMode,ebitdaTerm,vtPv,ev,detteNette,bridgeAjust,
-    equityDcf,ebitdaRef,ebitRef,caRef,rnRef,sensi,methodes,poids,
+    equityDcf,ebitdaRef,ebitRef,caRef,rnRef,sensi,sensiAxes,methodes,poids,
     multiple:mc.central,equityMult:eqComp(mc.central),
     eqMin:Math.min(...centrauxAll),eqMax:Math.max(...centrauxAll),
     fourchette:{min:Math.min(...(ponderees.length?ponderees:centrauxAll)),max:Math.max(...(ponderees.length?ponderees:centrauxAll)),retenue}};
