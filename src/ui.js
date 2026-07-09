@@ -27,6 +27,41 @@ function sauverDossier(){
   if(i>=0) l[i]=persistable; else l.push(persistable);
   sauverDossiers(l);
 }
+/* ---------- sauvegarde / restauration (les dossiers ne vivent que sur ce poste) ---------- */
+function exporterDossiersJSON(){
+  const l=chargerDossiers();
+  if(!l.length){toast("Aucun dossier à sauvegarder");return;}
+  const paquet={format:"findalyx-advisory",version:1,date:new Date().toISOString(),dossiers:l};
+  const blob=new Blob([JSON.stringify(paquet)],{type:"application/json"});
+  const a=document.createElement("a");a.href=URL.createObjectURL(blob);
+  a.download="Findalyx_sauvegarde_"+new Date().toISOString().slice(0,10)+".json";a.click();
+  toast(l.length+" dossier(s) exporté(s)");
+}
+function importerDossiersJSON(input){
+  const f=input.files&&input.files[0]; if(!f) return;
+  const r=new FileReader();
+  r.onload=e=>{
+    try{
+      const data=JSON.parse(e.target.result);
+      const arr=Array.isArray(data)?data:(data&&Array.isArray(data.dossiers)?data.dossiers:null);
+      if(!arr) throw new Error("format non reconnu (attendu : sauvegarde Findalyx .json)");
+      const valides=arr.filter(d=>d&&d.id&&typeof d.societe==="string");
+      if(!valides.length) throw new Error("aucun dossier valide dans le fichier");
+      const l=chargerDossiers();
+      let ajoutes=0,remplaces=0;
+      valides.forEach(d=>{const {tbagr,...net}=d;const i=l.findIndex(x=>x.id===net.id);
+        if(i>=0){l[i]=net;remplaces++;}else{l.push(net);ajoutes++;}});
+      if(sauverDossiers(l)!==false){
+        /* si le dossier ouvert vient d'être remplacé, le recharger pour refléter la sauvegarde */
+        if(DOSSIER){const maj=chargerDossiers().find(x=>x.id===DOSSIER.id);if(maj){DOSSIER=maj;recalculer();}}
+        toast(ajoutes+" dossier(s) ajouté(s), "+remplaces+" remplacé(s)");
+        shell();
+      }
+    }catch(err){toast("Import impossible : "+err.message);}
+    input.value="";
+  };
+  r.readAsText(f);
+}
 
 /* ---------- formats ---------- */
 /* unité d'affichage : F = FCFA, K = milliers (défaut), M = millions — par dossier */
@@ -525,7 +560,7 @@ function vueImport(){
     const eq=Math.abs(b.controle.ecart)<1;
     return `<tr><td>FY${b.annee}</td><td>${esc(b.fichier)}</td><td>${esc(b.feuille||"1ʳᵉ feuille")}</td>
     <td>${b.controle.nb}</td>
-    <td><span class="chip ${eq?"ok":"bad"}">${eq?"équilibrée":"écart "+fmt(b.controle.ecart/1000)+" "+uni().suf}</span></td>
+    <td><span class="chip ${eq?"ok":"bad"}">${eq?"équilibrée":"écart "+fmt(b.controle.ecart/1000)+" "+uni().suf}</span>${b.controle.lignesIgnorees?` <span class="chip bad" title="${esc((b.controle.echIgnorees||[]).join(' · '))}">⚠ ${b.controle.lignesIgnorees} ignorée(s)</span>`:""}</td>
     <td><button class="btn sm" onclick="retirerBalance(${b.annee})">Retirer</button></td></tr>`;
   }).join("");
   return `<h1>Balances générales</h1>
@@ -575,13 +610,18 @@ function importerBalance(){
     const b={annee,fichier:fichier.name,feuille,comptes:res.comptes,controle:res.controle};
     if(WIZ&&VUE==="wizard"){
       WIZ.balances=WIZ.balances.filter(x=>x.annee!==annee);WIZ.balances.push(b);shell();
-      toast("Balance FY"+annee+" ajoutée ("+res.controle.nb+" comptes)");return;
+      toast("Balance FY"+annee+" ajoutée ("+res.controle.nb+" comptes)"+msgIgnorees(res.controle));return;
     }
     DOSSIER.balances=DOSSIER.balances.filter(x=>x.annee!==annee);
     DOSSIER.balances.push(b);
     recalculer();sauverDossier();shell();
-    toast("Balance FY"+annee+" importée ("+res.controle.nb+" comptes)");
+    toast("Balance FY"+annee+" importée ("+res.controle.nb+" comptes)"+msgIgnorees(res.controle));
   }catch(err){toast("Erreur : "+err.message);}
+}
+/* message d'alerte quand des lignes porteuses de montants n'ont pas été importées (compte non reconnu) */
+function msgIgnorees(ctl){
+  if(!ctl||!ctl.lignesIgnorees) return "";
+  return " — ⚠ "+ctl.lignesIgnorees+" ligne(s) avec montant non importée(s) : n° de compte non reconnu";
 }
 function retirerBalance(annee){
   if(WIZ&&VUE==="wizard"){WIZ.balances=WIZ.balances.filter(b=>b.annee!==annee);shell();return;}

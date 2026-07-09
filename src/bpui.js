@@ -810,6 +810,15 @@ function vueParams(){
     <div class="hyp-l"><span>Secteur de comparaison des ratios et de la notation</span>
       <select class="sel" style="width:46%" onchange="changerSecteur(this.value)">${SECTEURS.map(s=>`<option${s===(DOSSIER.secteur||"Général")?" selected":""}>${s}</option>`).join("")}</select></div>
     <div class="mut" style="margin-top:8px">Détermine la comparaison sectorielle des ratios et le calcul de la Notation. Le benchmark provient de la base en ligne — aucune borne n'est affichée tant que le secteur n'a pas assez de sociétés.</div></div>`;
+  const sauvegardeCtl=`<div class="card"><div class="sec-titre" style="margin-top:0">Sauvegarde &amp; restauration</div>
+    <div class="mut" style="margin-bottom:8px">Les dossiers sont stockés uniquement sur cet ordinateur (aucun serveur).
+    Exportez régulièrement une sauvegarde <code>.json</code> pour les protéger ou les transférer sur un autre poste.
+    L'import <b>fusionne</b> : un dossier de même identifiant est remplacé, les autres sont ajoutés.</div>
+    <div class="row">
+      <button class="btn" onclick="exporterDossiersJSON()">⬇ Exporter tous les dossiers (.json)</button>
+      <label class="btn">⬆ Importer une sauvegarde
+        <input type="file" accept="application/json,.json" style="display:none" onchange="importerDossiersJSON(this)"></label>
+    </div></div>`;
   return `<h1>Paramètres — fiche société</h1>
   <div class="mut" style="margin-bottom:12px">Ces informations alimentent automatiquement les rapports
   (présentation de la société, contexte de mission) et les pages de garde. Tout est facultatif — les
@@ -817,5 +826,6 @@ function vueParams(){
   ${secteurCtl}
   <div class="deux">${groupes[0]}${groupes[2]}</div>
   ${groupes[1]}
-  <div class="deux">${groupes[3]}${logoCtl}</div>`;
+  <div class="deux">${groupes[3]}${logoCtl}</div>
+  ${sauvegardeCtl}`;
 }

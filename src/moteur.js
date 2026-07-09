@@ -339,9 +339,24 @@ function lireBalance(matrice){
     return true;
   });
 
+  /* rapport d'import : lignes porteuses d'un montant mais sans n° de compte reconnu
+     (donnees potentiellement ignorees). Les totaux sans compte sont exclus a raison. */
+  let lignesIgnorees=0; const echIgnorees=[];
+  const colsMontant = colNet!==null ? [colNet] : paires.reduce((a,p)=>a.concat(p),[]);
+  for(let i=premLigne;i<nl;i++){
+    if(estCompte(cell(i,colCompte))) continue;
+    if(!colsMontant.some(c=>estNombre(cell(i,c)))) continue;   /* aucun montant : ligne vide/section, sans enjeu */
+    const lib=nettoyer(cell(i,colLib))||nettoyer(cell(i,colCompte));
+    const l=norm(lib);
+    if(l.startsWith("total")||l.startsWith("sous-total")||l.startsWith("s/total")) continue;  /* total sans compte : normal */
+    lignesIgnorees++;
+    if(echIgnorees.length<6) echIgnorees.push((lib||("ligne "+(i+1))).slice(0,40));
+  }
+
   const totD=comptes.reduce((t,e)=>t+e.sf_d,0), totC=comptes.reduce((t,e)=>t+e.sf_c,0);
   return {comptes, controle:{nb:comptes.length, sfDebit:totD, sfCredit:totC,
-          ecart:totD-totC, sousTotauxExclus:exclus.size}};
+          ecart:totD-totC, sousTotauxExclus:exclus.size,
+          lignesIgnorees, echIgnorees}};
 }
 
 /* ---------- 2. TBAGR (agrégation multi-exercices, en K) ---------- */

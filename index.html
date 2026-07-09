@@ -1289,9 +1289,24 @@ function lireBalance(matrice){
     return true;
   });
 
+  /* rapport d'import : lignes porteuses d'un montant mais sans n° de compte reconnu
+     (donnees potentiellement ignorees). Les totaux sans compte sont exclus a raison. */
+  let lignesIgnorees=0; const echIgnorees=[];
+  const colsMontant = colNet!==null ? [colNet] : paires.reduce((a,p)=>a.concat(p),[]);
+  for(let i=premLigne;i<nl;i++){
+    if(estCompte(cell(i,colCompte))) continue;
+    if(!colsMontant.some(c=>estNombre(cell(i,c)))) continue;   /* aucun montant : ligne vide/section, sans enjeu */
+    const lib=nettoyer(cell(i,colLib))||nettoyer(cell(i,colCompte));
+    const l=norm(lib);
+    if(l.startsWith("total")||l.startsWith("sous-total")||l.startsWith("s/total")) continue;  /* total sans compte : normal */
+    lignesIgnorees++;
+    if(echIgnorees.length<6) echIgnorees.push((lib||("ligne "+(i+1))).slice(0,40));
+  }
+
   const totD=comptes.reduce((t,e)=>t+e.sf_d,0), totC=comptes.reduce((t,e)=>t+e.sf_c,0);
   return {comptes, controle:{nb:comptes.length, sfDebit:totD, sfCredit:totC,
-          ecart:totD-totC, sousTotauxExclus:exclus.size}};
+          ecart:totD-totC, sousTotauxExclus:exclus.size,
+          lignesIgnorees, echIgnorees}};
 }
 
 /* ---------- 2. TBAGR (agrégation multi-exercices, en K) ---------- */
@@ -4250,6 +4265,41 @@ function sauverDossier(){
   if(i>=0) l[i]=persistable; else l.push(persistable);
   sauverDossiers(l);
 }
+/* ---------- sauvegarde / restauration (les dossiers ne vivent que sur ce poste) ---------- */
+function exporterDossiersJSON(){
+  const l=chargerDossiers();
+  if(!l.length){toast("Aucun dossier à sauvegarder");return;}
+  const paquet={format:"findalyx-advisory",version:1,date:new Date().toISOString(),dossiers:l};
+  const blob=new Blob([JSON.stringify(paquet)],{type:"application/json"});
+  const a=document.createElement("a");a.href=URL.createObjectURL(blob);
+  a.download="Findalyx_sauvegarde_"+new Date().toISOString().slice(0,10)+".json";a.click();
+  toast(l.length+" dossier(s) exporté(s)");
+}
+function importerDossiersJSON(input){
+  const f=input.files&&input.files[0]; if(!f) return;
+  const r=new FileReader();
+  r.onload=e=>{
+    try{
+      const data=JSON.parse(e.target.result);
+      const arr=Array.isArray(data)?data:(data&&Array.isArray(data.dossiers)?data.dossiers:null);
+      if(!arr) throw new Error("format non reconnu (attendu : sauvegarde Findalyx .json)");
+      const valides=arr.filter(d=>d&&d.id&&typeof d.societe==="string");
+      if(!valides.length) throw new Error("aucun dossier valide dans le fichier");
+      const l=chargerDossiers();
+      let ajoutes=0,remplaces=0;
+      valides.forEach(d=>{const {tbagr,...net}=d;const i=l.findIndex(x=>x.id===net.id);
+        if(i>=0){l[i]=net;remplaces++;}else{l.push(net);ajoutes++;}});
+      if(sauverDossiers(l)!==false){
+        /* si le dossier ouvert vient d'être remplacé, le recharger pour refléter la sauvegarde */
+        if(DOSSIER){const maj=chargerDossiers().find(x=>x.id===DOSSIER.id);if(maj){DOSSIER=maj;recalculer();}}
+        toast(ajoutes+" dossier(s) ajouté(s), "+remplaces+" remplacé(s)");
+        shell();
+      }
+    }catch(err){toast("Import impossible : "+err.message);}
+    input.value="";
+  };
+  r.readAsText(f);
+}
 
 /* ---------- formats ---------- */
 /* unité d'affichage : F = FCFA, K = milliers (défaut), M = millions — par dossier */
@@ -4748,7 +4798,7 @@ function vueImport(){
     const eq=Math.abs(b.controle.ecart)<1;
     return `<tr><td>FY${b.annee}</td><td>${esc(b.fichier)}</td><td>${esc(b.feuille||"1ʳᵉ feuille")}</td>
     <td>${b.controle.nb}</td>
-    <td><span class="chip ${eq?"ok":"bad"}">${eq?"équilibrée":"écart "+fmt(b.controle.ecart/1000)+" "+uni().suf}</span></td>
+    <td><span class="chip ${eq?"ok":"bad"}">${eq?"équilibrée":"écart "+fmt(b.controle.ecart/1000)+" "+uni().suf}</span>${b.controle.lignesIgnorees?` <span class="chip bad" title="${esc((b.controle.echIgnorees||[]).join(' · '))}">⚠ ${b.controle.lignesIgnorees} ignorée(s)</span>`:""}</td>
     <td><button class="btn sm" onclick="retirerBalance(${b.annee})">Retirer</button></td></tr>`;
   }).join("");
   return `<h1>Balances générales</h1>
@@ -4798,13 +4848,18 @@ function importerBalance(){
     const b={annee,fichier:fichier.name,feuille,comptes:res.comptes,controle:res.controle};
     if(WIZ&&VUE==="wizard"){
       WIZ.balances=WIZ.balances.filter(x=>x.annee!==annee);WIZ.balances.push(b);shell();
-      toast("Balance FY"+annee+" ajoutée ("+res.controle.nb+" comptes)");return;
+      toast("Balance FY"+annee+" ajoutée ("+res.controle.nb+" comptes)"+msgIgnorees(res.controle));return;
     }
     DOSSIER.balances=DOSSIER.balances.filter(x=>x.annee!==annee);
     DOSSIER.balances.push(b);
     recalculer();sauverDossier();shell();
-    toast("Balance FY"+annee+" importée ("+res.controle.nb+" comptes)");
+    toast("Balance FY"+annee+" importée ("+res.controle.nb+" comptes)"+msgIgnorees(res.controle));
   }catch(err){toast("Erreur : "+err.message);}
+}
+/* message d'alerte quand des lignes porteuses de montants n'ont pas été importées (compte non reconnu) */
+function msgIgnorees(ctl){
+  if(!ctl||!ctl.lignesIgnorees) return "";
+  return " — ⚠ "+ctl.lignesIgnorees+" ligne(s) avec montant non importée(s) : n° de compte non reconnu";
 }
 function retirerBalance(annee){
   if(WIZ&&VUE==="wizard"){WIZ.balances=WIZ.balances.filter(b=>b.annee!==annee);shell();return;}
@@ -6625,6 +6680,15 @@ function vueParams(){
     <div class="hyp-l"><span>Secteur de comparaison des ratios et de la notation</span>
       <select class="sel" style="width:46%" onchange="changerSecteur(this.value)">${SECTEURS.map(s=>`<option${s===(DOSSIER.secteur||"Général")?" selected":""}>${s}</option>`).join("")}</select></div>
     <div class="mut" style="margin-top:8px">Détermine la comparaison sectorielle des ratios et le calcul de la Notation. Le benchmark provient de la base en ligne — aucune borne n'est affichée tant que le secteur n'a pas assez de sociétés.</div></div>`;
+  const sauvegardeCtl=`<div class="card"><div class="sec-titre" style="margin-top:0">Sauvegarde &amp; restauration</div>
+    <div class="mut" style="margin-bottom:8px">Les dossiers sont stockés uniquement sur cet ordinateur (aucun serveur).
+    Exportez régulièrement une sauvegarde <code>.json</code> pour les protéger ou les transférer sur un autre poste.
+    L'import <b>fusionne</b> : un dossier de même identifiant est remplacé, les autres sont ajoutés.</div>
+    <div class="row">
+      <button class="btn" onclick="exporterDossiersJSON()">⬇ Exporter tous les dossiers (.json)</button>
+      <label class="btn">⬆ Importer une sauvegarde
+        <input type="file" accept="application/json,.json" style="display:none" onchange="importerDossiersJSON(this)"></label>
+    </div></div>`;
   return `<h1>Paramètres — fiche société</h1>
   <div class="mut" style="margin-bottom:12px">Ces informations alimentent automatiquement les rapports
   (présentation de la société, contexte de mission) et les pages de garde. Tout est facultatif — les
@@ -6632,7 +6696,8 @@ function vueParams(){
   ${secteurCtl}
   <div class="deux">${groupes[0]}${groupes[2]}</div>
   ${groupes[1]}
-  <div class="deux">${groupes[3]}${logoCtl}</div>`;
+  <div class="deux">${groupes[3]}${logoCtl}</div>
+  ${sauvegardeCtl}`;
 }
 /* ============================================================
    Modèle financier Excel à FORMULES VIVANTES
