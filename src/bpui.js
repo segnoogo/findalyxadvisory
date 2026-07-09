@@ -16,6 +16,10 @@ function assurerBP(){
     for(const k in base.valo) if(DOSSIER.bp.valo[k]===undefined) DOSSIER.bp.valo[k]=base.valo[k];
     base.opex.forEach(o=>{if(!DOSSIER.bp.opex.find(x=>x.code===o.code))DOSSIER.bp.opex.push(o);});
     DOSSIER.bp.opex=DOSSIER.bp.opex.filter(o=>base.opex.find(x=>x.code===o.code));
+    /* BFR hors exploitation figé : suit l'historique corrigé par défaut, ne se fige que si saisi manuellement
+       (rattrape les dossiers créés avant le correctif de mapping 49 / État créditeur → autres dettes) */
+    if(!DOSSIER.bp.autresCreances_fixeManuel) DOSSIER.bp.autresCreances_fixe=base.autresCreances_fixe;
+    if(!DOSSIER.bp.autresDettes_fixeManuel)   DOSSIER.bp.autresDettes_fixe=base.autresDettes_fixe;
   }
   /* référence EBITDA ajusté pour la valorisation */
   const aA=ETATS?ETATS.annees[ETATS.annees.length-1]:null;
@@ -26,7 +30,9 @@ function assurerBP(){
 function resetBP(){if(!confirm("Réinitialiser toutes les hypothèses depuis l'historique ?"))return;
   DOSSIER.bp=null;assurerBP();sauverDossier();rendre();}
 function hBP(k,val,div){const H=assurerBP();const x=numFR(val);
-  if(x===null){rendre();return;}H[k]=x/(div||1);sauverDossier();rendre();}
+  if(x===null){rendre();return;}H[k]=x/(div||1);
+  if(k==="autresCreances_fixe"||k==="autresDettes_fixe")H[k+"Manuel"]=true;
+  sauverDossier();rendre();}
 function hBPa(k,i,val,div){const H=assurerBP();const x=numFR(val);
   if(x===null){rendre();return;}H[k][i]=x/(div||1);sauverDossier();rendre();}
 function hOpex(code,champ,val,div){const H=assurerBP();const o=H.opex.find(x=>x.code===code);
