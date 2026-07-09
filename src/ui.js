@@ -121,6 +121,11 @@ function shell(){
     <div class="view" id="vue"></div>
   </div><div id="modal"></div>`;
   if(!window.__profClose){window.__profClose=true;document.addEventListener("click",function(e){document.querySelectorAll("details.profil[open]").forEach(function(d){var s=d.querySelector("summary");if(s&&s.contains(e.target))return;d.open=false;});});}
+  /* accessibilité : Échap ferme la modale ouverte (sinon referme les menus déroulants) */
+  if(!window.__escClose){window.__escClose=true;document.addEventListener("keydown",function(e){if(e.key!=="Escape")return;
+    var m=document.getElementById("modal");
+    if(m&&m.innerHTML.trim()){fermerModal();}
+    else{document.querySelectorAll("details.profil[open]").forEach(function(d){d.open=false;});}});}
   rendre();
 }
 function selecteurUnite(){
@@ -1462,7 +1467,9 @@ const NUMFMT='#,##0;(#,##0);"-"';
 function nomOnglet(etat){return etat.slice(0,31);}  /* le nom de la société est dans le titre des tableaux */
 function finaliserClasseur(wb){
   wb.eachSheet(ws=>{
-    ws.views=[{showGridLines:false}];
+    /* préserver un volet figé (state:frozen) déjà posé par une feuille ; on ne fait qu'ajouter showGridLines:false */
+    const vue=(ws.views&&ws.views[0])||{};
+    ws.views=[Object.assign({},vue,{showGridLines:false})];
     if(!ws.getColumn(1).width||ws.getColumn(1).width>3)ws.getColumn(1).width=3;
     ws.eachRow({includeEmpty:false},r=>r.eachCell({includeEmpty:false},c=>{
       c.font=Object.assign({name:"Arial Narrow",size:10},c.font||{});
@@ -1528,6 +1535,10 @@ function titreLiasse(ws,sousTitre){
 }
 const FOND_TOTAL={type:"pattern",pattern:"solid",fgColor:{argb:"FFF7F9FC"}};
 async function exporterExcel(seulementTbagr){
+  if(!DOSSIER||!ETATS||!DOSSIER.tbagr||!(DOSSIER.tbagr.lignes||[]).length){
+    toast("Aucun état à exporter — importez d'abord une balance.");return;
+  }
+  try{
   const u=uni(),UF=u.f;
   const NF=u.dec?'#,##0.0;(#,##0.0);"-"':NUMFMT;
   const mnt=x=>(x===null||x===undefined)?null:(u.dec?Math.round(x*UF*10)/10:Math.round(x*UF));
@@ -1618,6 +1629,10 @@ async function exporterExcel(seulementTbagr){
   a.download=(seulementTbagr?"TBAGR_":"Etats_financiers_")+DOSSIER.societe.replace(/\W+/g,"_")+".xlsx";
   a.click();
   toast("Fichier téléchargé");
+  }catch(err){
+    toast("Export impossible : "+((err&&err.message)||err));
+    try{console.error("exporterExcel",err);}catch(_){}
+  }
 }
 
 /* ---------- démarrage : licence d'abord, puis restauration de la société active ---------- */
