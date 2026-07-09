@@ -32,6 +32,9 @@ function hypothesesBP(etats, lignesPerso){
   const fraisFinH=-(v.RESULTAT_FIN[a1]<0?v.RESULTAT_FIN[a1]:0);
   const cd=v.COUTS_DIRECTS[a1], op=v.OPEX[a1];
   const rao=v.EBIT[a1]+v.RESULTAT_FIN[a1];
+  /* provisions pour risques & charges (montant positif) : passif assimilé à de la dette
+     dans le pont valeur d'entreprise → fonds propres */
+  const provRC=Math.max(0,-((v.PROVISIONS_RC&&v.PROVISIONS_RC[a1])||0));
 
   return {
     nb:5, scenario:"base",
@@ -93,8 +96,9 @@ function hypothesesBP(etats, lignesPerso){
       multEbit:8, multCA:1.2, per:10,
       /* pondération des méthodes pour la valeur retenue (en %) */
       poids:{dcf:40,comp:20,trans:15,ebit:5,ca:0,per:5,anr:15},
-      /* pont valeur d'entreprise → fonds propres (ajustements hors dette nette) */
-      bridge:[],
+      /* pont valeur d'entreprise → fonds propres (ajustements hors dette nette).
+         Pré-rempli avec les provisions R&C (dette-like) ; l'utilisateur peut l'éditer/retirer. */
+      bridge: provRC>0.5?[{lib:"Provisions pour risques & charges",montant:-Math.round(provRC)}]:[],
       anrAjustements:[]
     }
   };

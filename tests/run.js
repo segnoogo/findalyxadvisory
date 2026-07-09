@@ -7,6 +7,7 @@
    modifie le moteur les relance pour vérifier qu'il n'a rien cassé.
    ========================================================================= */
 const M = require('../src/moteur.js');
+const BP = require('../src/bp.js');
 const { balances, matrice } = require('./fixtures.js');
 
 let pass = 0, fail = 0;
@@ -83,6 +84,34 @@ const agb = M.agregatsBenchmark(etats);
 ok(Object.keys(agb).length === 16, `16 champs d'agrégats (obtenu ${Object.keys(agb).length})`);
 near(agb.ca, v.CA[etats.annees[etats.annees.length - 1]], 0.001, 'agrégat ca = CA de l\'état');
 ok(agb.dettes_financieres >= 0 && agb.dettes_fournisseurs >= 0, 'dettes exprimées en magnitude positive');
+
+console.log('== 8. Moteur VIVANT bp.js (business plan bouclé + valorisation) ==');
+const Hbp = BP.hypothesesBP(etats);
+const Pbp = BP.projeterBP(etats, Hbp);
+ok(Pbp.annees.length === (Hbp.nb || 5), `${Hbp.nb || 5} années projetées (obtenu ${Pbp.annees.length})`);
+// INVARIANT 3 — bilan prévisionnel bouclé : l'écart de bouclage du TFT ≈ 0 chaque année
+Pbp.annees.forEach(a => near(Pbp.tft[a].ECART, 0, 0.01, `BP bouclé ${a} (ECART TFT ≈ 0)`));
+// INVARIANT 4 — TFT prévisionnel réconcilié : clôture (ZG) = trésorerie nette du bilan
+Pbp.annees.forEach(a => near(Pbp.tft[a].ZG, Pbp.bs.TRESO[a], 0.01, `TFT prévisionnel ${a} (ZG = trésorerie de clôture)`));
+const valBp = BP.valoriserBP(etats, Hbp, Pbp);
+ok(isFinite(valBp.wacc) && valBp.wacc > 0 && valBp.wacc < 1, `WACC dans ]0,1[ (obtenu ${(valBp.wacc * 100).toFixed(1)} %)`);
+ok(valBp.ke >= valBp.kd, `coût des fonds propres ≥ coût de la dette après IS (${(valBp.ke * 100).toFixed(1)} % ≥ ${(valBp.kd * 100).toFixed(1)} %)`);
+// mode Gordon (défaut) : le centre de la matrice de sensibilité = la valeur DCF centrale
+near(valBp.sensi[2][2], valBp.equityDcf, 0.5, 'sensibilité centrale = equity DCF (mode Gordon)');
+near(valBp.vt, valBp.vtGordon, 0.001, 'valeur terminale = Gordon par défaut');
+// valeur retenue dans la fourchette pondérée
+ok(valBp.fourchette.min <= valBp.fourchette.retenue + 1e-6 && valBp.fourchette.retenue <= valBp.fourchette.max + 1e-6,
+   `valeur retenue dans la fourchette [${Math.round(valBp.fourchette.min)}, ${Math.round(valBp.fourchette.max)}]`);
+// mode exit-multiple : VT = multiple de sortie × EBITDA terminal
+const Hex = BP.hypothesesBP(etats); Hex.valo.tvMode = 'exit';
+const valEx = BP.valoriserBP(etats, Hex, BP.projeterBP(etats, Hex));
+near(valEx.vt, valEx.vtExit, 0.001, 'valeur terminale = multiple de sortie en mode exit');
+near(valEx.vtExit, Hex.valo.exitMultiple * valEx.ebitdaTerm, 0.001, 'VT exit = multiple × EBITDA terminal');
+// pont EV→FP : provisions R&C pré-remplies (négatif) quand il en existe
+ok(Array.isArray(Hbp.valo.bridge), 'le pont EV→FP est un tableau');
+const provRC = -(v.PROVISIONS_RC[etats.annees[etats.annees.length - 1]] || 0);
+if (provRC > 0.5) ok(Hbp.valo.bridge.some(b => /provision/i.test(b.lib) && b.montant < 0), 'pont pré-rempli avec les provisions R&C (montant négatif)');
+else ok(true, 'pas de provisions R&C à pré-remplir dans la fixture');
 
 console.log(`\n${fail ? '❌ ÉCHEC' : '✅ SUCCÈS'} — ${pass} assertions passées, ${fail} échec(s).`);
 process.exit(fail ? 1 : 0);

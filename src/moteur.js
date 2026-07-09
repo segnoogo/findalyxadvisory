@@ -607,7 +607,9 @@ function calculerRatios(etats){
   });
   const evalues=ratios.filter(r=>r.statut);
   const bons=evalues.filter(r=>r.statut==="good").length;
-  const score=evalues.length?Math.round(bons/evalues.length*100):0;
+  const moyens=evalues.filter(r=>r.statut==="warn").length;
+  /* un ratio « à surveiller » (warn) vaut un demi-point : ni pleinement bon, ni un échec complet */
+  const score=evalues.length?Math.round((bons+0.5*moyens)/evalues.length*100):0;
   let synthese;
   if(score>=70) synthese="La santé financière est solide : les fondamentaux sont bien orientés et la marge de manœuvre est confortable.";
   else if(score>=45) synthese="Situation financière contrastée : certains fondamentaux sont corrects mais des points de vigilance appellent un suivi rapproché.";
