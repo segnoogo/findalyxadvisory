@@ -135,7 +135,11 @@ function construireEtatsFormules(wb){
   bs("ADT","Autres dettes",["AUTRES_DETTES","HAO_PASSIF"]);
   rB.BFRH=ligneF(wsB,"BFR hors exploitation",somme([rB.ACR,rB.ADT]),{st:1});
   rB.BFR=ligneF(wsB,"Besoin en fonds de roulement global",somme([rB.BFRE,rB.BFRH]),{st:1});
-  bs("TN","Trésorerie nette",["TRESO_ACTIF","TRESO_PASSIF",...persoDe2("TRESORERIE_NETTE").map(x=>x.code)],"+",{st:1});
+  /* trésorerie présentée en BRUT (actif / découvert séparés, comme le databook) : les ratios de
+     liquidité comptent le découvert comme un passif circulant à part entière */
+  bs("TRA","Trésorerie et équivalents (actif)",["TRESO_ACTIF",...persoDe2("TRESORERIE_NETTE").map(x=>x.code)],"+");
+  bs("TRP","Concours bancaires courants (découvert)",["TRESO_PASSIF"],"+");
+  rB.TN=ligneF(wsB,"Trésorerie nette",somme([rB.TRA,rB.TRP]),{st:1});
   bs("PRV","Provisions pour risques et charges",["PROVISIONS_RC"]);
   bs("DET","Dettes financières",["DETTES_FINANCIERES",...persoDe2("FINANCEMENT").map(x=>x.code)]);
   rB.AN=ligneF(wsB,"Actif net",somme([rB.IMN,rB.BFR,rB.TN,rB.PRV,rB.DET]),{st:1});
@@ -154,8 +158,8 @@ function construireEtatsFormules(wb){
     const ca=c=>PL(rP.CA,c), ebitda=c=>PL(rP.EBITDA,c), ebit=c=>PL(rP.EBIT,c), rnr=c=>PL(rP.RN,c);
     const cp=c=>BS(rB.CP,c), dfin=c=>`(-${BS(rB.DET,c)})`, dnet=c=>`(-${BS(rB.DET,c)}-${BS(rB.TN,c)})`;
     const achats=c=>`(-${PL(rP.COUTS_DIRECTS,c)})`, opex=c=>`(${PL(rP.CHARGES_PERSONNEL,c)}-${PL(rP.FRAIS_GENERAUX,c)})`;
-    const actC=c=>`(${BS(rB.STK,c)}+${BS(rB.CLI,c)}+${BS(rB.AVF,c)}+${BS(rB.ACR,c)}+MAX(0,${BS(rB.TN,c)}))`;
-    const pasC=c=>`(-(${BS(rB.FRN,c)}+${BS(rB.CAV,c)}+${BS(rB.DSO,c)}+${BS(rB.DFI,c)}+${BS(rB.ADT,c)})+MAX(0,-${BS(rB.TN,c)}))`;
+    const actC=c=>`(${BS(rB.STK,c)}+${BS(rB.CLI,c)}+${BS(rB.AVF,c)}+${BS(rB.ACR,c)}+${BS(rB.TRA,c)})`;
+    const pasC=c=>`(-(${BS(rB.FRN,c)}+${BS(rB.CAV,c)}+${BS(rB.DSO,c)}+${BS(rB.DFI,c)}+${BS(rB.ADT,c)})-${BS(rB.TRP,c)})`;
     const totA=c=>`(${BS(rB.IMN,c)}+${actC(c)})`;
     const items=[
       {lab:"ROE (rentabilité des capitaux propres)",unit:"%",f:c=>`IF(${cp(c)}<=0,"",${rnr(c)}/${cp(c)})`},
@@ -163,7 +167,7 @@ function construireEtatsFormules(wb){
       {lab:"ROCE (rentabilité des capitaux employés)",unit:"%",f:c=>`IF((${cp(c)}+${dfin(c)})<=0,"",${ebit(c)}/(${cp(c)}+${dfin(c)}))`},
       {lab:"Liquidité générale",unit:"x",f:c=>`IF(${pasC(c)}<=0,"",${actC(c)}/${pasC(c)})`},
       {lab:"Liquidité réduite",unit:"x",f:c=>`IF(${pasC(c)}<=0,"",(${actC(c)}-${BS(rB.STK,c)})/${pasC(c)})`},
-      {lab:"Liquidité immédiate",unit:"x",f:c=>`IF(${pasC(c)}<=0,"",MAX(0,${BS(rB.TN,c)})/${pasC(c)})`},
+      {lab:"Liquidité immédiate",unit:"x",f:c=>`IF(${pasC(c)}<=0,"",${BS(rB.TRA,c)}/${pasC(c)})`},
       {lab:"BFR en jours de CA",unit:"j",f:c=>`IF(${ca(c)}=0,"",${BS(rB.BFR,c)}*360/${ca(c)})`},
       {lab:"Délai clients (DSO)",unit:"j",f:c=>`IF(${ca(c)}=0,"",${BS(rB.CLI,c)}*360/(${ca(c)}*1.18))`},
       {lab:"Délai fournisseurs (DPO)",unit:"j",f:c=>`IF((${achats(c)}+${opex(c)})<=0,"",(-${BS(rB.FRN,c)})*360/((${achats(c)}+${opex(c)})*1.18))`},

@@ -446,6 +446,7 @@ function construireFeuillesBP(wb){
     [rv.DOT,"+ Dotations aux amortissements"],[rv.DBF,"± Variation du BFR"],
     [rv.CPX,"– Investissements"],[rv.FCF,"FCFF"],[rv.PV,"FCFF actualisés"]];
   vLibs.forEach(([rn,lib])=>cellV(wsV,rn,2,lib));
+  const my=!!H.valo.midYear;   /* convention mi-année : flux à t−0,5, VT en N−0,5 (Gordon) / N (exit) */
   AP.forEach((a,i)=>{
     const c=4+i,Lc=L(c);
     const F=(row,f)=>cellF(wsV,row,c,f,NF);
@@ -456,7 +457,7 @@ function construireFeuillesBP(wb){
     F(rv.DBF,`-(${B(rb.BFR,i)}-${Bp(rb.BFR,i)})`);
     F(rv.CPX,`-${hp(hy.capex,i)}`);
     F(rv.FCF,`${Lc}${rv.NOP}+${Lc}${rv.DOT}+${Lc}${rv.DBF}+${Lc}${rv.CPX}`);
-    F(rv.PV,`${Lc}${rv.FCF}/(1+${W})^${i+1}`);
+    F(rv.PV,`${Lc}${rv.FCF}/(1+${W})^${my?i+0.5:i+1}`);
   });
   totalRow(wsV,rv.FCF,3+N);
   const fcffRange=`${L(4)}${rv.FCF}:${L(3+N)}${rv.FCF}`;
@@ -470,7 +471,7 @@ function construireFeuillesBP(wb){
     [rv.VTG,"Valeur terminale — Gordon (g)",`${lastF}*(1+${G})/(${W}-${G})`],
     [rv.VTX,"Valeur terminale — multiple de sortie",`${h1(hy.exitM)}*${ebitdaTerm}`],
     [rv.VT,"Valeur terminale retenue ("+(H.valo.tvMode==="exit"?"multiple de sortie":"Gordon")+")",tvSel],
-    [rv.VTP,"Valeur terminale actualisée",`C${rv.VT}/(1+${W})^${N}`],
+    [rv.VTP,"Valeur terminale actualisée",`C${rv.VT}/(1+${W})^${my&&H.valo.tvMode!=="exit"?N-0.5:N}`],
     [rv.EV,"Valeur d'entreprise (EV)",`C${rv.SPV}+C${rv.VTP}`],
     [rv.DN,"(–) Dette nette (dernier exercice réel)",`${rB}!${L(cHL)}${rb.DET}-${rB}!${L(cHL)}${rb.TRES}`],
     [rv.BRG,"± Ajustements du pont (hors dette nette)",brgSum],
@@ -498,8 +499,8 @@ function construireFeuillesBP(wb){
     [-0.01,-0.005,0,0.005,0.01].forEach((dg,jx)=>{
       const w=`(${W}+${dw})`,g=`(${G}+${dg})`;
       cellF(wsV,rn,3+jx,
-        `SUMPRODUCT(${fcffRange}*(1+${w})^-(COLUMN(${fcffRange})-COLUMN(${L(4)}${rv.FCF})+1))`+
-        `+${lastF}*(1+${g})/(${w}-${g})/(1+${w})^${N}${dnB}`,NF);
+        `SUMPRODUCT(${fcffRange}*(1+${w})^-(COLUMN(${fcffRange})-COLUMN(${L(4)}${rv.FCF})+${my?0.5:1}))`+
+        `+${lastF}*(1+${g})/(${w}-${g})/(1+${w})^${my?N-0.5:N}${dnB}`,NF);
     });
   });
   /* méthodes + pondération */

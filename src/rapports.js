@@ -883,7 +883,7 @@ function construireValo(pptx){
   const mKey={}; (val.methodes||[]).forEach(m=>{mKey[m.id]=m;});
   const mCles=ORD.map(id=>mKey[id]).filter(Boolean);
   const gordon=val.tvMode!=="exit";
-  const tvTxt=gordon?"Gordon, g "+rpPct(val.g):"multiple de sortie "+(Vh.exitMultiple||0).toFixed(1)+"× EBITDA";
+  const tvTxt=(gordon?"Gordon, g "+rpPct(val.g):"multiple de sortie "+(Vh.exitMultiple||0).toFixed(1)+"× EBITDA")+(Vh.midYear?" ; actualisation mi-année":"");
   const pct1=x=>isFinite(x)?(x*100).toFixed(1).replace(".",",")+" %":"-";   /* taux à une décimale (build-up, axes de sensibilité) */
   rpGarde(pptx,B.societe,"Rapport provisoire d'évaluation financière au 31/12/"+a1,
     "Historique "+fy[0]+" – "+fy[fy.length-1]+"  |  Montants en "+rpLib()+"",B.dateTxt,B.cabinet);

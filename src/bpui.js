@@ -488,6 +488,7 @@ function vueValo(){
     ${(Vh.tvMode||'gordon')==='gordon'
       ?hypLigne("Croissance à l'infini (g)",inPct("hValo.bind(null,'g')",Vh.g,0.25))
       :hypLigne("Multiple de sortie (× EBITDA terminal)",`<span class="ctl-h"><input type="text" inputmode="decimal" class="nin" value="${Vh.exitMultiple||0}" step="0.5" onchange="hValo('exitMultiple',this.value,1)"><span class="mut" style="width:34px">×</span></span>`)}
+    ${hypLigne("Convention d'actualisation",`<span class="segvue"><button class="${!Vh.midYear?'on':''}" onclick="assurerBP().valo.midYear=false;sauverDossier();rendre()">Fin d'année</button><button class="${Vh.midYear?'on':''}" onclick="assurerBP().valo.midYear=true;sauverDossier();rendre()">Mi-année</button></span>`)}
     <div class="row" style="margin-top:10px">
       <span class="chip ok">Coût des fonds propres : ${pc(V.ke)}</span>
       <span class="chip ok">Coût de la dette net d'IS : ${pc(V.kd)}</span>

@@ -91,7 +91,7 @@ function hypothesesBP(etats, lignesPerso){
       primePays:0.03, primeTaille:0.02, primeIlliquidite:0.015,
       coutDette:born(detteH>0?fraisFinH/detteH:0.08,0.02,0.2,0.08),
       poidsDette:born(detteH/((detteH+Math.max(v.CAPITAUX_PROPRES[a1],1))||1),0,0.8,0.2),
-      g:0.03,
+      g:0.03, midYear:false,   /* convention d'actualisation : fin d'année (défaut) ou mi-année */
       /* valeur terminale : "gordon" (croissance perpétuelle g) ou "exit" (multiple de sortie EV/EBITDA) */
       tvMode:"gordon", exitMultiple:5.5,
       multiplesComparables:{min:4,central:5.5,max:7},
@@ -278,6 +278,7 @@ function valoriserBP(etats,H,P){
   const ke=V.rf+V.beta*V.primeMarche+primeSpe;
   const kd=V.coutDette*(1-t);
   const wacc=ke*(1-V.poidsDette)+kd*V.poidsDette;
+  const my=!!V.midYear;   /* convention mi-année : flux explicites actualisés à t−0,5 */
   /* FCFF ligne à ligne */
   const fcff={},detailFcff={};
   AP.forEach((a,i)=>{
@@ -290,7 +291,7 @@ function valoriserBP(etats,H,P){
     detailFcff[a]={ebit,impotTheorique:ebit>0?-t*ebit:0,nopat,dot,dbfr,capex,fcff:fcff[a]};
   });
   const pv={};let sommePv=0;
-  AP.forEach((a,i)=>{pv[a]=fcff[a]/Math.pow(1+wacc,i+1);sommePv+=pv[a];});
+  AP.forEach((a,i)=>{pv[a]=fcff[a]/Math.pow(1+wacc,my?i+0.5:i+1);sommePv+=pv[a];});
   const fcffN=fcff[AP[N-1]];
   const ebitdaTerm=P.pl.EBITDA[AP[N-1]];
   /* valeur terminale : Gordon (croissance g) vs multiple de sortie (EV/EBITDA) */
@@ -298,7 +299,10 @@ function valoriserBP(etats,H,P){
   const vtExit=(V.exitMultiple||0)*ebitdaTerm;
   const tvMode=V.tvMode==="exit"?"exit":"gordon";
   const vt=tvMode==="exit"?vtExit:vtGordon;
-  const vtPv=vt/Math.pow(1+wacc,N);
+  /* actualisation de la valeur terminale : mi-année → N−0,5 pour Gordon (perpétuité de flux
+     mi-année), mais N pour le multiple de sortie (cession datée en fin d'exercice N) */
+  const tvExp=(my&&tvMode!=="exit")?N-0.5:N;
+  const vtPv=vt/Math.pow(1+wacc,tvExp);
   const ev=sommePv+vtPv;
   const detteNette=-v.DETTES_FINANCIERES[a1]-v.TRESORERIE_NETTE[a1];
   /* pont EV → fonds propres : ajustements hors dette nette (minoritaires, provisions, actifs hors exploitation…) */
@@ -315,10 +319,10 @@ function valoriserBP(etats,H,P){
     const ligne=[];
     colAxis.forEach(dx=>{
       const w=wacc+dw;
-      let s=0;AP.forEach((a,i)=>s+=fcff[a]/Math.pow(1+w,i+1));
+      let s=0;AP.forEach((a,i)=>s+=fcff[a]/Math.pow(1+w,my?i+0.5:i+1));
       let tv;
       if(tvMode==="exit"){const mm=(V.exitMultiple||0)+dx;tv=mm*ebitdaTerm/Math.pow(1+w,N);}
-      else{const g=V.g+dx;tv=w>g?fcffN*(1+g)/(w-g)/Math.pow(1+w,N):0;}
+      else{const g=V.g+dx;tv=w>g?fcffN*(1+g)/(w-g)/Math.pow(1+w,my?N-0.5:N):0;}
       ligne.push(s+tv-detteNette+bridgeAjust);
     });
     sensi.push(ligne);
