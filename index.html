@@ -3770,6 +3770,7 @@ function construireBP(pptx){
   const {A,v,a1,fy}=B;
   const hyp=assurerBP();
   const proj=projeterBP(ETATS,hyp);
+  const val=valoriserBP(ETATS,hyp,proj);
   const ap=proj.annees;
   const fyp=ap.map(a=>"FY"+String(a).slice(-2)+"p");
   const mention=B.societe+" - Business plan "+ap[0]+"-"+ap[ap.length-1]+" - "+B.dateTxt+" - Confidentiel";
@@ -3848,7 +3849,7 @@ function construireBP(pptx){
     ["Nouveaux emprunts",hyp.nouveauxEmprunts.some(x=>x>0)?hyp.nouveauxEmprunts.map(x=>rpFmt(x)).join(" ; "):"aucun"],
     ["Dividendes (% du résultat N-1)",pcH(hyp.dividendes_payout)]]);
   gH("Coût du capital",[
-    ["WACC",pcH((typeof val!=="undefined"&&val&&val.wacc)||(hyp.valo.rf+hyp.valo.beta*hyp.valo.primeMarche+hyp.valo.primeSpecifique)*(1-hyp.valo.poidsDette)+hyp.valo.coutDette*(1-hyp.is_taux)*hyp.valo.poidsDette)],
+    ["WACC",pcH(val.wacc)],
     ["Croissance à l'infini (g)",pcH(hyp.valo.g)]]);
   rpTable(sl,0.55,1.6,7.6,B.societe.toUpperCase()+" - Hypothèses",["Hypothèse","Valeur"],
     lignesH,stylesH,new Set(),[5.2,1.4],8);
@@ -5060,6 +5061,13 @@ function codesDe(code){
   ).map(pp=>pp.code);
   return [...base,...extra];
 }
+/* une ligne n'est cliquable que si sa composition résout vers au moins un compte réel de la balance
+   (sinon un sous-total calculé — EBITDA, EBIT, résultat net… — ouvrirait un drill-down vide) */
+function drillable(code){
+  if(!DOSSIER||!DOSSIER.tbagr) return false;
+  const cs=codesDe(code);
+  return DOSSIER.tbagr.lignes.some(l=>cs.includes(l.mapping));
+}
 const AGGS_PL=new Set(["CA","COUTS_DIRECTS","MARGE_BRUTE","AUTRES_PROD","SERVICES_EXT","OPEX","FRAIS_GENERAUX","CHARGES_PERSONNEL",
   "EBITDA","DA","EBIT","RESULTAT_FIN","RAO","RESULTAT_HAO","RESULTAT_AVANT_IMPOT","IMPOTS","RESULTAT_NET"]);
 function detailLigne(code,libelle){
@@ -5118,8 +5126,9 @@ function tableEtat(defs,titre){
     if(vals.every(v=>Math.abs(v)<0.5)&&!d.toujours) return "";
     const deltas=A.slice(1).map((a,i)=>vals[i]?fpct(vals[i+1]/vals[i]-1):"-");
     const cagr=n>2?(vals[0]>0&&vals[n-1]>0?fpct(Math.pow(vals[n-1]/vals[0],1/(n-1))-1):"-"):null;
-    return `<tr class="${d.st||""}${d.detail?" det":""} cliquable" onclick="detailLigne('${d.code}','${d.lib.replace(/'/g,"\\'")}')" title="Voir les comptes">
-      <td>${esc(d.lib)}<span class="chev">›</span></td>
+    const dr=drillable(d.code);
+    return `<tr class="${d.st||""}${d.detail?" det":""}${dr?" cliquable":""}"${dr?` onclick="detailLigne('${d.code}','${d.lib.replace(/'/g,"\\'")}')" title="Voir les comptes"`:""}>
+      <td>${esc(d.lib)}${dr?'<span class="chev">›</span>':""}</td>
       ${vals.map(v=>`<td class="num">${fmt(v)}</td>`).join("")}
       ${deltas.map(x=>`<td class="num delta">${x}</td>`).join("")}
       ${cagr!==null?`<td class="num delta">${cagr}</td>`:""}</tr>`;

@@ -838,6 +838,13 @@ function codesDe(code){
   ).map(pp=>pp.code);
   return [...base,...extra];
 }
+/* une ligne n'est cliquable que si sa composition résout vers au moins un compte réel de la balance
+   (sinon un sous-total calculé — EBITDA, EBIT, résultat net… — ouvrirait un drill-down vide) */
+function drillable(code){
+  if(!DOSSIER||!DOSSIER.tbagr) return false;
+  const cs=codesDe(code);
+  return DOSSIER.tbagr.lignes.some(l=>cs.includes(l.mapping));
+}
 const AGGS_PL=new Set(["CA","COUTS_DIRECTS","MARGE_BRUTE","AUTRES_PROD","SERVICES_EXT","OPEX","FRAIS_GENERAUX","CHARGES_PERSONNEL",
   "EBITDA","DA","EBIT","RESULTAT_FIN","RAO","RESULTAT_HAO","RESULTAT_AVANT_IMPOT","IMPOTS","RESULTAT_NET"]);
 function detailLigne(code,libelle){
@@ -896,8 +903,9 @@ function tableEtat(defs,titre){
     if(vals.every(v=>Math.abs(v)<0.5)&&!d.toujours) return "";
     const deltas=A.slice(1).map((a,i)=>vals[i]?fpct(vals[i+1]/vals[i]-1):"-");
     const cagr=n>2?(vals[0]>0&&vals[n-1]>0?fpct(Math.pow(vals[n-1]/vals[0],1/(n-1))-1):"-"):null;
-    return `<tr class="${d.st||""}${d.detail?" det":""} cliquable" onclick="detailLigne('${d.code}','${d.lib.replace(/'/g,"\\'")}')" title="Voir les comptes">
-      <td>${esc(d.lib)}<span class="chev">›</span></td>
+    const dr=drillable(d.code);
+    return `<tr class="${d.st||""}${d.detail?" det":""}${dr?" cliquable":""}"${dr?` onclick="detailLigne('${d.code}','${d.lib.replace(/'/g,"\\'")}')" title="Voir les comptes"`:""}>
+      <td>${esc(d.lib)}${dr?'<span class="chev">›</span>':""}</td>
       ${vals.map(v=>`<td class="num">${fmt(v)}</td>`).join("")}
       ${deltas.map(x=>`<td class="num delta">${x}</td>`).join("")}
       ${cagr!==null?`<td class="num delta">${cagr}</td>`:""}</tr>`;

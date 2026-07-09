@@ -607,6 +607,7 @@ function construireBP(pptx){
   const {A,v,a1,fy}=B;
   const hyp=assurerBP();
   const proj=projeterBP(ETATS,hyp);
+  const val=valoriserBP(ETATS,hyp,proj);
   const ap=proj.annees;
   const fyp=ap.map(a=>"FY"+String(a).slice(-2)+"p");
   const mention=B.societe+" - Business plan "+ap[0]+"-"+ap[ap.length-1]+" - "+B.dateTxt+" - Confidentiel";
@@ -685,7 +686,7 @@ function construireBP(pptx){
     ["Nouveaux emprunts",hyp.nouveauxEmprunts.some(x=>x>0)?hyp.nouveauxEmprunts.map(x=>rpFmt(x)).join(" ; "):"aucun"],
     ["Dividendes (% du résultat N-1)",pcH(hyp.dividendes_payout)]]);
   gH("Coût du capital",[
-    ["WACC",pcH((typeof val!=="undefined"&&val&&val.wacc)||(hyp.valo.rf+hyp.valo.beta*hyp.valo.primeMarche+hyp.valo.primeSpecifique)*(1-hyp.valo.poidsDette)+hyp.valo.coutDette*(1-hyp.is_taux)*hyp.valo.poidsDette)],
+    ["WACC",pcH(val.wacc)],
     ["Croissance à l'infini (g)",pcH(hyp.valo.g)]]);
   rpTable(sl,0.55,1.6,7.6,B.societe.toUpperCase()+" - Hypothèses",["Hypothèse","Valeur"],
     lignesH,stylesH,new Set(),[5.2,1.4],8);
