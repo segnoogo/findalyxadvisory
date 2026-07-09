@@ -3683,13 +3683,13 @@ function construireDD(pptx){
   const [pca,tca]=rpPilule(v,"CA",a0p,a1),[peb,teb]=rpPilule(v,"EBITDA",a0p,a1),
         [prn,trn]=rpPilule(v,"RESULTAT_NET",a0p,a1);
   rpCartes(sl,[
-    ["Chiffre d'affaires "+fy[fy.length-1],rpFmt(ca1)+" K",
+    ["Chiffre d'affaires "+fy[fy.length-1],rpFmt(ca1)+" "+rpLib(),
      tcam!==null?"TCAM "+rpPct(tcam):"",pca,tca,"chart","224289"],
-    ["EBITDA "+fy[fy.length-1],rpFmt(v.EBITDA[a1])+" K",
+    ["EBITDA "+fy[fy.length-1],rpFmt(v.EBITDA[a1])+" "+rpLib(),
      ca1?Math.round(v.EBITDA[a1]/ca1*100)+"% du CA":"",peb,teb,"coins","FA6706"],
-    ["Résultat net "+fy[fy.length-1],rpFmt(v.RESULTAT_NET[a1])+" K",
+    ["Résultat net "+fy[fy.length-1],rpFmt(v.RESULTAT_NET[a1])+" "+rpLib(),
      ca1?Math.round(v.RESULTAT_NET[a1]/ca1*100)+"% du CA":"",prn,trn,"file","172554"],
-    ["Trésorerie nette",rpFmt(v.TRESORERIE_NETTE[a1])+" K",
+    ["Trésorerie nette",rpFmt(v.TRESORERIE_NETTE[a1])+" "+rpLib(),
      v.TRESORERIE_NETTE[a1]<0?"position négative":"",null,"neutre","wallet","16904E"],
   ]);
   const syn=rpLignesFin(v,["CA","MARGE_BRUTE","EBITDA","RESULTAT_NET","BFR","TRESORERIE_NETTE",
@@ -3792,7 +3792,51 @@ function construireDD(pptx){
     rpPied(sl,mention,++page);
   }
   rpSlideRatios(pptx,B,mention,++page);
-  rpSection(pptx,4,"Annexes",["Glossaire","Lexique financier"],mention,++page);
+  /* ---------- 4. Notation et qualité des résultats ---------- */
+  rpSection(pptx,4,"Notation et qualité des résultats",["Notation et scores de crédit","Qualité des résultats (QoE)"],mention,++page);
+  const sc=calculerScores(ETATS);
+  sl=pptx.addSlide();
+  rpEnTete(sl,B.societe,"Notation et scores");
+  rpTitre(sl,"Notation et scores de crédit");
+  rpCartes(sl,[
+    ["Notation Findalyx",sc.notation.grade,sc.notation.mention+" · "+sc.notation.global+"/100",null,"neutre","chart","172554"],
+    ["Altman Z-Score",sc.altman.grade,"Z = "+sc.altman.z+" · zone "+sc.altman.zone,null,"neutre","coins","224289"],
+    ["Cotation BCEAO",sc.bceao.cote,sc.bceao.mention+" · "+sc.bceao.nOk+"/4",null,"neutre","file","FA6706"],
+  ],1.7);
+  const d2=x=>(Math.round(x*100)/100).toLocaleString("fr-FR",{maximumFractionDigits:2});
+  const tNot=[
+    ["Profitabilité (30 %)",Math.round(sc.notation.prof)+" / 100"],
+    ["Liquidité (30 %)",Math.round(sc.notation.liq)+" / 100"],
+    ["Solvabilité (40 %)",Math.round(sc.notation.solv)+" / 100"],
+    ["Note globale",sc.notation.global+" / 100"]];
+  rpTable(sl,0.55,3.4,4.0,B.societe.toUpperCase()+" - Notation Findalyx",["Dimension","Note"],tNot,
+    ["detail","detail","detail","sous_total"],new Set(),[2.7,1.2],8.5);
+  const tAlt=[...sc.altman.comp.map(c=>[c.k,d2(c.v)]),["Z-Score","= "+sc.altman.z],["Zone de risque",sc.altman.zone]];
+  rpTable(sl,4.75,3.4,4.35,B.societe.toUpperCase()+" - Altman Z\" (marchés émergents)",["Composante","Valeur"],tAlt,
+    ["detail","detail","detail","detail","sous_total","detail"],new Set(),[3.0,1.2],8);
+  const uB=(x,u)=>u==="%"?Math.round(x)+" %":(Math.round(x*100)/100).toLocaleString("fr-FR",{maximumFractionDigits:2})+"×";
+  const tBc=sc.bceao.crit.map(c=>[c.lib,uB(c.val,c.unite),c.seuil]);
+  rpTable(sl,9.2,3.4,3.6,B.societe.toUpperCase()+" - BCEAO ("+sc.bceao.nOk+"/4 critères)",["Critère","Valeur","Norme"],tBc,
+    ["detail","detail","detail","detail"],new Set([2]),[1.9,0.75,1.05],7.5);
+  rpCadreComment(sl,0.55,5.75,12.25,1.1);
+  rpPied(sl,mention,++page);
+  /* qualité des résultats : isole les autres produits de l'EBITDA (factuel, sans interprétation) */
+  sl=pptx.addSlide();
+  rpEnTete(sl,B.societe,"Qualité des résultats");
+  rpTitre(sl,"Qualité des résultats (Quality of Earnings)");
+  const qoe=[
+    ["EBITDA reporté",...A.map(a=>rpFmt(v.EBITDA[a]))],
+    ["(−) Autres produits (à examiner : récurrents ?)",...A.map(a=>rpFmt(v.AUTRES_PROD[a]))],
+    ["= EBITDA d'exploitation courant",...A.map(a=>rpFmt(v.EBITDA[a]-(v.AUTRES_PROD[a]||0)))],
+    ["Marge EBITDA reporté / CA",...A.map(a=>v.CA[a]?Math.round(v.EBITDA[a]/v.CA[a]*100)+" %":"-")],
+    ["Marge EBITDA courant / CA",...A.map(a=>v.CA[a]?Math.round((v.EBITDA[a]-(v.AUTRES_PROD[a]||0))/v.CA[a]*100)+" %":"-")]];
+  rpTable(sl,0.55,1.7,9.2,B.societe.toUpperCase()+" - Décomposition de l'EBITDA",[rpLib(),...fy],qoe,
+    ["sous_total","detail","sous_total","detail","detail"],new Set(),[4.8,...A.map(()=>0.9)],9,
+    "Isole la part de l'EBITDA provenant des autres produits (subventions, produits divers), à apprécier pour la récurrence. Retraitements détaillés dans l'application et le databook.");
+  rpCadreComment(sl,0.55,4.65,12.25,1.95);
+  rpPied(sl,mention,++page);
+  /* ---------- 5. Annexes ---------- */
+  rpSection(pptx,5,"Annexes",["Glossaire","Lexique financier"],mention,++page);
   rpGlossaire(pptx,B,mention,++page);
   rpLexique(pptx,B,mention,++page);
   rpContacts(pptx,B.cabinet,mention,++page);
@@ -3822,14 +3866,14 @@ function construireBP(pptx){
     rpFmt(proj.pl.CA[ap[ap.length-1]])+" "+rpLib()+" en "+fyp[fyp.length-1]+
     " et le résultat net "+rpFmt(proj.pl.RN[ap[ap.length-1]])+" "+rpLib()+".");
   rpCartes(sl,[
-    ["CA "+fyp[fyp.length-1],rpFmt(proj.pl.CA[ap[ap.length-1]])+" K",
+    ["CA "+fyp[fyp.length-1],rpFmt(proj.pl.CA[ap[ap.length-1]])+" "+rpLib(),
      "croissance "+rpPct(hyp.caCroiss[0])+"/an",null,"neutre","chart","224289"],
-    ["EBITDA "+fyp[fyp.length-1],rpFmt(proj.pl.EBITDA[ap[ap.length-1]])+" K",
+    ["EBITDA "+fyp[fyp.length-1],rpFmt(proj.pl.EBITDA[ap[ap.length-1]])+" "+rpLib(),
      proj.pl.CA[ap[ap.length-1]]?Math.round(proj.pl.EBITDA[ap[ap.length-1]]/proj.pl.CA[ap[ap.length-1]]*100)+"% du CA":"",
      null,"neutre","coins","FA6706"],
-    ["Résultat net cumulé",rpFmt(ap.reduce((s,a)=>s+proj.pl.RN[a],0))+" K","sur l'horizon du plan",
+    ["Résultat net cumulé",rpFmt(ap.reduce((s,a)=>s+proj.pl.RN[a],0))+" "+rpLib(),"sur l'horizon du plan",
      null,"neutre","file","172554"],
-    ["Trésorerie fin "+fyp[fyp.length-1],rpFmt(proj.bs.TRESO_NETTE[ap[ap.length-1]])+" K",
+    ["Trésorerie fin "+fyp[fyp.length-1],rpFmt(proj.bs.TRESO_NETTE[ap[ap.length-1]])+" "+rpLib(),
      proj.bs.TRESO_NETTE[ap[ap.length-1]]<0?"position négative":"",null,
      proj.bs.TRESO_NETTE[ap[ap.length-1]]<0?"down":"up","wallet","16904E"],
   ]);
@@ -3959,7 +4003,61 @@ function construireBP(pptx){
     new Set(),[3.4,...ap.map(()=>0.86)],8,"Source : projections Findalyx Advisory (bilan bouclé par la trésorerie)");
   rpCadreComment(sl,8.45,1.6,4.35,5.25);
   rpPied(sl,mention,++page);
-  rpSection(pptx,5,"Annexes",["Glossaire","Lexique financier"],mention,++page);
+  /* ---------- 5. Analyse & covenants ---------- */
+  rpSection(pptx,5,"Analyse & covenants",["Seuil de rentabilité","Ratios prévisionnels et covenants bancaires"],mention,++page);
+  const pctR=x=>(x==null||!isFinite(x))?"n.s.":Math.round(x*100)+" %";
+  const jrR=x=>(x==null||!isFinite(x))?"n.s.":Math.round(x)+" j";
+  const mltR=x=>(x==null||!isFinite(x))?"n.s.":(Math.round(x*100)/100).toLocaleString("fr-FR",{maximumFractionDigits:2})+"×";
+  /* seuil de rentabilité (point mort d'exploitation, EBIT = 0) — mêmes formules que l'application */
+  sl=pptx.addSlide();
+  rpEnTete(sl,B.societe,"Analyse & covenants");
+  rpTitre(sl,"Seuil de rentabilité (point mort d'exploitation)");
+  const sr=a=>{const ca=proj.pl.CA[a],taux=ca?proj.pl.MARGE_BRUTE[a]/ca:0;
+    const fixes=-((proj.pl.AUTRES_PROD[a]||0)+(proj.pl.OPEX_TOTAL[a]||0)+(proj.pl.CHARGES_PERSONNEL[a]||0)+(proj.pl.DA[a]||0));
+    const seuil=taux?fixes/taux:0;
+    return {ca,taux,fixes,seuil,pm:ca?seuil/ca*360:NaN,marge:ca?(ca-seuil)/ca:NaN,levier:proj.pl.EBIT[a]?proj.pl.MARGE_BRUTE[a]/proj.pl.EBIT[a]:NaN};};
+  const srRows=[
+    ["Chiffre d'affaires",...ap.map(a=>rpFmt(sr(a).ca))],
+    ["Taux de marge sur coûts variables",...ap.map(a=>pctR(sr(a).taux))],
+    ["Charges fixes (nettes des autres produits)",...ap.map(a=>rpFmt(sr(a).fixes))],
+    ["Seuil de rentabilité (CA critique)",...ap.map(a=>rpFmt(sr(a).seuil))],
+    ["Point mort (jours de CA)",...ap.map(a=>jrR(sr(a).pm))],
+    ["Marge de sécurité",...ap.map(a=>pctR(sr(a).marge))],
+    ["Levier opérationnel",...ap.map(a=>mltR(sr(a).levier))]];
+  rpTable(sl,0.55,1.7,8.6,B.societe.toUpperCase()+" - Seuil de rentabilité",
+    [rpLib(),...fyp],srRows,["titre","detail","detail","sous_total","detail","detail","detail"],
+    new Set(),[3.8,...ap.map(()=>0.96)],9,
+    "Point mort où le résultat d'exploitation s'annule : coûts directs = charges variables ; frais généraux, personnel et dotations = charges fixes.");
+  rpCadreComment(sl,0.55,4.65,12.25,1.95);
+  rpPied(sl,mention,++page);
+  /* ratios prévisionnels & covenants bancaires — mêmes formules que l'application */
+  sl=pptx.addSlide();
+  rpEnTete(sl,B.societe,"Analyse & covenants");
+  rpTitre(sl,"Ratios prévisionnels et covenants bancaires");
+  const cov=a=>{
+    const service=(proj.dette[a].remboursement||0)+(proj.dette[a].interets||0)+(proj.dette[a].interetsCT||0);
+    const cfads=proj.pl.EBITDA[a]+proj.pl.IS[a]+(proj.tft[a]?proj.tft[a].DBFR:0);
+    const detteFin=proj.bs.DETTE[a]+(proj.bs.LIGNE_CT[a]||0);
+    const detteNette=detteFin-(proj.bs.TRESO_ACTIVE[a]!==undefined?proj.bs.TRESO_ACTIVE[a]:Math.max(0,proj.bs.TRESO[a]));
+    const acCirc=proj.bs.STOCKS[a]+proj.bs.CLIENTS[a]+proj.bs.AUTRES_CREANCES[a]+(proj.bs.TRESO_ACTIVE[a]||Math.max(0,proj.bs.TRESO[a]));
+    const paCirc=-(proj.bs.FOURNISSEURS[a]+proj.bs.DETTES_FISC_SOC[a]+proj.bs.AUTRES_DETTES[a])+(proj.bs.LIGNE_CT[a]||0);
+    return {dscr:service>0.5?cfads/service:null, lev:proj.pl.EBITDA[a]>0?detteNette/proj.pl.EBITDA[a]:null,
+      gear:proj.bs.CP[a]>0?detteFin/proj.bs.CP[a]:null, couv:proj.pl.FRAIS_FIN[a]<0?proj.pl.EBITDA[a]/-proj.pl.FRAIS_FIN[a]:null,
+      liq:paCirc>0?acCirc/paCirc:null};};
+  const covRows=[
+    ["DSCR — couverture du service de la dette","≥ 1,2×",...ap.map(a=>mltR(cov(a).dscr))],
+    ["Dette nette / EBITDA","≤ 3,5×",...ap.map(a=>mltR(cov(a).lev))],
+    ["Gearing (dette fin. / capitaux propres)","≤ 1,5×",...ap.map(a=>mltR(cov(a).gear))],
+    ["Couverture des intérêts (EBITDA / frais fin.)","≥ 3×",...ap.map(a=>mltR(cov(a).couv))],
+    ["Liquidité générale","≥ 1×",...ap.map(a=>mltR(cov(a).liq))]];
+  rpTable(sl,0.55,1.7,11.0,B.societe.toUpperCase()+" - Ratios prévisionnels et covenants bancaires",
+    ["Covenant","Norme usuelle",...fyp],covRows,["detail","detail","detail","detail","detail"],
+    new Set([1]),[4.8,1.4,...ap.map(()=>0.94)],9,
+    "CFADS = EBITDA − impôt − variation du BFR ; service de la dette = remboursements + intérêts (dette et découvert). Normes = seuils bancaires usuels, à comparer aux valeurs projetées.");
+  rpCadreComment(sl,0.55,4.65,12.25,1.95);
+  rpPied(sl,mention,++page);
+  /* ---------- 6. Annexes ---------- */
+  rpSection(pptx,6,"Annexes",["Glossaire","Lexique financier"],mention,++page);
   rpGlossaire(pptx,B,mention,++page);
   rpLexique(pptx,B,mention,++page);
   rpContacts(pptx,B.cabinet,mention,++page);
@@ -3970,71 +4068,124 @@ function construireValo(pptx){
   const B=rpBase();
   const {A,v,a1,fy}=B;
   const hyp=assurerBP();
+  const Vh=hyp.valo;
   const proj=projeterBP(ETATS,hyp);
   const val=valoriserBP(ETATS,hyp,proj);
   const ap=proj.annees;
   const fyp=ap.map(a=>"FY"+String(a).slice(-2)+"p");
   const mention=B.societe+" - Évaluation financière au 31/12/"+a1+" - Confidentiel";
   let page=1;
+  /* méthodes retenues = les plus utilisées : DCF, comparables, transactions, actif net */
+  const ORD=["dcf","comp","trans","anr"], COURT={dcf:"DCF",comp:"Comparables",trans:"Transactions",anr:"Actif net"};
+  const mKey={}; (val.methodes||[]).forEach(m=>{mKey[m.id]=m;});
+  const mCles=ORD.map(id=>mKey[id]).filter(Boolean);
+  const gordon=val.tvMode!=="exit";
+  const tvTxt=gordon?"Gordon, g "+rpPct(val.g):"multiple de sortie "+(Vh.exitMultiple||0).toFixed(1)+"× EBITDA";
+  const pct1=x=>isFinite(x)?(x*100).toFixed(1).replace(".",",")+" %":"-";   /* taux à une décimale (build-up, axes de sensibilité) */
   rpGarde(pptx,B.societe,"Rapport provisoire d'évaluation financière au 31/12/"+a1,
     "Historique "+fy[0]+" – "+fy[fy.length-1]+"  |  Montants en "+rpLib()+"",B.dateTxt,B.cabinet);
   rpPreambule(pptx,B,mention,++page,
     "Le présent rapport présente l'évaluation financière des fonds propres de "+B.societe+" au 31/12/"+a1+", à partir des projections issues du business plan. Il constitue un support de discussion préalable aux échanges avec le management.",
-    "L'évaluation combine une actualisation des flux de trésorerie disponibles (DCF, valeur terminale de Gordon) et une approche par multiples d'EBITDA. Les flux et le coût du capital sont paramétrés dans l'application et modifiables.");
-  rpSection(pptx,1,"Note de synthèse",["Méthodes d'évaluation","Fourchette de valorisation"],mention,++page);
+    "L'évaluation combine l'actualisation des flux de trésorerie disponibles (DCF, valeur terminale de "+tvTxt+"), les multiples de marché (comparables et transactions) et l'actif net. Les flux et le coût du capital sont paramétrés dans l'application et modifiables.");
+  /* ---------- 1. Synthèse multi-méthodes ---------- */
+  rpSection(pptx,1,"Note de synthèse",["Synthèse multi-méthodes"],mention,++page);
   let sl=pptx.addSlide();
   rpEnTete(sl,B.societe,"Note de synthèse");
-  rpTitre(sl,"Fourchette d'évaluation au 31/12/"+a1);
-  rpAssertion(sl,"La valeur des fonds propres ressort à "+rpFmt(val.equityDcf)+
-    " "+rpLib()+" par le DCF (WACC "+rpPct(val.wacc)+", g "+rpPct(val.g)+") et à "+
-    rpFmt(val.equityMult)+" "+rpLib()+" par les multiples ("+val.multiple.toFixed(1)+"x EBITDA).");
+  rpTitre(sl,"Synthèse d'évaluation des fonds propres au 31/12/"+a1);
   rpCartes(sl,[
-    ["Fonds propres — DCF",rpFmt(val.equityDcf)+" K","WACC "+rpPct(val.wacc)+", g "+rpPct(val.g),
-     null,"neutre","coins","FA6706"],
-    ["Fonds propres — multiples",rpFmt(val.equityMult)+" K","EV/EBITDA "+val.multiple.toFixed(1)+"x",
-     null,"neutre","chart","224289"],
-    ["Fourchette basse",rpFmt(val.eqMin)+" K","sensibilité WACC/g",null,"neutre","file","172554"],
-    ["Fourchette haute",rpFmt(val.eqMax)+" K","sensibilité WACC/g",null,"neutre","wallet","16904E"],
-  ]);
-  const brg=[["Somme des FCFF actualisés",rpFmt(val.sommePv)],
-    ["Valeur terminale actualisée",rpFmt(val.vtPv)],
-    ["Valeur d'entreprise (EV)",rpFmt(val.ev)],
-    ["(-) Dette nette au 31/12/"+a1,rpFmt(-val.detteNette)],
-    ["Valeur des fonds propres (DCF)",rpFmt(val.equityDcf)],
-    ["Valeur des fonds propres (multiples)",rpFmt(val.equityMult)]];
-  rpTable(sl,0.55,3.35,6.9,B.societe.toUpperCase()+" - Synthèse de valorisation",
-    [rpLib(),"Valeur"],brg,["detail","detail","sous_total","detail","sous_total","sous_total"],
-    new Set(),[4.4,1.8],9,"Source : DCF et multiples sur projections Findalyx Advisory");
-  rpBarresH(sl,7.65,3.35,5.15,2.2,"Fourchette — fonds propres ("+rpLib()+")",["Bas","DCF","Multiples","Haut"],
-    [val.eqMin,val.equityDcf,val.equityMult,val.eqMax],{colors:["9CA3AF","172554","2E5AAC","9CA3AF"]});
-  rpCadreComment(sl,7.65,5.7,5.15,1.15);
+    ["Fonds propres — DCF",rpFmt(val.equityDcf)+" "+rpLib(),"WACC "+rpPct(val.wacc),null,"neutre","coins","FA6706"],
+    ["Comparables (central)",rpFmt((mKey.comp&&mKey.comp.central)||val.equityMult)+" "+rpLib(),val.multiple.toFixed(1)+"× EBITDA",null,"neutre","chart","224289"],
+    ["Actif net",rpFmt((mKey.anr&&mKey.anr.central)||v.CAPITAUX_PROPRES[a1])+" "+rpLib(),"approche patrimoniale",null,"neutre","file","172554"],
+    ["Valeur retenue",rpFmt(val.fourchette.retenue)+" "+rpLib(),"moyenne pondérée",null,"neutre","wallet","16904E"],
+  ],1.7);
+  const synth=mCles.map(m=>[m.lib,rpFmt(m.min),rpFmt(m.central),rpFmt(m.max)]);
+  synth.push(["Valeur retenue (pondérée)",rpFmt(val.fourchette.min),rpFmt(val.fourchette.retenue),rpFmt(val.fourchette.max)]);
+  rpTable(sl,0.55,3.35,7.0,B.societe.toUpperCase()+" - Fourchettes de valeur par méthode",
+    [rpLib(),"Bas","Central","Haut"],synth,[...mCles.map(()=>"detail"),"sous_total"],
+    new Set([2]),[3.4,1.2,1.2,1.2],9,"Source : valorisation multi-méthodes Findalyx Advisory");
+  rpBarresH(sl,7.75,3.15,5.05,3.0,"Fourchette — valeur des fonds propres ("+rpLib()+")",
+    [...mCles.map(m=>COURT[m.id]),"Retenue"],
+    [...mCles.map(m=>m.central),val.fourchette.retenue],
+    {colors:["172554","2E5AAC","8FAADC","9E3A38","16904E"]});
+  rpCadreComment(sl,0.55,5.5,7.0,1.35);
   rpPied(sl,mention,++page);
-  /* DCF détaillé */
+  /* ---------- 2. DCF : coût du capital, flux, passage aux fonds propres ---------- */
+  const sousDcf=gordon?["Coût du capital et flux actualisés","Analyse de sensibilité"]:["Coût du capital et flux actualisés"];
+  rpSection(pptx,2,"Approche par les flux (DCF)",sousDcf,mention,++page);
   sl=pptx.addSlide();
-  rpEnTete(sl,B.societe,"Valorisation financière");
-  rpTitre(sl,"Actualisation des flux de trésorerie (DCF)");
-  rpAssertion(sl,"La valeur d'entreprise ressort à "+rpFmt(val.ev)+" "+rpLib()+", dont "+
-    rpFmt(val.vtPv)+" "+rpLib()+" de valeur terminale actualisée ("+
-    (val.ev?Math.round(val.vtPv/val.ev*100):0)+"% de l'EV).");
+  rpEnTete(sl,B.societe,"Approche par les flux (DCF)");
+  rpTitre(sl,"Coût du capital et actualisation des flux");
+  const wacc=[
+    ["Taux sans risque (rf)",pct1(Vh.rf)],
+    ["Prime de marché × β ("+(Vh.beta||1).toFixed(2)+")",pct1((Vh.beta||1)*Vh.primeMarche)],
+    ["Prime de risque spécifique (pays, taille, illiquidité)",pct1(val.primeSpe)],
+    ["= Coût des fonds propres (ke)",pct1(val.ke)],
+    ["Coût de la dette après impôt (kd)",pct1(val.kd)],
+    ["Poids de la dette dans le financement",pct1(Vh.poidsDette)],
+    ["= Coût moyen pondéré du capital (WACC)",pct1(val.wacc)]];
+  rpTable(sl,0.55,1.65,5.7,B.societe.toUpperCase()+" - Coût du capital (build-up)",
+    ["Composante","Taux"],wacc,wacc.map(r=>/^=/.test(r[0])?"sous_total":"detail"),
+    new Set(),[4.4,1.3],9);
   const fcf=[["FCFF",...ap.map(a=>rpFmt(val.fcff[a]))],
-             ["FCFF actualisés (WACC "+rpPct(val.wacc)+")",...ap.map(a=>rpFmt(val.pv[a]))]];
-  rpTable(sl,0.55,1.6,12.25,B.societe.toUpperCase()+" - Flux actualisés",
-    [rpLib(),...fyp],fcf,["detail","detail"],new Set(),
-    [3.2,...Array(ap.length).fill(1.2)],9);
-  const proj4=[["Chiffre d'affaires",...ap.map(a=>rpFmt(proj.pl.CA[a]))],
-    ["EBITDA",...ap.map(a=>rpFmt(proj.pl.EBITDA[a]))],
-    ["Résultat net",...ap.map(a=>rpFmt(proj.pl.RN[a]))]];
-  rpTable(sl,0.55,3.25,12.25,"Projections sous-jacentes "+ap[0]+" - "+ap[ap.length-1],
-    [rpLib(),...fyp],proj4,["titre","sous_total","sous_total"],new Set(),
-    [3.2,...Array(ap.length).fill(1.2)],9);
-  rpColonnes(sl,0.55,5.1,7.4,1.75,"FCFF actualisés ("+rpLib()+")",fyp,[{name:"FCFF actualisés",values:ap.map(a=>val.pv[a]),color:"16904E"}]);
-  rpCadreComment(sl,8.15,5.1,4.65,1.75);
+             ["FCFF actualisés",...ap.map(a=>rpFmt(val.pv[a]))]];
+  rpTable(sl,6.5,1.65,6.3,"Flux de trésorerie disponibles (FCFF)",
+    [rpLib(),...fyp],fcf,["detail","sous_total"],new Set(),
+    [1.8,...Array(ap.length).fill(0.9)],8.5);
+  const brg=[["Somme des FCFF actualisés",rpFmt(val.sommePv)],
+    ["Valeur terminale actualisée ("+tvTxt+")",rpFmt(val.vtPv)],
+    ["= Valeur d'entreprise (EV)",rpFmt(val.ev)],
+    ["(−) Dette nette au 31/12/"+a1,rpFmt(-val.detteNette)],
+    (Math.abs(val.bridgeAjust)>0.5?["(±) Ajustements du pont (provisions, etc.)",rpFmt(val.bridgeAjust)]:null),
+    ["= Valeur des fonds propres (DCF)",rpFmt(val.equityDcf)]].filter(Boolean);
+  rpTable(sl,6.5,4.15,6.3,"Passage valeur d'entreprise → fonds propres",
+    [rpLib(),"Valeur"],brg,brg.map(r=>/^=/.test(r[0])?"sous_total":"detail"),
+    new Set(),[4.4,1.9],8.5);
+  rpCadreComment(sl,0.55,4.15,5.7,2.35);
   rpPied(sl,mention,++page);
-  rpSection(pptx,2,"Risques",["Risques majeurs et couverture"],mention,++page);
+  /* sensibilité (uniquement en mode Gordon : la grille WACC×g est cohérente avec la valeur centrale) */
+  if(gordon){
+    sl=pptx.addSlide();
+    rpEnTete(sl,B.societe,"Approche par les flux (DCF)");
+    rpTitre(sl,"Sensibilité de la valeur des fonds propres");
+    const dws=[-0.01,-0.005,0,0.005,0.01];
+    const entS=["WACC \\ g",...dws.map(dg=>pct1(val.g+dg))];
+    const rowsS=(val.sensi||[]).map((ligne,i)=>[pct1(val.wacc+dws[i]),...ligne.map(x=>rpFmt(x))]);
+    rpTable(sl,0.55,2.2,12.25,B.societe.toUpperCase()+" - Valeur des fonds propres selon le WACC et la croissance perpétuelle g",
+      entS,rowsS,rowsS.map((r,i)=>i===2?"sous_total":"detail"),new Set([3]),
+      [1.7,...dws.map(()=>1.0)],9,"Chaque cellule = valeur des fonds propres (EV actualisée − dette nette + ajustements du pont).");
+    rpCadreComment(sl,0.55,4.6,12.25,1.9);
+    rpPied(sl,mention,++page);
+  }
+  /* ---------- 3. Multiples de marché & actif net ---------- */
+  rpSection(pptx,3,"Approches de marché et patrimoniale",["Comparables, transactions et actif net"],mention,++page);
+  sl=pptx.addSlide();
+  rpEnTete(sl,B.societe,"Approches de marché et patrimoniale");
+  rpTitre(sl,"Multiples de marché et actif net");
+  const mc=Vh.multiplesComparables, mt=Vh.multiplesTransactions;
+  const tMult=[
+    ["EBITDA de référence "+fy[fy.length-1],rpFmt(val.ebitdaRef),"",""],
+    ["Comparables — EV/EBITDA",mc.min.toFixed(1)+"×",mc.central.toFixed(1)+"×",mc.max.toFixed(1)+"×"],
+    ["→ fonds propres induits",rpFmt(mKey.comp&&mKey.comp.min),rpFmt(mKey.comp&&mKey.comp.central),rpFmt(mKey.comp&&mKey.comp.max)],
+    ["Transactions — EV/EBITDA",mt.min.toFixed(1)+"×",mt.central.toFixed(1)+"×",mt.max.toFixed(1)+"×"],
+    ["→ fonds propres induits",rpFmt(mKey.trans&&mKey.trans.min),rpFmt(mKey.trans&&mKey.trans.central),rpFmt(mKey.trans&&mKey.trans.max)]];
+  rpTable(sl,0.55,1.7,8.2,B.societe.toUpperCase()+" - Multiples d'EBITDA et fonds propres induits",
+    ["","Bas","Central","Haut"],tMult,["titre","detail","sous_total","detail","sous_total"],
+    new Set([2]),[3.9,1.2,1.2,1.2],9,"Fonds propres = multiple × EBITDA de référence − dette nette + ajustements du pont.");
+  const tAnr=[
+    ["Actif net comptable au 31/12/"+a1,rpFmt(v.CAPITAUX_PROPRES[a1])],
+    ["Retraitements (réévaluations, actifs hors exploitation)",rpFmt((mKey.anr?mKey.anr.central:v.CAPITAUX_PROPRES[a1])-v.CAPITAUX_PROPRES[a1])],
+    ["= Actif net réévalué (ANR)",rpFmt(mKey.anr?mKey.anr.central:v.CAPITAUX_PROPRES[a1])]];
+  rpTable(sl,9.0,1.7,3.8,"Approche patrimoniale (ANR)",
+    [rpLib(),"Valeur"],tAnr,["detail","detail","sous_total"],new Set(),[2.6,1.2],8.5);
+  rpCadreComment(sl,0.55,4.35,12.25,2.15);
+  rpPied(sl,mention,++page);
+  /* ---------- 4. Risques ---------- */
+  rpSection(pptx,4,"Risques",["Risques majeurs et couverture"],mention,++page);
   rpPlaceholder(pptx,B.societe,"Risques","Risques majeurs et couverture",
     ["Risques de marché et de concurrence","Risques opérationnels",
      "Risques financiers (change, taux, liquidité)","Risques juridiques et fiscaux"],mention,++page);
-  rpSection(pptx,3,"Annexes",["Glossaire","Lexique financier"],mention,++page);
+  /* ---------- 5. Annexes ---------- */
+  rpSection(pptx,5,"Annexes",["Glossaire","Lexique financier"],mention,++page);
   rpGlossaire(pptx,B,mention,++page);
   rpLexique(pptx,B,mention,++page);
   rpContacts(pptx,B.cabinet,mention,++page);
