@@ -258,6 +258,21 @@ function rpBase(){
   const dateTxt=new Date().toLocaleDateString("fr-FR",{month:"long",year:"numeric"});
   return {A,v,a1,a0,ca1,fy,dateTxt,societe:DOSSIER.societe,cabinet:cabinetExport()||"Findalyx Advisory"};
 }
+/* accès unifié à la projection pour les rapports : dossier avec historique (projeterBP) OU
+   modèle sans balance (projeterModele). En mode modèle, aligne ETATS sur l'ETATS synthétique
+   et renvoie hyp=M (le modèle). Les rapports masquent les colonnes « historique » via rpModele(). */
+function rpModele(){return !!(DOSSIER&&DOSSIER.sansHistorique);}
+function rpProj(){
+  if(rpModele()){
+    var M=assurerModele();
+    var proj=projeterModele(M);
+    ETATS=etatsFromModele(proj);
+    var val=null; try{val=valoriserBP(ETATS,{is_taux:M.is_taux,valo:M.valo},proj);}catch(e){}
+    return {hyp:M,proj:proj,val:val};
+  }
+  var hyp=assurerBP(),proj=projeterBP(ETATS,hyp),val=valoriserBP(ETATS,hyp,proj);
+  return {hyp:hyp,proj:proj,val:val};
+}
 function rpPilule(v,code,a0p,a1){
   if(!a0p||!v[code][a0p])return [null,"neutre"];
   const d=v[code][a1]/v[code][a0p]-1;
@@ -648,21 +663,20 @@ function construireDD(pptx){
 /* ---------- RAPPORT BP ---------- */
 function construireBP(pptx,opts){
   opts=opts||{};
+  const {hyp,proj,val}=rpProj();   /* aligne ETATS (synthétique en mode modèle) avant rpBase */
+  const mm=rpModele();
   const B=rpBase();
   const {A,v,a1,fy}=B;
-  const hyp=assurerBP();
-  const proj=projeterBP(ETATS,hyp);
-  const val=valoriserBP(ETATS,hyp,proj);
   const ap=proj.annees;
   const fyp=ap.map(a=>"FY"+String(a).slice(-2)+"p");
   const mention=opts.mention||(B.societe+" - Business plan "+ap[0]+"-"+ap[ap.length-1]+" - "+B.dateTxt+" - Confidentiel");
   const S=opts.secBase||0; let page=opts.page||1;
   if(!opts.combine){
     rpGarde(pptx,B.societe,"Rapport provisoire de Business Plan "+ap[0]+" – "+ap[ap.length-1],
-      "Historique "+fy[0]+" – "+fy[fy.length-1]+"  |  Montants en "+rpLib()+"",B.dateTxt,B.cabinet);
+      (mm?"Business plan sans historique  |  Montants en "+rpLib():"Historique "+fy[0]+" – "+fy[fy.length-1]+"  |  Montants en "+rpLib()),B.dateTxt,B.cabinet);
     rpPreambule(pptx,B,mention,++page,
-      "Le présent rapport présente le business plan de "+B.societe+" sur la période "+ap[0]+" à "+ap[ap.length-1]+", construit à partir de l'historique "+fy[0]+"–"+fy[fy.length-1]+". Il constitue un support de discussion préalable aux échanges avec le management.",
-      "Les projections sont établies à partir des balances historiques et d'hypothèses paramétrées dans l'application (croissance du CA, marges, BFR, investissements, financement). Le bilan prévisionnel est bouclé par la trésorerie ; toutes les hypothèses sont modifiables.");
+      "Le présent rapport présente le business plan de "+B.societe+" sur la période "+ap[0]+" à "+ap[ap.length-1]+", "+(mm?"construit à partir d'un modèle piloté par inducteurs (sans historique comptable)":"construit à partir de l'historique "+fy[0]+"–"+fy[fy.length-1])+". Il constitue un support de discussion préalable aux échanges avec le management.",
+      (mm?"Les projections sont établies à partir d'inducteurs d'activité (volumes × prix), de coûts, de charges, d'investissements et d'un montage de financement paramétrés dans l'application. Le bilan prévisionnel est bouclé par la trésorerie ; toutes les hypothèses sont modifiables.":"Les projections sont établies à partir des balances historiques et d'hypothèses paramétrées dans l'application (croissance du CA, marges, BFR, investissements, financement). Le bilan prévisionnel est bouclé par la trésorerie ; toutes les hypothèses sont modifiables."));
   }
   rpSection(pptx,S+1,"Note de synthèse",["Résumé exécutif et trajectoire"],mention,++page);
   let sl=pptx.addSlide();
@@ -673,7 +687,7 @@ function construireBP(pptx,opts){
     " et le résultat net "+rpFmt(proj.pl.RN[ap[ap.length-1]])+" "+rpLib()+".");
   rpCartes(sl,[
     ["CA "+fyp[fyp.length-1],rpFmt(proj.pl.CA[ap[ap.length-1]])+" "+rpLib(),
-     "croissance "+rpPct(hyp.caCroiss[0])+"/an",null,"neutre","chart","224289"],
+     mm?("scénario "+proj.scenario):("croissance "+rpPct(hyp.caCroiss[0])+"/an"),null,"neutre","chart","224289"],
     ["EBITDA "+fyp[fyp.length-1],rpFmt(proj.pl.EBITDA[ap[ap.length-1]])+" "+rpLib(),
      proj.pl.CA[ap[ap.length-1]]?Math.round(proj.pl.EBITDA[ap[ap.length-1]]/proj.pl.CA[ap[ap.length-1]]*100)+"% du CA":"",
      null,"neutre","coins","FA6706"],
@@ -686,18 +700,18 @@ function construireBP(pptx,opts){
   const trj=["CA","EBITDA","RN"].map(c=>{
     const lib={CA:"Chiffre d'affaires",EBITDA:"EBITDA",RN:"Résultat net"}[c];
     const ch={CA:"CA",EBITDA:"EBITDA",RN:"RESULTAT_NET"}[c];
-    return [lib,rpFmt(v[ch][a1]),...ap.map(a=>rpFmt(proj.pl[c][a]))];
+    return mm?[lib,...ap.map(a=>rpFmt(proj.pl[c][a]))]:[lib,rpFmt(v[ch][a1]),...ap.map(a=>rpFmt(proj.pl[c][a]))];
   });
-  trj.push(["Trésorerie nette",rpFmt(v.TRESORERIE_NETTE[a1]),...ap.map(a=>rpFmt(proj.bs.TRESO_NETTE[a]))]);
+  trj.push(mm?["Trésorerie nette",...ap.map(a=>rpFmt(proj.bs.TRESO_NETTE[a]))]:["Trésorerie nette",rpFmt(v.TRESORERIE_NETTE[a1]),...ap.map(a=>rpFmt(proj.bs.TRESO_NETTE[a]))]);
   rpTable(sl,0.55,3.35,6.9,B.societe.toUpperCase()+" - Trajectoire",
-    [rpLib(),fy[fy.length-1]+" (réel)",...fyp],trj,
+    mm?[rpLib(),...fyp]:[rpLib(),fy[fy.length-1]+" (réel)",...fyp],trj,
     ["titre","sous_total","sous_total","sous_total"],new Set(),
-    [2.6,...Array(1+ap.length).fill(1.15)],8.5,
+    [2.6,...Array((mm?0:1)+ap.length).fill(1.15)],8.5,
     "Source : projections Findalyx Advisory (hypothèses modifiables dans l'application)");
-  rpColonnes(sl,7.65,3.35,5.15,2.1,"("+rpLib()+")",[fy[fy.length-1],...fyp],[
-    {name:"CA",values:[v.CA[a1],...ap.map(a=>proj.pl.CA[a])],color:"172554"},
-    {name:"EBITDA",values:[v.EBITDA[a1],...ap.map(a=>proj.pl.EBITDA[a])],color:"2E5AAC"},
-    {name:"RN",values:[v.RESULTAT_NET[a1],...ap.map(a=>proj.pl.RN[a])],color:"8FAADC"}]);
+  rpColonnes(sl,7.65,3.35,5.15,2.1,"("+rpLib()+")",mm?[...fyp]:[fy[fy.length-1],...fyp],[
+    {name:"CA",values:mm?ap.map(a=>proj.pl.CA[a]):[v.CA[a1],...ap.map(a=>proj.pl.CA[a])],color:"172554"},
+    {name:"EBITDA",values:mm?ap.map(a=>proj.pl.EBITDA[a]):[v.EBITDA[a1],...ap.map(a=>proj.pl.EBITDA[a])],color:"2E5AAC"},
+    {name:"RN",values:mm?ap.map(a=>proj.pl.RN[a]):[v.RESULTAT_NET[a1],...ap.map(a=>proj.pl.RN[a])],color:"8FAADC"}]);
   rpCadreComment(sl,7.65,5.55,5.15,1.3);
   rpPied(sl,mention,++page);
   rpSection(pptx,S+2,"Présentation du projet et étude de marché",
@@ -713,11 +727,28 @@ function construireBP(pptx,opts){
   sl=pptx.addSlide();
   rpEnTete(sl,B.societe,"Hypothèses");
   rpTitre(sl,"Hypothèses opérationnelles et financières");
-  rpAssertion(sl,"Les valeurs par défaut sont dérivées de l'historique "+fy[0]+" – "+fy[fy.length-1]+".");
+  rpAssertion(sl,mm?"Le modèle est piloté par des inducteurs d'activité (volumes × prix) ; toutes les hypothèses sont modifiables dans l'application.":"Les valeurs par défaut sont dérivées de l'historique "+fy[0]+" – "+fy[fy.length-1]+".");
   const lignesH=[],stylesH=[];
   const pcH=x=>(x*100).toFixed(1).replace(".0","")+" %";
   const gH=(t,items)=>{lignesH.push([t,""]);stylesH.push("sous_total");
     items.forEach(([l,x])=>{lignesH.push([l,x]);stylesH.push("detail");});};
+  if(mm){
+    const Pf=proj.financement, b=hyp.bfr||{};
+    gH("Activité (pilotée par inducteurs)",(hyp.revenus||[]).map(L=>[L.name||"Ligne de revenus",
+      "volume × prix — coûts "+((L.cout&&L.cout.m==="unit")?"unitaires":(((L.cout&&L.cout.val)||0)+" % du CA"))]));
+    gH("Coûts, charges & BFR",[
+      ["Inflation des coûts unitaires",pcH(hyp.inflation||0.03)],
+      ["Délais clients / stocks / fournisseurs",Math.round(b.dso||0)+" / "+Math.round(b.dio||0)+" / "+Math.round(b.dpo||0)+" j"],
+      ["Taux d'IS",pcH(hyp.is_taux||0.30)]]);
+    gH("Investissement & financement",[
+      ["Durée de construction",(Pf.dureeConstruction||0)+" an(s)"],
+      ["Investissements (jusqu'à la mise en service)",rpFmt(Pf.capexFinance)+" "+rpLib()],
+      ["Financement — fonds propres / dette",Math.round(Pf.partFP*100)+" % / "+Math.round((1-Pf.partFP)*100)+" %"],
+      ["Intérêts de construction capitalisés (IDC)",rpFmt(Pf.idc)+" "+rpLib()]]);
+    gH("Coût du capital",[
+      ["WACC",val?pcH(val.wacc):"n.s."],
+      ["Croissance à l'infini (g)",pcH((hyp.valo&&hyp.valo.g)||0.03)]]);
+  } else {
   gH("Activité et marges",[
     ["Croissance du CA par année",hyp.caCroiss.map(pcH).join(" ; ")],
     ["Coûts directs (% du CA)",pcH(hyp.coutsDirects_pct)],
@@ -735,6 +766,7 @@ function construireBP(pptx,opts){
   gH("Coût du capital",[
     ["WACC",pcH(val.wacc)],
     ["Croissance à l'infini (g)",pcH(hyp.valo.g)]]);
+  }
   rpTable(sl,0.55,1.6,7.6,B.societe.toUpperCase()+" - Hypothèses",["Hypothèse","Valeur"],
     lignesH,stylesH,new Set(),[5.2,1.4],8);
   rpCadreComment(sl,8.35,1.6,4.45,5.25);
@@ -744,8 +776,8 @@ function construireBP(pptx,opts){
   sl=pptx.addSlide();
   rpEnTete(sl,B.societe,"Projections financières");
   rpTitre(sl,"Compte de résultat prévisionnel");
-  rpAssertion(sl,"L'EBITDA évolue de "+rpFmt(v.EBITDA[a1])+" "+rpLib()+" en "+fy[fy.length-1]+
-    " à "+rpFmt(proj.pl.EBITDA[ap[ap.length-1]])+" "+rpLib()+" en "+fyp[fyp.length-1]+".");
+  rpAssertion(sl,mm?("L'EBITDA atteint "+rpFmt(proj.pl.EBITDA[ap[ap.length-1]])+" "+rpLib()+" en "+fyp[fyp.length-1]+"."):("L'EBITDA évolue de "+rpFmt(v.EBITDA[a1])+" "+rpLib()+" en "+fy[fy.length-1]+
+    " à "+rpFmt(proj.pl.EBITDA[ap[ap.length-1]])+" "+rpLib()+" en "+fyp[fyp.length-1]+"."));
   proj.pl.FRAIS_GENERAUX={}; ap.forEach(a=>{proj.pl.FRAIS_GENERAUX[a]=(proj.pl.OPEX_TOTAL[a]||0)+(proj.pl.CHARGES_PERSONNEL[a]||0);});
   const codesP=[["CA","Chiffre d'affaires","titre"],["ACHATS","Coûts directs","sous_total"],
     ["MARGE_BRUTE","Marge brute","sous_total"],["AUTRES_PRODUITS","Autres produits","detail"],
@@ -756,24 +788,24 @@ function construireBP(pptx,opts){
   const histM={CA:"CA",ACHATS:"COUTS_DIRECTS",MARGE_BRUTE:"MARGE_BRUTE",AUTRES_PRODUITS:"AUTRES_PROD",
     FRAIS_GENERAUX:"FRAIS_GENERAUX",EBITDA:"EBITDA",DOTATIONS:"DA",EBIT:"EBIT",
     RESULTAT_FIN:"RESULTAT_FIN",EBT:"RESULTAT_AVANT_IMPOT",IS:"IMPOTS",RN:"RESULTAT_NET"};
-  const lignesBP=codesP.map(([c,lib])=>[lib,...A.map(a=>rpFmt(v[histM[c]][a])),
+  const lignesBP=codesP.map(([c,lib])=>mm?[lib,...ap.map(a=>rpFmt(proj.pl[c][a]))]:[lib,...A.map(a=>rpFmt(v[histM[c]][a])),
     ...ap.map(a=>rpFmt(proj.pl[c][a]))]);
   rpTable(sl,0.55,1.6,12.25,B.societe.toUpperCase()+" - P&L prévisionnel",
-    [rpLib(),...fy,...fyp],lignesBP,codesP.map(x=>x[2]),
-    new Set(Array.from({length:A.length},(_,k)=>1+k)),
-    [2.6,...Array(A.length+ap.length).fill(1.05)],8,
-    "Colonnes bleutées : historique reconstitué ; autres : projections.");
-  rpColonnes(sl,0.55,5.0,7.5,1.85,"("+rpLib()+")",[...fy,...fyp],[
-    {name:"CA",values:[...A.map(a=>v.CA[a]),...ap.map(a=>proj.pl.CA[a])],color:"172554"},
-    {name:"EBITDA",values:[...A.map(a=>v.EBITDA[a]),...ap.map(a=>proj.pl.EBITDA[a])],color:"2E5AAC"},
-    {name:"RN",values:[...A.map(a=>v.RESULTAT_NET[a]),...ap.map(a=>proj.pl.RN[a])],color:"8FAADC"}]);
+    mm?[rpLib(),...fyp]:[rpLib(),...fy,...fyp],lignesBP,codesP.map(x=>x[2]),
+    mm?new Set():new Set(Array.from({length:A.length},(_,k)=>1+k)),
+    [2.6,...Array((mm?0:A.length)+ap.length).fill(1.05)],8,
+    mm?"Projections issues du modèle d'inducteurs ; bilan bouclé par la trésorerie.":"Colonnes bleutées : historique reconstitué ; autres : projections.");
+  rpColonnes(sl,0.55,5.0,7.5,1.85,"("+rpLib()+")",mm?[...fyp]:[...fy,...fyp],[
+    {name:"CA",values:mm?ap.map(a=>proj.pl.CA[a]):[...A.map(a=>v.CA[a]),...ap.map(a=>proj.pl.CA[a])],color:"172554"},
+    {name:"EBITDA",values:mm?ap.map(a=>proj.pl.EBITDA[a]):[...A.map(a=>v.EBITDA[a]),...ap.map(a=>proj.pl.EBITDA[a])],color:"2E5AAC"},
+    {name:"RN",values:mm?ap.map(a=>proj.pl.RN[a]):[...A.map(a=>v.RESULTAT_NET[a]),...ap.map(a=>proj.pl.RN[a])],color:"8FAADC"}]);
   rpCadreComment(sl,8.15,5.0,4.65,1.85);
   rpPied(sl,mention,++page);
   /* bilan & trésorerie prévisionnels */
   sl=pptx.addSlide();
   rpEnTete(sl,B.societe,"Projections financières");
   rpTitre(sl,"Bilan et trésorerie prévisionnels");
-  rpAssertion(sl,"La trésorerie nette évolue de "+rpFmt(v.TRESORERIE_NETTE[a1])+" "+rpLib()+" ("+fy[fy.length-1]+") à "+rpFmt(proj.bs.TRESO_NETTE[ap[ap.length-1]])+" "+rpLib()+" ("+fyp[fyp.length-1]+").");
+  rpAssertion(sl,mm?("La trésorerie nette atteint "+rpFmt(proj.bs.TRESO_NETTE[ap[ap.length-1]])+" "+rpLib()+" en "+fyp[fyp.length-1]+"."):("La trésorerie nette évolue de "+rpFmt(v.TRESORERIE_NETTE[a1])+" "+rpLib()+" ("+fy[fy.length-1]+") à "+rpFmt(proj.bs.TRESO_NETTE[ap[ap.length-1]])+" "+rpLib()+" ("+fyp[fyp.length-1]+")."));
   const bsP=[["Immobilisations nettes",...ap.map(a=>rpFmt(proj.bs.IMMO_NET[a]))],
     ["Stocks",...ap.map(a=>rpFmt(proj.bs.STOCKS[a]))],
     ["Créances clients",...ap.map(a=>rpFmt(proj.bs.CLIENTS[a]))],
@@ -875,12 +907,11 @@ function construireBP(pptx,opts){
 /* ---------- RAPPORT VALO ---------- */
 function construireValo(pptx,opts){
   opts=opts||{};
+  const {hyp,proj,val}=rpProj();   /* aligne ETATS (synthétique en mode modèle) avant rpBase */
+  const mm=rpModele();
   const B=rpBase();
   const {A,v,a1,fy}=B;
-  const hyp=assurerBP();
   const Vh=hyp.valo;
-  const proj=projeterBP(ETATS,hyp);
-  const val=valoriserBP(ETATS,hyp,proj);
   const ap=proj.annees;
   const fyp=ap.map(a=>"FY"+String(a).slice(-2)+"p");
   const mention=opts.mention||(B.societe+" - Évaluation financière au 31/12/"+a1+" - Confidentiel");
@@ -893,10 +924,10 @@ function construireValo(pptx,opts){
   const tvTxt=(gordon?"Gordon, g "+rpPct(val.g):"multiple de sortie "+(Vh.exitMultiple||0).toFixed(1)+"× EBITDA")+(Vh.midYear?" ; actualisation mi-année":"");
   const pct1=x=>isFinite(x)?(x*100).toFixed(1).replace(".",",")+" %":"-";   /* taux à une décimale (build-up, axes de sensibilité) */
   if(!opts.combine){
-    rpGarde(pptx,B.societe,"Rapport provisoire d'évaluation financière au 31/12/"+a1,
-      "Historique "+fy[0]+" – "+fy[fy.length-1]+"  |  Montants en "+rpLib()+"",B.dateTxt,B.cabinet);
+    rpGarde(pptx,B.societe,mm?"Rapport provisoire d'évaluation financière":"Rapport provisoire d'évaluation financière au 31/12/"+a1,
+      (mm?"Business plan sans historique  |  Montants en "+rpLib():"Historique "+fy[0]+" – "+fy[fy.length-1]+"  |  Montants en "+rpLib()),B.dateTxt,B.cabinet);
     rpPreambule(pptx,B,mention,++page,
-      "Le présent rapport présente l'évaluation financière des fonds propres de "+B.societe+" au 31/12/"+a1+", à partir des projections issues du business plan. Il constitue un support de discussion préalable aux échanges avec le management.",
+      "Le présent rapport présente l'évaluation financière des fonds propres de "+B.societe+(mm?"":" au 31/12/"+a1)+", à partir des projections issues du business plan. Il constitue un support de discussion préalable aux échanges avec le management.",
       "L'évaluation combine l'actualisation des flux de trésorerie disponibles (DCF, valeur terminale de "+tvTxt+"), les multiples de marché (comparables et transactions) et l'actif net. Les flux et le coût du capital sont paramétrés dans l'application et modifiables.");
   }
   /* ---------- 1. Synthèse multi-méthodes ---------- */
@@ -1009,14 +1040,14 @@ function construireValo(pptx,opts){
 
 /* ---------- RAPPORT COMBINÉ BP + VALO ---------- */
 function construireBPValo(pptx){
+  const {hyp,proj}=rpProj();   /* aligne ETATS (synthétique en mode modèle) avant rpBase */
+  const mm=rpModele();
   const B=rpBase();
   const {a1,fy}=B;
-  const hyp=assurerBP();
-  const proj=projeterBP(ETATS,hyp);
   const ap=proj.annees;
   const mention=B.societe+" - Business plan & évaluation financière - "+B.dateTxt+" - Confidentiel";
   rpGarde(pptx,B.societe,"Business Plan & Évaluation financière",
-    "Business plan "+ap[0]+" – "+ap[ap.length-1]+" · évaluation au 31/12/"+a1+"  |  Montants en "+rpLib()+"",B.dateTxt,B.cabinet);
+    (mm?"Business plan "+ap[0]+" – "+ap[ap.length-1]+" (sans historique)  |  Montants en "+rpLib():"Business plan "+ap[0]+" – "+ap[ap.length-1]+" · évaluation au 31/12/"+a1+"  |  Montants en "+rpLib()),B.dateTxt,B.cabinet);
   let page=1;
   rpPreambule(pptx,B,mention,++page,
     "Le présent document réunit le business plan de "+B.societe+" ("+ap[0]+" – "+ap[ap.length-1]+") et l'évaluation financière des fonds propres qui en découle. Il constitue un support de discussion préalable aux échanges avec le management, les investisseurs ou les partenaires financiers.",
@@ -1032,7 +1063,7 @@ function construireBPValo(pptx){
 
 /* ---------- point d'entrée ---------- */
 async function genererRapport(type){
-  if(!ETATS){toast("Importez d'abord des balances");return;}
+  if(!ETATS && !(DOSSIER&&DOSSIER.sansHistorique)){toast("Importez d'abord des balances");return;}
   if(typeof PptxGenJS==="undefined"){toast("Bibliothèque PowerPoint non chargée (connexion requise)");return;}
   toast("Génération du rapport en cours…");
   const pptx=new PptxGenJS();

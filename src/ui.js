@@ -106,7 +106,7 @@ function icone(d){return `<span class="ic"><svg viewBox="0 0 24 24" fill="none" 
 function shell(){
   /* en mode « sans balance », les vues d'analyse historique n'ont pas de sens : nav réduite */
   const navList=(DOSSIER&&DOSSIER.sansHistorique)
-    ?[NAV[0],{id:"modele",lab:"Business plan",ic:NAV[6].ic},NAV[8]]
+    ?[NAV[0],{id:"modele",lab:"Business plan",ic:NAV[6].ic},NAV[8],NAV[9]]
     :NAV;
   const items=navList.map(n=>`<div class="item ${VUE===n.id?"active":""}" onclick="aller('${n.id}')">${icone(n.ic)}${n.lab}</div>`).join("");
   document.getElementById("app").innerHTML=`
@@ -1467,10 +1467,21 @@ function dessinerGraphs(){
 /* --- projections & valorisation --- */
 let projChart=null;
 function vueExports(){
-  if(!ETATS) return '<div class="mut">Importez d\'abord des balances.</div>';
   const carte=(titre,desc,action,bouton)=>`<div class="card"><b>${titre}</b>
     <div class="mut">${desc}</div>
     <button class="btn primary" onclick="${action}">${bouton}</button></div>`;
+  if(DOSSIER&&DOSSIER.sansHistorique){
+    return `<h1>Exports</h1>
+    <div class="mut" style="margin-bottom:12px">Business plan sans historique — les exports reprennent vos inducteurs, le montage de financement (Sources &amp; Emplois) et la valorisation. Les analyses historiques (due diligence, databook, balance mappée) ne s'appliquent pas ici.</div>
+    <div class="sec-titre">Rapports PowerPoint</div>
+    <div class="mut" style="margin:-4px 0 10px">Style banque d'affaires Findalyx — natif PowerPoint, entièrement retouchable.</div>
+    <div class="grille-exp">
+    ${carte("Business plan","Résumé exécutif, hypothèses du modèle, P&amp;L / bilan / trésorerie prévisionnels, seuil de rentabilité et covenants.","genererRapport('bp')","Générer")}
+    ${carte("Valorisation","Fourchette DCF et multiples, flux actualisés, build-up MEDAF (risque pays Damodaran), sensibilité.","genererRapport('valo')","Générer")}
+    ${carte("Business plan + Valorisation","Document unique : le plan (hypothèses, projections, covenants) puis l'évaluation des fonds propres — l'usage courant pour un dossier bancaire ou investisseur.","genererRapport('bpvalo')","Générer")}
+    </div>`;
+  }
+  if(!ETATS) return '<div class="mut">Importez d\'abord des balances.</div>';
   return `<h1>Exports</h1>
   <div class="sec-titre">Classeurs Excel</div>
   <div class="grille-exp">
