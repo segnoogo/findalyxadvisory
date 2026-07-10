@@ -6148,6 +6148,10 @@ function vueExports(){
   if(DOSSIER&&DOSSIER.sansHistorique){
     return `<h1>Exports</h1>
     <div class="mut" style="margin-bottom:12px">Business plan sans historique — les exports reprennent vos inducteurs, le montage de financement (Sources &amp; Emplois) et la valorisation. Les analyses historiques (due diligence, databook, balance mappée) ne s'appliquent pas ici.</div>
+    <div class="sec-titre">Classeur Excel</div>
+    <div class="grille-exp">
+    ${carte("Business plan + Valorisation (Excel)","P&amp;L, bilan, TFT et dette prévisionnels, Sources &amp; Emplois du montage et valorisation multi-méthodes — en valeurs, prêt à retravailler.","exporterExcelModele()","Télécharger")}
+    </div>
     <div class="sec-titre">Rapports PowerPoint</div>
     <div class="mut" style="margin:-4px 0 10px">Style banque d'affaires Findalyx — natif PowerPoint, entièrement retouchable.</div>
     <div class="grille-exp">
@@ -6354,6 +6358,135 @@ async function exporterExcel(seulementTbagr){
     toast("Export impossible : "+((err&&err.message)||err));
     try{console.error("exporterExcel",err);}catch(_){}
   }
+}
+
+/* ---------- Classeur Excel du MODÈLE (sans historique) : états prévisionnels + valo, en valeurs ---------- */
+async function exporterExcelModele(){
+  if(!DOSSIER||!DOSSIER.sansHistorique){toast("Réservé au business plan sans balance");return;}
+  if(typeof ExcelJS==="undefined"){toast("Bibliothèque Excel non chargée (connexion requise)");return;}
+  try{
+    const M=assurerModele();
+    const P=projeterModele(M);
+    ETATS=etatsFromModele(P);
+    let val=null; try{val=valoriserBP(ETATS,{is_taux:M.is_taux,valo:M.valo},P);}catch(e){}
+    const u=uni(),UF=u.f,NF=u.dec?'#,##0.0;(#,##0.0);"-"':NUMFMT;
+    const mnt=x=>(x===null||x===undefined)?null:(u.dec?Math.round(x*UF*10)/10:Math.round(x*UF));
+    const AP=P.annees,fyp=AP.map(a=>"FY"+String(a).slice(-2)+"p");
+    const wb=new ExcelJS.Workbook();
+    const feuille=(nom,sousTitre,lignes,totaux,note)=>{
+      const ws=wb.addWorksheet(nomOnglet(nom));
+      titreLiasse(ws,sousTitre);
+      styliserEntete(ws.addRow([null,u.lib,...fyp]),1);
+      lignes.forEach((lg,i)=>{
+        const r=ws.addRow([null,lg[0],...lg.slice(1).map(mnt)]);
+        for(let c=3;c<3+AP.length;c++)r.getCell(c).numFmt=NF;
+        if(totaux&&totaux.has(i)){r.font={bold:true,color:{argb:"FF172554"}};for(let c=2;c<3+AP.length;c++)r.getCell(c).fill=FOND_TOTAL;}
+      });
+      if(note){ws.addRow([]);const r2=ws.addRow([null,note]);r2.getCell(2).font={italic:true,size:9,color:{argb:"FF808080"}};}
+      ws.columns=[{width:3},{width:42},...AP.map(()=>({width:13}))];
+      return ws;
+    };
+    const col=a=>a;   /* lisibilité */
+    /* P&L prévisionnel */
+    feuille("P&L prévisionnel","Compte de résultat prévisionnel — "+u.lib,[
+      ["Chiffre d'affaires",...AP.map(a=>P.pl.CA[a])],
+      ["Coûts directs",...AP.map(a=>P.pl.COUTS_DIRECTS[a])],
+      ["Marge brute",...AP.map(a=>P.pl.MARGE_BRUTE[a])],
+      ["Autres produits",...AP.map(a=>P.pl.AUTRES_PROD[a])],
+      ["Frais généraux (dont personnel)",...AP.map(a=>(P.pl.OPEX_TOTAL[a]||0)+(P.pl.CHARGES_PERSONNEL[a]||0))],
+      ["EBITDA",...AP.map(a=>P.pl.EBITDA[a])],
+      ["Dotations aux amortissements",...AP.map(a=>P.pl.DA[a])],
+      ["EBIT",...AP.map(a=>P.pl.EBIT[a])],
+      ["Résultat financier",...AP.map(a=>P.pl.RESULTAT_FIN[a])],
+      ["Résultat avant impôt",...AP.map(a=>P.pl.EBT[a])],
+      ["Impôt sur les sociétés",...AP.map(a=>P.pl.IS[a])],
+      ["Résultat net",...AP.map(a=>P.pl.RN[a])]],
+      new Set([2,5,7,9,11]),"Projections issues du modèle d'inducteurs ; bilan bouclé par la trésorerie.");
+    /* Bilan prévisionnel (grandes masses, présentation actif net) */
+    feuille("Bilan prévisionnel","Bilan prévisionnel (actif net) — "+u.lib,[
+      ["Immobilisations nettes",...AP.map(a=>P.bs.IMMO_NET[a])],
+      ["Stocks",...AP.map(a=>P.bs.STOCKS[a])],
+      ["Créances clients",...AP.map(a=>P.bs.CLIENTS[a])],
+      ["Dettes fournisseurs",...AP.map(a=>P.bs.FOURNISSEURS[a])],
+      ["Besoin en fonds de roulement",...AP.map(a=>P.bs.BFR[a])],
+      ["Trésorerie nette",...AP.map(a=>P.bs.TRESO[a])],
+      ["Capitaux propres",...AP.map(a=>P.bs.CP[a])],
+      ["Dettes financières",...AP.map(a=>P.bs.DETTE[a])]],
+      new Set([4,5,6,7]));
+    /* TFT prévisionnel */
+    const tftD=[["Trésorerie nette à l'ouverture","ZA"],["Capacité d'autofinancement (CAFG)","FA"],
+      ["Variation des créances","VAR_CREANCES"],["Variation des stocks","FC"],["Variation des dettes d'exploitation","FE"],
+      ["Flux opérationnels","ZB"],["Acquisitions d'immobilisations","ACQUIS_IMMO"],["Flux d'investissement","ZC"],
+      ["Augmentation de capital","FK"],["Subvention d'investissement","FL"],["Emprunts nouveaux","EMPRUNT"],
+      ["Remboursements d'emprunts","REMBOURS"],["Dividendes versés","FN"],["Flux de financement","ZFIN"],
+      ["Variation nette de trésorerie","ZF"],["Trésorerie nette à la clôture","ZG"]];
+    feuille("TFT prévisionnel","Tableau des flux de trésorerie — "+u.lib,
+      tftD.map(([lib,code])=>[lib,...AP.map(a=>P.tft[a][code])]),new Set([0,5,7,13,14,15]),
+      "Colonne par année du plan ; en période de construction, capital / emprunt / investissement apparaissent dans l'année concernée.");
+    /* Dette */
+    feuille("Dette","Tableau de la dette financière — "+u.lib,[
+      ["Encours à l'ouverture",...AP.map(a=>P.dette[a].ouverture)],
+      ["Nouveaux tirages",...AP.map(a=>P.dette[a].tirage)],
+      ["Intérêts de la période",...AP.map(a=>-(P.dette[a].interets||0))],
+      ["Remboursements",...AP.map(a=>-(P.dette[a].remboursement||0))],
+      ["Encours à la clôture",...AP.map(a=>P.dette[a].cloture)]],
+      new Set([4]),"En période de construction, les intérêts sont capitalisés dans la dette (IDC) et le remboursement est différé.");
+    /* Sources & Emplois du montage */
+    const Pf=P.financement, wsSU=wb.addWorksheet(nomOnglet("Sources & Emplois"));
+    titreLiasse(wsSU,"Sources & Emplois du montage — "+u.lib);
+    styliserEntete(wsSU.addRow([null,"Rubrique","Montant "+u.lib]),1);
+    const suRow=(lib,x,tot)=>{const r=wsSU.addRow([null,lib,mnt(x)]);r.getCell(3).numFmt=NF;if(tot){r.font={bold:true,color:{argb:"FF172554"}};r.getCell(2).fill=FOND_TOTAL;r.getCell(3).fill=FOND_TOTAL;}return r;};
+    wsSU.addRow([null,"EMPLOIS"]).getCell(2).font={bold:true,color:{argb:"FF224289"}};
+    suRow("Investissements (jusqu'à la mise en service)",Pf.capexFinance);
+    suRow("BFR de démarrage",Pf.bfrDemarrage);
+    if(Pf.idc>0.01)suRow("Intérêts de construction (IDC)",Pf.idc);
+    suRow("Total emplois",Pf.emplois,true);
+    wsSU.addRow([]);
+    wsSU.addRow([null,"RESSOURCES"]).getCell(2).font={bold:true,color:{argb:"FF224289"}};
+    suRow("Fonds propres ("+Math.round(Pf.partFP*100)+" %)",Pf.capital);
+    if(Pf.subvention>0.01)suRow("Subvention",Pf.subvention);
+    suRow("Dette"+(Pf.idc>0.01?" (dont IDC)":""),Pf.detteAvecIDC);
+    suRow("Total ressources",Pf.sources,true);
+    wsSU.addRow([]);
+    const rC=wsSU.addRow([null,"Durée de construction : "+(Pf.dureeConstruction||0)+" an(s) ; exploitation à partir de l'année "+Pf.anneeExploit+"."]);
+    rC.getCell(2).font={italic:true,size:9,color:{argb:"FF808080"}};
+    wsSU.columns=[{width:3},{width:48},{width:16}];
+    /* Valorisation */
+    if(val){
+      const wsV=wb.addWorksheet(nomOnglet("Valorisation"));
+      titreLiasse(wsV,"Évaluation des fonds propres (multi-méthodes) — "+u.lib);
+      const pc=x=>isFinite(x)?(x*100).toFixed(2).replace(/\.?0+$/,"")+" %":"-";
+      const lig=(l,x,f,tot)=>{const r=wsV.addRow([null,l,x]);if(f)r.getCell(3).numFmt=f;if(tot){r.font={bold:true,color:{argb:"FF172554"}};r.getCell(2).fill=FOND_TOTAL;r.getCell(3).fill=FOND_TOTAL;}return r;};
+      wsV.addRow([null,"Coût du capital (CAPM)"]).getCell(2).font={bold:true,color:{argb:"FF224289"}};
+      lig("Taux sans risque (rf)",pc(M.valo.rf));
+      lig("Prime de marché × β",pc((M.valo.beta||1)*M.valo.primeMarche));
+      lig("Prime de risque pays"+(M.valo.pays?" ("+M.valo.pays+")":""),pc(M.valo.primePays||0));
+      lig("Primes taille + illiquidité",pc((M.valo.primeTaille||0)+(M.valo.primeIlliquidite||0)));
+      lig("= Coût des fonds propres (ke)",pc(val.ke),null,true);
+      lig("Coût de la dette après impôt (kd)",pc(val.kd));
+      lig("= WACC",pc(val.wacc),null,true);
+      wsV.addRow([]);
+      wsV.addRow([null,"Passage à la valeur des fonds propres (DCF)"]).getCell(2).font={bold:true,color:{argb:"FF224289"}};
+      lig("Somme des FCFF actualisés",mnt(val.sommePv),NF);
+      lig("Valeur terminale actualisée",mnt(val.vtPv),NF);
+      lig("Valeur d'entreprise (EV)",mnt(val.ev),NF,true);
+      lig("(−) Dette nette",mnt(-val.detteNette),NF);
+      lig("Valeur des fonds propres (DCF)",mnt(val.equityDcf),NF,true);
+      wsV.addRow([]);
+      wsV.addRow([null,"Fourchette par méthode"]).getCell(2).font={bold:true,color:{argb:"FF224289"}};
+      styliserEntete(wsV.addRow([null,"Méthode","Bas","Central","Haut"]),1);
+      (val.methodes||[]).forEach(m=>{const r=wsV.addRow([null,m.lib,mnt(m.min),mnt(m.central),mnt(m.max)]);for(let c=3;c<=5;c++)r.getCell(c).numFmt=NF;});
+      const rR=wsV.addRow([null,"Valeur retenue (pondérée)",mnt(val.fourchette.min),mnt(val.fourchette.retenue),mnt(val.fourchette.max)]);
+      rR.font={bold:true,color:{argb:"FF172554"}};for(let c=2;c<=5;c++)rR.getCell(c).fill=FOND_TOTAL;for(let c=3;c<=5;c++)rR.getCell(c).numFmt=NF;
+      wsV.columns=[{width:3},{width:44},{width:15},{width:15},{width:15}];
+    }
+    finaliserClasseur(wb);
+    const buf=await wb.xlsx.writeBuffer();
+    const blob=new Blob([buf],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+    const a=document.createElement("a");a.href=URL.createObjectURL(blob);
+    a.download="BP_Modele_"+DOSSIER.societe.replace(/\W+/g,"_")+".xlsx";a.click();
+    toast("Classeur du modèle téléchargé");
+  }catch(err){toast("Export impossible : "+((err&&err.message)||err));try{console.error("exporterExcelModele",err);}catch(_){}}
 }
 
 /* ---------- démarrage : licence d'abord, puis restauration de la société active ---------- */
