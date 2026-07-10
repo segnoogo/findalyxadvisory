@@ -409,7 +409,8 @@ function vueAccueil(){
   const barre=`<div class="card" style="display:flex;align-items:center;gap:10px">
     <b>Mes sociétés</b><span class="chip">${nb}</span>
     <button class="btn sm" onclick="ACC_LISTE=!ACC_LISTE;rendre()">${ouverte?"Replier la liste":"Afficher la liste"}</button>
-    <button class="btn sm primary" style="margin-left:auto" onclick="ouvrirWizard()">+ Nouvelle société</button>
+    <button class="btn sm" style="margin-left:auto" onclick="creerModelePrompt()">+ BP sans balance</button>
+    <button class="btn sm primary" onclick="ouvrirWizard()">+ Nouvelle société</button>
   </div>`;
   const creation=`<div class="card">
     <b>Dossier avec comptabilité</b>
@@ -427,9 +428,12 @@ function vueAccueil(){
   ${barre}
   ${ouverte?`<div class="deux">${creation}${creationModele}</div>`+(cartes||'<div class="mut" style="padding:14px 4px">Aucun dossier. Créez le premier ci-dessus.</div>'):""}`;
 }
-async function creerModele(){
-  const el=document.getElementById("nouvNomModele");
-  const nom=el?el.value.trim():"";
+function creerModelePrompt(){
+  const nom=prompt("Nom de la société (business plan sans balance) :");
+  if(nom&&nom.trim())creerModele(nom.trim());
+}
+async function creerModele(nom){
+  if(!nom){const el=document.getElementById("nouvNomModele");nom=el?el.value.trim():"";}
   if(!nom){toast("Entrez un nom de société");return;}
   const id="d"+Date.now();
   const q=await licAjouterSociete(id,nom);
