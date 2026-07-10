@@ -1460,6 +1460,7 @@ function vueExports(){
     ${carte("Due diligence","Synthèse, performances historiques, situation nette, flux de trésorerie, observations rédigées.","genererRapport('dd')","Générer")}
     ${carte("Business plan","Résumé exécutif, hypothèses, P&amp;L prévisionnel 5 ans, trajectoire de trésorerie.","genererRapport('bp')","Générer")}
     ${carte("Valorisation","Fourchette DCF et multiples, flux actualisés, hypothèses de valorisation.","genererRapport('valo')","Générer")}
+    ${carte("Business plan + Valorisation","Document unique : le plan (hypothèses, projections, covenants) puis l'évaluation des fonds propres — l'usage courant pour un dossier bancaire ou investisseur.","genererRapport('bpvalo')","Générer")}
   </div>`;
 }
 function styliserEntete(row,texteCols){
