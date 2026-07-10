@@ -115,5 +115,26 @@ const provRC = -(v.PROVISIONS_RC[etats.annees[etats.annees.length - 1]] || 0);
 if (provRC > 0.5) ok(Hbp.valo.bridge.some(b => /provision/i.test(b.lib) && b.montant < 0), 'pont pré-rempli avec les provisions R&C (montant négatif)');
 else ok(true, 'pas de provisions R&C à pré-remplir dans la fixture');
 
+console.log('== 9. Moteur MODÈLE (BP sans historique, projeterModele) ==');
+const modele = {
+  nb:5, anneeDepart:2025, is_taux:0.30, imf_taux:0.005, inflation:0.03,
+  revenus:[
+    {rows:[{op:'x',name:'Quantité',val:100000,unit:'u/an',g:5}], prix:{val:1000,unit:'FCFA',g:2}, cout:{m:'pct',val:40}},
+    {rows:[{op:'x',name:'Capacité',val:5000,unit:'u/an'},{op:'x',name:'Utilisation',val:80,unit:'%'}], prix:{val:2000,g:3}, cout:{m:'unit',val:900}}
+  ],
+  chargesFixes:[{name:'Charges fixes',montant:30000000,g:3}],
+  capex:[{montant:200000000,duree:5,annee:0}],
+  financement:{capital:100000000,apports:0,emprunt:{montant:150000000,taux:0.08,duree:5}},
+  bfr:{dso:30,dio:45,dpo:30}
+};
+const Pm = BP.projeterModele(modele);
+ok(BP.volInducteurs(modele.revenus[1].rows,0) === 5000*0.8, 'volInducteurs : chaîne × avec unité % traitée en ratio');
+near(Pm.pl.CA[2025], 100000*1000 + 5000*0.8*2000, 0.001, 'CA modèle an 1 = Σ (volume × prix) par ligne');
+// INVARIANT 5 — bilan modèle bouclé : ECART du TFT ≈ 0 chaque année
+Pm.annees.forEach(a => near(Pm.tft[a].ECART, 0, 0.01, `BP modèle bouclé ${a} (ECART TFT ≈ 0)`));
+near(Pm.ouverture.treso, 100000000 + 150000000 - 200000000, 0.001, 'trésorerie d\'ouverture = capital + emprunt − CAPEX initial');
+ok(Math.abs((Pm.ouverture.immoNet + Pm.ouverture.bfr + Pm.ouverture.treso) - (Pm.ouverture.cp + Pm.ouverture.dette)) < 0.001, 'bilan d\'ouverture équilibré (actif = passif)');
+ok(Pm.annees.every(a => Pm.pl.IS[a] <= -(modele.imf_taux * Pm.pl.CA[a]) + 1e-6), 'impôt minimum forfaitaire appliqué chaque année (modèle)');
+
 console.log(`\n${fail ? '❌ ÉCHEC' : '✅ SUCCÈS'} — ${pass} assertions passées, ${fail} échec(s).`);
 process.exit(fail ? 1 : 0);

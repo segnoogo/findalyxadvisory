@@ -269,6 +269,136 @@ function projeterBP(etats,H,scenario){
   return P;
 }
 
+/* ===========================================================================
+   BP SANS HISTORIQUE — projection à partir d'un modèle d'inducteurs.
+   Produit le MÊME objet P que projeterBP (mêmes clés pl/bs/tft/dette) : tout
+   l'aval (valorisation, covenants, seuil, exports) est réutilisé tel quel.
+   Réutilise les formules de bouclage/TFT prouvées de projeterBP (mirroring).
+   =========================================================================== */
+/* volume d'une ligne = enchaînement d'inducteurs (× ou ÷) ; unité contenant « % » = ratio */
+function volInducteurs(rows,i){
+  var v=1;
+  (rows||[]).forEach(function(r){
+    var pct=String(r.unit||"").indexOf("%")>=0, base;
+    if(r.mode==="yearly"){ var x=(r.vals&&r.vals[i]!=null)?+r.vals[i]:0; base=pct?x/100:x; }
+    else { var b=pct?(+r.val||0)/100:(+r.val||0); base=b*Math.pow(1+(+r.g||0)/100,i); }
+    v=(r.op==="d")?(base?v/base:0):v*base;
+  });
+  return v;
+}
+/* valeur d'un poste (prix, charge…) : saisie par année ou valeur an 1 + croissance */
+function valAnnee(o,i){
+  if(!o) return 0;
+  if(o.mode==="yearly") return (o.vals&&o.vals[i]!=null)?+o.vals[i]:0;
+  return (+o.val||0)*Math.pow(1+(+o.g||0)/100,i);
+}
+function projeterModele(M,scenario){
+  var N=M.nb||5, startY=M.anneeDepart||2025;
+  var AP=Array.from({length:N},function(_,i){return startY+i;});
+  var scLab=(M.scenarios&&M.scenario&&M.scenarios[M.scenario]&&M.scenarios[M.scenario].lab)||"Central";
+  var P={annees:AP,scenario:scLab,pl:{},bs:{},tft:{},dette:{}};
+  ["CA","COUTS_DIRECTS","MARGE_BRUTE","AUTRES_PROD","OPEX_TOTAL","CHARGES_PERSONNEL","EBITDA","DA","EBIT","PRODUITS_FIN","FRAIS_FIN","RESULTAT_FIN","EBT","IS","RN"].forEach(function(c){P.pl[c]={};});
+  P.pl.OPEX_DETAIL={};
+  ["IMMO_BRUT","AMORT_CUM","IMMO_NET","STOCKS","CLIENTS","AUTRES_CREANCES","FOURNISSEURS","DETTES_FISC_SOC","AUTRES_DETTES","BFR","CP","DETTE","PROVISIONS","TRESO","LIGNE_CT","TRESO_ACTIVE"].forEach(function(c){P.bs[c]={};});
+  var infl=M.inflation||0.03, bfrH=M.bfr||{dso:30,dio:45,dpo:30};
+  var isTx=(M.is_taux!=null?M.is_taux:0.30);
+  /* financement → bilan d'ouverture (année 0) */
+  var fin=M.financement||{};
+  var cp0=(+fin.capital||0)+(+fin.apports||0)+(+fin.subvention||0);
+  var emp=(fin.emprunt&&+fin.emprunt.montant)||0;
+  var dTaux=(fin.emprunt&&+fin.emprunt.taux)||0.08, dDuree=(fin.emprunt&&+fin.emprunt.duree)||5;
+  /* CAPEX : liste {montant,duree,annee} ; annee 0 = investissement initial (ouverture), k = année projetée k */
+  var capex=(M.capex||[]).map(function(c){return {montant:(c.montant!=null?+c.montant:(+c.nombre||0)*(+c.coutUnitaire||0)),duree:+c.duree||5,annee:+c.annee||0,amorti:0};});
+  var capexInit=capex.filter(function(c){return c.annee<=0;}).reduce(function(s,c){return s+c.montant;},0);
+  var treso0=cp0+emp-capexInit;
+  var brut=capexInit, amortCum=0, cp=cp0, provisions=0, detteSolde=emp, ligneCT=0, bfrP=0, tresoP=treso0, rnPrec=0;
+  var amortAnnuel=dDuree>0?emp/dDuree:emp;
+  var horizonDef=M.reportDef_horizon||3;
+  var deficits=(M.reportDeficitaire>0)?[{montant:+M.reportDeficitaire,resteAns:horizonDef}]:[];
+
+  AP.forEach(function(a,i){
+    var py=i+1;   /* année projetée en base 1 (0 = ouverture) */
+    /* --- revenus & coûts directs (par ligne d'inducteurs) --- */
+    var ca=0, coutsD=0;
+    (M.revenus||[]).forEach(function(L){
+      var vol=volInducteurs(L.rows,i), prix=valAnnee(L.prix,i), caL=vol*prix;
+      ca+=caL;
+      var cm=(L.cout&&L.cout.m)||"pct", cv=+((L.cout||{}).val)||0;
+      coutsD += (cm==="unit") ? vol*cv*Math.pow(1+infl,i) : caL*cv/100;
+    });
+    var cd=-coutsD;
+    var autresProd=valAnnee(M.autresProd,i);
+    /* --- charges fixes → OPEX / personnel (montant annuel, croissance ou par année) --- */
+    var opexTot=0, persTot=0;
+    (M.chargesFixes||[]).forEach(function(c){ var m=-valAnnee(c,i); if(c.personnel)persTot+=m; else opexTot+=m; });
+    /* --- CAPEX de l'année & amortissements linéaires par poste --- */
+    if(py>=1){ capex.forEach(function(c){ if(c.annee===py) brut+=c.montant; }); }
+    var dot=0; capex.forEach(function(c){ if(c.annee<=py){ var restant=c.montant-c.amorti; if(restant>0.01){ var d=Math.min(c.montant/c.duree,restant); c.amorti+=d; dot+=d; } } });
+    amortCum+=dot;
+    var capexAn=capex.filter(function(c){return c.annee===py;}).reduce(function(s,c){return s+c.montant;},0);
+    /* --- dette : amortissement linéaire de l'emprunt initial --- */
+    var soldeDebut=detteSolde, remb=Math.min(amortAnnuel,detteSolde); detteSolde-=remb;
+    var interets=dTaux*(soldeDebut+detteSolde)/2;
+    var interetsCT=(M.decouvert_taux||0.12)*ligneCT;
+    var dette=detteSolde;
+    /* --- cascade P&L --- */
+    var ebitda=ca+cd+autresProd+opexTot+persTot;
+    var ebit=ebitda-dot;
+    var pf=valAnnee(M.produitsFin,i);
+    var rf=pf-interets-interetsCT;
+    var ebt=ebit+rf;
+    var baseIS=ebt;
+    if(ebt>0){var dispo=ebt; deficits.forEach(function(d){var im=Math.min(d.montant,dispo);d.montant-=im;dispo-=im;}); deficits=deficits.filter(function(d){return d.montant>0.01;}); baseIS=dispo;}
+    var isBenef=baseIS>0?isTx*baseIS:0, imf=(M.imf_taux||0)*ca;
+    var impots=-Math.max(isBenef,imf);
+    var rn=ebt+impots;
+    deficits.forEach(function(d){d.resteAns--;}); deficits=deficits.filter(function(d){return d.resteAns>0;});
+    if(ebt<0)deficits.push({montant:-ebt,resteAns:horizonDef});
+    /* --- BFR (jours ; DSO/DPO en TTC comme le reste de l'app) --- */
+    var clients=ca*1.18*(bfrH.dso||0)/360;
+    var stocks=Math.abs(cd)*(bfrH.dio||0)/360;
+    var fournisseurs=-(Math.abs(cd)+Math.abs(opexTot)+Math.abs(persTot))*1.18*(bfrH.dpo||0)/360;
+    var bfr=clients+stocks+fournisseurs;
+    /* --- CP & trésorerie de bouclage --- */
+    var div=0; cp=cp+rn-div;
+    var immoNet=brut-amortCum;
+    var tresoNette=cp+dette+provisions-immoNet-bfr;
+    ligneCT=tresoNette<0?-tresoNette:0;
+    var tresoActive=tresoNette+ligneCT, treso=tresoNette;
+    /* --- TFT (mêmes agrégats que projeterBP ; ouverture = bilan année 0) --- */
+    var prevStk=(P.bs.STOCKS[AP[i-1]]!==undefined)?P.bs.STOCKS[AP[i-1]]:0;
+    var prevCliCr=(P.bs.CLIENTS[AP[i-1]]!==undefined)?(P.bs.CLIENTS[AP[i-1]]+P.bs.AUTRES_CREANCES[AP[i-1]]):0;
+    var prevFrnDet=(P.bs.FOURNISSEURS[AP[i-1]]!==undefined)?(P.bs.FOURNISSEURS[AP[i-1]]+P.bs.DETTES_FISC_SOC[AP[i-1]]+P.bs.AUTRES_DETTES[AP[i-1]]):0;
+    var dBfr=bfr-bfrP;
+    var t={ZA:tresoP,FA:rn+dot,FB:0,FC:-(stocks-prevStk),FD:-(clients-prevCliCr),FE:-(fournisseurs-prevFrnDet),ZB:0,
+      FF:0,FG:-capexAn,FH:0,FI:0,ZC:0,FK:0,FL:0,FN:-div,ZD:-div,FO:-remb,ZE:-remb,ZF:0,ZG:0,
+      RN:rn,AMORT:dot,PROV:0,DBFR:-dBfr,OP:0,CAPEX:-capexAn,FIN:0,FCF:0,OUVERTURE:tresoP,CLOTURE:treso};
+    t.ZB=t.FA+t.FB+t.FC+t.FD+t.FE; t.ZC=t.FF+t.FG+t.FH+t.FI; t.ZF=t.ZB+t.ZC+t.ZD+t.ZE; t.ZG=t.ZA+t.ZF;
+    t.VAR_CREANCES=t.FD+t.FB; t.ACQUIS_IMMO=t.FF+t.FG+t.FH; t.CESSION_IMMO=t.FI;
+    t.EMPRUNT=0; t.REMBOURS=-remb; t.ZFIN=t.ZD+t.ZE; t.FCF=t.ZF; t.OP=t.ZB;
+    /* --- stocker --- */
+    P.pl.CA[a]=ca;P.pl.COUTS_DIRECTS[a]=cd;P.pl.MARGE_BRUTE[a]=ca+cd;
+    P.pl.AUTRES_PROD[a]=autresProd;P.pl.OPEX_TOTAL[a]=opexTot;P.pl.CHARGES_PERSONNEL[a]=persTot;
+    P.pl.EBITDA[a]=ebitda;P.pl.DA[a]=-dot;P.pl.EBIT[a]=ebit;
+    P.pl.PRODUITS_FIN[a]=pf;P.pl.FRAIS_FIN[a]=-(interets+interetsCT);P.pl.RESULTAT_FIN[a]=rf;
+    P.pl.EBT[a]=ebt;P.pl.IS[a]=impots;P.pl.RN[a]=rn;
+    P.bs.IMMO_BRUT[a]=brut;P.bs.AMORT_CUM[a]=-amortCum;P.bs.IMMO_NET[a]=immoNet;
+    P.bs.STOCKS[a]=stocks;P.bs.CLIENTS[a]=clients;P.bs.AUTRES_CREANCES[a]=0;
+    P.bs.FOURNISSEURS[a]=fournisseurs;P.bs.DETTES_FISC_SOC[a]=0;P.bs.AUTRES_DETTES[a]=0;P.bs.BFR[a]=bfr;
+    P.bs.CP[a]=cp;P.bs.DETTE[a]=dette;P.bs.PROVISIONS[a]=provisions;P.bs.TRESO[a]=treso;
+    P.bs.LIGNE_CT[a]=ligneCT;P.bs.TRESO_ACTIVE[a]=tresoActive;
+    P.dette[a]={ouverture:soldeDebut,tirage:0,remboursement:remb,interets:interets,interetsCT:interetsCT,ligneCT:ligneCT,cloture:dette,div:div};
+    P.tft[a]=t; P.tft[a].ECART=t.ZG-treso;
+    bfrP=bfr;tresoP=treso;rnPrec=rn;
+  });
+  /* bilan d'ouverture exposé (année 0) pour l'affichage éventuel */
+  P.ouverture={annee:startY-1,cp:cp0,dette:emp,immoNet:capexInit,treso:treso0,bfr:0};
+  P.pl.AUTRES_PRODUITS=P.pl.AUTRES_PROD;P.pl.PERSONNEL=P.pl.CHARGES_PERSONNEL;
+  P.pl.AUTRES_OPEX=P.pl.OPEX_TOTAL;P.pl.DOTATIONS=P.pl.DA;P.pl.ACHATS=P.pl.COUTS_DIRECTS;
+  P.bs.TRESO_NETTE=P.bs.TRESO;
+  return P;
+}
+
 /* ---------- valorisation multi-méthodes ---------- */
 function valoriserBP(etats,H,P){
   const V=H.valo, v=etats.v, A0=etats.annees, a1=A0[A0.length-1];
@@ -363,4 +493,6 @@ if(typeof module!=="undefined"&&module.exports){
   module.exports.hypothesesBP=hypothesesBP;
   module.exports.projeterBP=projeterBP;
   module.exports.valoriserBP=valoriserBP;
+  module.exports.projeterModele=projeterModele;
+  module.exports.volInducteurs=volInducteurs;
 }
