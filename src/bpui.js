@@ -83,10 +83,10 @@ function hValoPays(nom){var H=assurerValoH();if(nom){var c=paysCRP(nom);if(c!=nu
 function modeleParDefaut(){
   var y=(typeof CONF_ANNEE!=="undefined"&&CONF_ANNEE)||2025;
   try{y=new Date().getFullYear();}catch(e){}
-  return {nb:5,anneeDepart:y,tva:0.18,is_taux:0.30,imf_taux:0.005,inflation:0.03,reportDef_horizon:3,decouvert_taux:0.12,
+  return {nb:5,anneeDepart:y,tva:0.18,is_taux:0.30,imf_taux:0.005,inflation:0.03,reportDef_horizon:3,decouvert_taux:0.12,dureeConstruction:0,
     revenus:[{name:"Produit / service 1",tpl:"quantite",rows:JSON.parse(JSON.stringify(M_PRESETS.quantite.rows)),prix:{val:1000,unit:"FCFA",g:2},cout:{m:"pct",val:40}}],
     chargesFixes:[{name:"Salaires",montant:20000000,personnel:true,g:3},{name:"Loyer & charges",montant:8000000,g:2}],
-    capex:[{name:"Investissement initial",montant:50000000,duree:5,annee:0}],
+    capex:[{name:"Investissement initial",montant:50000000,duree:5,annee:1}],
     financement:{mode:"auto",partFP:0.30,moisBFR:3,capital:20000000,apports:0,subvention:0,emprunt:{montant:30000000,taux:0.09,duree:5}},
     bfr:{dso:30,dio:45,dpo:30}, valo:modeleValoDefaut(),
     scenario:"central",
@@ -112,10 +112,10 @@ function etatsFromModele(P){
   s('CAPITAUX_PROPRES',P.bs.CP[aL]);s('DETTES_FINANCIERES',-P.bs.DETTE[aL]);s('TRESORERIE_NETTE',P.bs.TRESO[aL]);s('PROVISIONS_RC',-P.bs.PROVISIONS[aL]);
   s('RESULTAT_FIN',P.pl.RESULTAT_FIN[aL]);s('BFR',P.bs.BFR[aL]);s('ACTIF_NET',P.bs.CP[aL]);
   s('ACTIFS_IMMOBILISES',P.bs.IMMO_NET[aL]);s('CLIENTS',P.bs.CLIENTS[aL]);s('STOCKS',P.bs.STOCKS[aL]);s('FOURNISSEURS',P.bs.FOURNISSEURS[aL]);
-  /* capitaux propres décomposés à partir du bilan d'ouverture (capital + subventions figés,
-     le report à nouveau absorbe les résultats accumulés) → décomposition CP correcte en mode modèle */
-  var ouv=P.ouverture||{};
-  s('CAPITAL',ouv.capital||0);s('SUBV_PROV_REGL',ouv.subvention||0);
+  /* capitaux propres décomposés à partir du montage (capital + subventions figés, le report à nouveau
+     absorbe les résultats accumulés) → décomposition CP correcte en mode modèle (pas de bilan d'ouverture) */
+  var mtg=P.financement||{};
+  s('CAPITAL',mtg.capital||0);s('SUBV_PROV_REGL',mtg.subvention||0);
   ['COUTS_DIRECTS','AUTRES_PROD','OPEX','CHARGES_PERSONNEL','DA','IMPOTS','AMORT_DEPREC','AUTRES_CREANCES','AVANCES_FRS','HAO_ACTIF','HAO_PASSIF','DETTES_SOCIALES','DETTES_FISCALES','AUTRES_DETTES','CLIENTS_AVANCES','TRESO_ACTIF','TRESO_PASSIF','PRIMES_RESERVES','RAN_RESULTATS_ANT','RESULTAT_AVANT_IMPOT','PRODUITS_FIN','FRAIS_FIN'].forEach(function(k){if(!v[k])s(k,0);});
   return {annees:[aL],v:v,tft:P.tft||{}};
 }
@@ -140,7 +140,7 @@ function mCoutV(li,val){var x=numFR(val);if(x!==null)assurerModele().revenus[li]
 function mAddFixe(){assurerModele().chargesFixes.push({name:"Charge fixe",montant:0,g:0});sauverDossier();rendre();}
 function mDelFixe(i){assurerModele().chargesFixes.splice(i,1);sauverDossier();rendre();}
 function mFixe(i,champ,val){var c=assurerModele().chargesFixes[i];if(champ==='name')c.name=val;else if(champ==='personnel')c.personnel=val;else{var x=numFR(val);if(x!==null)c[champ]=x;}sauverDossier();rendre();}
-function mAddCapex(){assurerModele().capex.push({name:"Investissement",montant:0,duree:5,annee:0});sauverDossier();rendre();}
+function mAddCapex(){assurerModele().capex.push({name:"Investissement",montant:0,duree:5,annee:1});sauverDossier();rendre();}
 function mDelCapex(i){assurerModele().capex.splice(i,1);sauverDossier();rendre();}
 function mCapex(i,champ,val){var c=assurerModele().capex[i];if(champ==='name')c.name=val;else{var x=numFR(val);if(x!==null)c[champ]=x;}sauverDossier();rendre();}
 
@@ -237,43 +237,50 @@ function vueModele(){
         +'<td><button class="btn sm" onclick="mDelFixe('+i+')">✕</button></td></tr>';}).join("")
       +'</table></div><div style="padding:10px 14px"><button class="btn sm" onclick="mAddFixe()">+ Ajouter une charge</button></div></div>';
   } else if(SOUS_MODELE==="capex"){
-    corps='<div class="card" style="padding:0"><div class="bande">Investissements (CAPEX)</div><div class="tscroll"><table class="tb etat"><tr><th>Poste</th><th class="num">Montant</th><th class="num">Durée (ans)</th><th class="num">Année (0 = départ)</th><th></th></tr>'
+    corps='<div class="card" style="padding:0"><div class="bande">Investissements (CAPEX)</div><div class="tscroll"><table class="tb etat"><tr><th>Poste</th><th class="num">Montant</th><th class="num">Durée (ans)</th><th class="num">Année (1 = 1ʳᵉ)</th><th></th></tr>'
       +M.capex.map(function(c,i){return '<tr><td><input class="sel" value="'+esc(c.name||'')+'" onchange="mCapex('+i+',\'name\',this.value)"></td>'
         +'<td class="num"><input class="nin ninm" value="'+mAmt(c.montant||0)+'" oninput="mSep(this)" onchange="mCapex('+i+',\'montant\',this.value)"></td>'
         +'<td class="num"><input class="nin" style="width:60px" value="'+(c.duree||5)+'" onchange="mCapex('+i+',\'duree\',this.value)"></td>'
-        +'<td class="num"><input class="nin" style="width:60px" value="'+(c.annee||0)+'" onchange="mCapex('+i+',\'annee\',this.value)"></td>'
+        +'<td class="num"><input class="nin" style="width:60px" value="'+(c.annee||1)+'" onchange="mCapex('+i+',\'annee\',this.value)"></td>'
         +'<td><button class="btn sm" onclick="mDelCapex('+i+')">✕</button></td></tr>';}).join("")
-      +'</table></div><div style="padding:10px 14px"><button class="btn sm" onclick="mAddCapex()">+ Ajouter un investissement</button><div class="mut" style="margin-top:6px">Amortissement linéaire par poste sur sa durée. Année 0 = investissement initial (bilan d\'ouverture).</div></div></div>';
+      +'</table></div><div style="padding:10px 14px"><button class="btn sm" onclick="mAddCapex()">+ Ajouter un investissement</button><div class="mut" style="margin-top:6px">Amortissement linéaire par poste, à partir de sa mise en service (fin de construction). Année 1 = 1ʳᵉ année du plan ; pendant la construction, l\'investissement est financé mais pas encore amorti.</div></div></div>';
   } else if(SOUS_MODELE==="fin"){
     var f=M.financement||{}, e=f.emprunt||{}, Pf=P.financement, auto=(f.mode==="auto");
     var modeSeg='<div class="hyp-l"><span>Mode de financement</span><span class="segvue">'
       +'<button class="'+(auto?"on":"")+'" onclick="mSet(\'financement.mode\',\'auto\')">Automatique</button>'
       +'<button class="'+(auto?"":"on")+'" onclick="mSet(\'financement.mode\',\'manuel\')">Manuel</button></span></div>';
+    var consLigne='<div class="hyp-l"><span>Durée de construction</span><input class="sel" style="width:46%" value="'+(M.dureeConstruction||0)+'" onchange="mSet(\'dureeConstruction\',this.value,1)"> ans <span class="mut">— 0 = exploitation dès l\'année 1</span></div>';
     var empBloc='<div class="hyp-l"><span>Emprunt — taux d\'intérêt</span><input class="sel" style="width:46%" value="'+((e.taux||0)*100)+'" onchange="mSet(\'financement.emprunt.taux\',(numFR(this.value)||0)/100)"> %</div>'
       +'<div class="hyp-l"><span>Emprunt — durée de remboursement</span><input class="sel" style="width:46%" value="'+(e.duree||5)+'" onchange="mSet(\'financement.emprunt.duree\',this.value,1)"> ans</div>';
+    var su='<div class="card" style="background:#f6f8fc;margin-top:12px"><div class="sec-titre" style="margin-top:0">Sources & Emplois du montage</div>'
+      +'<div class="mut" style="margin:-4px 0 10px">'+(Pf.dureeConstruction>0?('Construction sur '+Pf.dureeConstruction+' an(s) ; exploitation à partir de l\'année '+Pf.anneeExploit+'. Intérêts de construction (IDC) capitalisés dans la dette.'):'Pas de période de construction : investissement et exploitation dès l\'année 1.')+'</div>'
+      +'<div class="row" style="gap:24px;flex-wrap:wrap;align-items:flex-start">'
+        +'<div style="flex:1;min-width:230px"><div class="mut" style="font-weight:700;text-transform:uppercase;font-size:11px;letter-spacing:.5px;margin-bottom:4px">Emplois</div>'
+          +'<div class="hyp-l"><span>Investissements (jusqu\'à la mise en service)</span><b>'+fmt(Pf.capexFinance)+' '+u.suf+'</b></div>'
+          +'<div class="hyp-l"><span>BFR de démarrage ('+Pf.moisBFR+' mois)</span><b>'+fmt(Pf.bfrDemarrage)+' '+u.suf+'</b></div>'
+          +(Pf.idc>0.01?'<div class="hyp-l"><span>Intérêts de construction (IDC)</span><b>'+fmt(Pf.idc)+' '+u.suf+'</b></div>':'')
+          +'<div class="hyp-l" style="border-top:2px solid #224289;padding-top:6px"><span><b>Total emplois</b></span><b>'+fmt(Pf.emplois)+' '+u.suf+'</b></div></div>'
+        +'<div style="flex:1;min-width:230px"><div class="mut" style="font-weight:700;text-transform:uppercase;font-size:11px;letter-spacing:.5px;margin-bottom:4px">Ressources</div>'
+          +'<div class="hyp-l"><span>Fonds propres ('+Math.round(Pf.partFP*100)+' %)</span><b style="color:#16904E">'+fmt(Pf.capital)+' '+u.suf+'</b></div>'
+          +(Pf.subvention?'<div class="hyp-l"><span>Subvention</span><b>'+fmt(Pf.subvention)+' '+u.suf+'</b></div>':'')
+          +'<div class="hyp-l"><span>Dette'+(Pf.idc>0.01?' (dont IDC)':'')+'</span><b style="color:#224289">'+fmt(Pf.detteAvecIDC)+' '+u.suf+'</b></div>'
+          +'<div class="hyp-l" style="border-top:2px solid #224289;padding-top:6px"><span><b>Total ressources</b></span><b>'+fmt(Pf.sources)+' '+u.suf+'</b></div></div>'
+      +'</div></div>';
     if(auto){
-      corps='<div class="card"><div class="sec-titre" style="margin-top:0">Financement — automatique</div>'+modeSeg
+      corps='<div class="card"><div class="sec-titre" style="margin-top:0">Financement — automatique</div>'+modeSeg+consLigne
         +'<div class="hyp-l"><span>Part de fonds propres (gearing cible)</span><input class="sel" style="width:46%" value="'+(Math.round((f.partFP!=null?f.partFP:0.30)*1000)/10)+'" onchange="mSet(\'financement.partFP\',(numFR(this.value)||0)/100)"> %</div>'
         +'<div class="hyp-l"><span>BFR de démarrage</span><input class="sel" style="width:46%" value="'+(f.moisBFR!=null?f.moisBFR:3)+'" onchange="mSet(\'financement.moisBFR\',this.value,1)"> mois de charges</div>'
-        +'<div class="hyp-l"><span>Subvention (optionnel, hors besoin)</span><input class="sel ninm" style="width:46%" value="'+mAmt(f.subvention||0)+'" oninput="mSep(this)" onchange="mSet(\'financement.subvention\',this.value,1)"></div>'
-        +empBloc
-        +'<div class="card" style="background:#f6f8fc;margin-top:12px"><div class="sec-titre" style="margin-top:0">Besoin de financement calculé</div>'
-        +'<div class="hyp-l"><span>Investissements initiaux (CAPEX année 0)</span><b>'+fmt(Pf.capexInit)+' '+u.suf+'</b></div>'
-        +'<div class="hyp-l"><span>+ BFR de démarrage ('+Pf.moisBFR+' mois de coûts An 1)</span><b>'+fmt(Pf.bfrDemarrage)+' '+u.suf+'</b></div>'
-        +'<div class="hyp-l" style="border-top:2px solid #224289;padding-top:6px"><span><b>= Besoin total à financer</b></span><b>'+fmt(Pf.besoin)+' '+u.suf+'</b></div>'
-        +'<div class="hyp-l" style="margin-top:8px"><span>› Fonds propres ('+Math.round(Pf.partFP*100)+' %)</span><b style="color:#16904E">'+fmt(Pf.capital)+' '+u.suf+'</b></div>'
-        +'<div class="hyp-l"><span>› Dette bancaire ('+Math.round((1-Pf.partFP)*100)+' %)</span><b style="color:#224289">'+fmt(Pf.dette)+' '+u.suf+'</b></div>'
-        +(Pf.subvention?'<div class="hyp-l"><span>+ Subvention</span><b>'+fmt(Pf.subvention)+' '+u.suf+'</b></div>':'')
-        +'</div>'
-        +'<div class="mut" style="margin-top:8px">Le besoin (CAPEX + BFR de démarrage) est réparti automatiquement selon la part de fonds propres choisie ; la dette est amortie sur sa durée. Trésorerie d\'ouverture = <b>'+fmt(P.ouverture.treso)+' '+u.suf+'</b> (marge de démarrage).</div></div>';
+        +'<div class="hyp-l"><span>Subvention (optionnel)</span><input class="sel ninm" style="width:46%" value="'+mAmt(f.subvention||0)+'" oninput="mSep(this)" onchange="mSet(\'financement.subvention\',this.value,1)"></div>'
+        +empBloc+su
+        +'<div class="mut" style="margin-top:8px">Le besoin (investissements + BFR de démarrage + IDC) est réparti fonds propres / dette selon la part choisie ; amortissement et remboursement démarrent à la mise en service.</div></div>';
     } else {
-      corps='<div class="card"><div class="sec-titre" style="margin-top:0">Financement — bilan d\'ouverture (manuel)</div>'+modeSeg
+      corps='<div class="card"><div class="sec-titre" style="margin-top:0">Financement — manuel</div>'+modeSeg+consLigne
         +'<div class="hyp-l"><span>Capital social</span><input class="sel ninm" style="width:46%" value="'+mAmt(f.capital||0)+'" oninput="mSep(this)" onchange="mSet(\'financement.capital\',this.value,1)"></div>'
         +'<div class="hyp-l"><span>Apports en compte courant</span><input class="sel ninm" style="width:46%" value="'+mAmt(f.apports||0)+'" oninput="mSep(this)" onchange="mSet(\'financement.apports\',this.value,1)"></div>'
         +'<div class="hyp-l"><span>Subvention</span><input class="sel ninm" style="width:46%" value="'+mAmt(f.subvention||0)+'" oninput="mSep(this)" onchange="mSet(\'financement.subvention\',this.value,1)"></div>'
         +'<div class="hyp-l"><span>Emprunt — montant</span><input class="sel ninm" style="width:46%" value="'+mAmt(e.montant||0)+'" oninput="mSep(this)" onchange="mSet(\'financement.emprunt.montant\',this.value,1)"></div>'
-        +empBloc
-        +'<div class="mut" style="margin-top:8px">Trésorerie d\'ouverture = capital + apports + subvention + emprunt − CAPEX initial = <b>'+fmt(P.ouverture.treso)+' '+u.suf+'</b>.</div></div>';
+        +empBloc+su
+        +'<div class="mut" style="margin-top:8px">Le financement est tiré en année 1 ; en cas de construction, les intérêts courent et sont capitalisés dans la dette (IDC). Aucun bilan d\'ouverture.</div></div>';
     }
   } else if(SOUS_MODELE==="bfr"){
     var b=M.bfr;
@@ -290,7 +297,7 @@ function vueModele(){
       +'<div class="hyp-l"><span>Impôt minimum forfaitaire (% du CA)</span><input class="sel" style="width:46%" value="'+((M.imf_taux||0)*100)+'" onchange="mSet(\'imf_taux\',(numFR(this.value)||0)/100)"> %</div></div>';
   } else if(SOUS_MODELE==="pl"){ corps=vueBPPl(P);
   } else if(SOUS_MODELE==="bs"){ corps=vueBPBs(P);
-  } else if(SOUS_MODELE==="tft"){ corps=vueModeleTft(P);
+  } else if(SOUS_MODELE==="tft"){ corps=vueBPTft(P);
   } else if(SOUS_MODELE==="dette"){ corps=vueBPDette(P);
   } else if(SOUS_MODELE==="analyse"){ corps=vueModeleAnalyse(P);
   } else if(SOUS_MODELE==="valo"){
@@ -625,23 +632,6 @@ function vueBPTft(P){
     <div class="bande">${esc(DOSSIER.societe.toUpperCase())} — TFT prévisionnel (modèle officiel) · scénario ${P.scenario}</div>
     <div class="tscroll"><table class="tb etat"><tr><th>${uni().lib}</th>
     ${AP.map(a=>`<th class="num">FY${String(a).slice(-2)}p</th>`).join("")}</tr>${lignes}</table></div></div>`;
-}
-/* TFT du modèle avec une colonne « Ouverture » (année 0) : mise en place — capital / emprunt /
-   subvention levés et investissements initiaux (sinon l'investissement de départ, logé au bilan
-   d'ouverture, n'apparaît dans aucun flux). Clôture d'ouverture = ouverture de la 1ʳᵉ année. */
-function vueModeleTft(P){
-  const AP=P.annees, ouv=P.ouvertureTFT||{}, oy=(P.ouverture?P.ouverture.annee:(AP[0]-1));
-  const lignes=TFT_DEF.map(([code,lib,st])=>{
-    if(!code) return `<tr class="sec"><td colspan="${AP.length+2}">${lib}</td></tr>`;
-    return `<tr class="${st||""}"><td>${lib}</td>`
-      +`<td class="num" style="opacity:.85">${fmt(ouv[code]||0)}</td>`
-      +AP.map(a=>`<td class="num">${fmt(P.tft[a][code])}</td>`).join("")+`</tr>`;
-  }).join("");
-  return `<div class="card" style="padding:0">
-    <div class="bande">${esc(DOSSIER.societe.toUpperCase())} — TFT prévisionnel (modèle officiel) · scénario ${P.scenario}</div>
-    <div class="tscroll"><table class="tb etat"><tr><th>${uni().lib}</th>
-    <th class="num" style="opacity:.85">Ouverture</th>${AP.map(a=>`<th class="num">FY${String(a).slice(-2)}p</th>`).join("")}</tr>${lignes}</table></div>
-    <div class="mut" style="margin:8px 12px">Colonne « Ouverture » (année ${oy}) : mise en place initiale — apports en capital, emprunt et subvention (sources) et investissements de départ (emplois). La trésorerie de clôture de l'ouverture devient la trésorerie d'ouverture de la première année projetée. Les investissements réalisés <b>pendant</b> le plan (année ≥ 1) apparaissent dans la colonne de l'année concernée.</div></div>`;
 }
 function vueBPDette(P){
   const AP=P.annees;

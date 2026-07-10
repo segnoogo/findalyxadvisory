@@ -133,21 +133,25 @@ ok(BP.volInducteurs(modele.revenus[1].rows,0) === 5000*0.8, 'volInducteurs : cha
 near(Pm.pl.CA[2025], (100000*1000 + 5000*0.8*2000)/1000, 0.001, 'CA modèle an 1 = Σ (volume × prix) par ligne, en base KFCFA');
 // INVARIANT 5 — bilan modèle bouclé : ECART du TFT ≈ 0 chaque année
 Pm.annees.forEach(a => near(Pm.tft[a].ECART, 0, 0.01, `BP modèle bouclé ${a} (ECART TFT ≈ 0)`));
-near(Pm.ouverture.treso, (100000000 + 150000000 - 200000000)/1000, 0.001, 'trésorerie d\'ouverture = (capital + emprunt − CAPEX initial) en base KFCFA');
-ok(Math.abs((Pm.ouverture.immoNet + Pm.ouverture.bfr + Pm.ouverture.treso) - (Pm.ouverture.cp + Pm.ouverture.dette)) < 0.001, 'bilan d\'ouverture équilibré (actif = passif)');
+ok(Pm.ouverture===undefined, 'pas de bilan d\'ouverture (modèle startup, tout à partir de l\'année 1)');
+ok(Pm.tft[Pm.annees[0]].EMPRUNT>0 && Math.abs(Pm.tft[Pm.annees[0]].FG)>0, 'financement et CAPEX dans les flux de l\'année 1 (pas d\'ouverture)');
 ok(Pm.annees.every(a => Pm.pl.IS[a] <= -(modele.imf_taux * Pm.pl.CA[a]) + 1e-6), 'impôt minimum forfaitaire appliqué chaque année (modèle)');
-// financement AUTOMATIQUE : besoin = CAPEX initial + BFR de démarrage, réparti CP/dette selon la part FP
+// financement AUTOMATIQUE : Sources & Emplois qui bouclent (pas de bilan d'ouverture)
 const modeleAuto = JSON.parse(JSON.stringify(modele));
 modeleAuto.financement = {mode:'auto', partFP:0.4, moisBFR:3, emprunt:{taux:0.1, duree:5}};
 const Pa = BP.projeterModele(modeleAuto);
-near(Pa.financement.besoin, Pa.financement.capexInit + Pa.financement.bfrDemarrage, 0.001, 'financement auto : besoin = CAPEX initial + BFR de démarrage');
-near(Pa.financement.capital, Pa.financement.besoin*0.4, 0.001, 'financement auto : fonds propres = besoin × part FP');
-near(Pa.financement.capital + Pa.financement.dette, Pa.financement.besoin, 0.001, 'financement auto : fonds propres + dette = besoin');
-ok(Math.abs((Pa.ouverture.immoNet + Pa.ouverture.bfr + Pa.ouverture.treso) - (Pa.ouverture.cp + Pa.ouverture.dette)) < 0.001, 'bilan d\'ouverture équilibré (financement auto)');
-// TFT d'ouverture : l'investissement initial (année 0) apparaît dans les flux d'investissement d'ouverture
-near(Pm.ouvertureTFT.ACQUIS_IMMO, -Pm.ouverture.immoNet, 0.001, 'TFT ouverture : acquisitions d\'immobilisations = − CAPEX initial');
-near(Pm.ouvertureTFT.ZG, Pm.tft[Pm.annees[0]].ZA, 0.001, 'TFT ouverture : trésorerie de clôture d\'ouverture = ouverture de l\'An 1');
-near(Pm.ouvertureTFT.ZF, Pm.ouvertureTFT.ZB + Pm.ouvertureTFT.ZC + Pm.ouvertureTFT.ZFIN, 0.001, 'TFT ouverture : variation = opérationnel + investissement + financement');
+near(Pa.financement.sources, Pa.financement.emplois, 0.01, 'financement auto : Sources = Emplois');
+near(Pa.financement.emplois, Pa.financement.capexFinance + Pa.financement.bfrDemarrage + Pa.financement.idc, 0.01, 'emplois = investissements + BFR de démarrage + IDC');
+near(Pa.financement.capital, (Pa.financement.capexFinance + Pa.financement.bfrDemarrage)*0.4, 0.01, 'fonds propres = besoin × part FP');
+Pa.annees.forEach(a => near(Pa.tft[a].ECART, 0, 0.02, `financement auto bouclé ${a} (ECART TFT ≈ 0)`));
+// PÉRIODE DE CONSTRUCTION (2 ans) : pas de revenus ni d'amortissement pendant, IDC capitalisés, bouclage
+const modeleC = JSON.parse(JSON.stringify(modele));
+modeleC.dureeConstruction = 2; modeleC.financement = {mode:'auto', partFP:0.3, moisBFR:3, emprunt:{taux:0.1, duree:5}};
+const Pcx = BP.projeterModele(modeleC); const yc = Pcx.annees;
+ok(Pcx.pl.CA[yc[0]]===0 && Pcx.pl.CA[yc[1]]===0 && Pcx.pl.CA[yc[2]]>0, 'construction : revenus nuls an 1-2, démarrent à la mise en service (an 3)');
+ok(Pcx.pl.DA[yc[0]]===0 && Pcx.pl.DA[yc[2]]<0, 'construction : amortissement différé à la mise en service');
+ok(Pcx.financement.idc>0, 'construction : intérêts de construction capitalisés (IDC > 0)');
+yc.forEach(a => near(Pcx.tft[a].ECART, 0, 0.05, `construction bouclée ${a} (ECART TFT ≈ 0)`));
 
 console.log(`\n${fail ? '❌ ÉCHEC' : '✅ SUCCÈS'} — ${pass} assertions passées, ${fail} échec(s).`);
 process.exit(fail ? 1 : 0);
