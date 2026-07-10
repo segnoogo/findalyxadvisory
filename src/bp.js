@@ -541,4 +541,5 @@ if(typeof module!=="undefined"&&module.exports){
   module.exports.valoriserBP=valoriserBP;
   module.exports.projeterModele=projeterModele;
   module.exports.volInducteurs=volInducteurs;
+  module.exports.valAnnee=valAnnee;
 }
