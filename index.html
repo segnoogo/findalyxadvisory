@@ -2503,8 +2503,13 @@ function valAnnee(o,i){
 function projeterModele(M,scenario){
   var N=M.nb||5, startY=M.anneeDepart||2025;
   var AP=Array.from({length:N},function(_,i){return startY+i;});
-  var scLab=(M.scenarios&&M.scenario&&M.scenarios[M.scenario]&&M.scenarios[M.scenario].lab)||"Central";
-  var P={annees:AP,scenario:scLab,pl:{},bs:{},tft:{},dette:{}};
+  /* scénario : facteur global sur le volume (CA), l'efficience des coûts et les délais du BFR.
+     scenario (param) permet de projeter un scénario précis sans changer le scénario actif du dossier. */
+  var scKey=scenario||M.scenario||"central";
+  var SCN=(M.scenarios&&M.scenarios[scKey])||{lab:"Central",dCA:0,dMarge:0,dJours:0};
+  var scLab=SCN.lab||"Central";
+  var fCA=1+(+SCN.dCA||0), fCout=1-(+SCN.dMarge||0), fJours=1+(+SCN.dJours||0);
+  var P={annees:AP,scenario:scLab,scenarioKey:scKey,pl:{},bs:{},tft:{},dette:{}};
   ["CA","COUTS_DIRECTS","MARGE_BRUTE","AUTRES_PROD","OPEX_TOTAL","CHARGES_PERSONNEL","EBITDA","DA","EBIT","PRODUITS_FIN","FRAIS_FIN","RESULTAT_FIN","EBT","IS","RN"].forEach(function(c){P.pl[c]={};});
   P.pl.OPEX_DETAIL={};
   ["IMMO_BRUT","AMORT_CUM","IMMO_NET","STOCKS","CLIENTS","AUTRES_CREANCES","FOURNISSEURS","DETTES_FISC_SOC","AUTRES_DETTES","BFR","CP","DETTE","PROVISIONS","TRESO","LIGNE_CT","TRESO_ACTIVE"].forEach(function(c){P.bs[c]={};});
@@ -2548,16 +2553,19 @@ function projeterModele(M,scenario){
     /* --- revenus & coûts directs (par ligne d'inducteurs) --- */
     var ca=0, coutsD=0;
     (M.revenus||[]).forEach(function(L){
-      var vol=volInducteurs(L.rows,i), prix=valAnnee(L.prix,i), caL=vol*prix/SC;
+      var vol=volInducteurs(L.rows,i)*fCA, prix=valAnnee(L.prix,i), caL=vol*prix/SC;   /* fCA = facteur scénario sur le volume */
       ca+=caL;
       var cm=(L.cout&&L.cout.m)||"pct", cv=+((L.cout||{}).val)||0;
-      coutsD += (cm==="unit") ? vol*cv*Math.pow(1+infl,i)/SC : caL*cv/100;
+      coutsD += ((cm==="unit") ? vol*cv*Math.pow(1+infl,i)/SC : caL*cv/100)*fCout;   /* fCout = efficience des coûts (scénario) */
     });
     var cd=-coutsD;
     var autresProd=valAnnee(M.autresProd,i)/SC;
     /* --- charges fixes → OPEX / personnel (montant annuel, croissance ou par année) --- */
     var opexTot=0, persTot=0;
-    (M.chargesFixes||[]).forEach(function(c){ var m=-valAnnee({val:(c.montant!=null?c.montant:c.val),g:c.g,mode:c.mode,vals:c.vals},i)/SC; if(c.personnel)persTot+=m; else opexTot+=m; });
+    (M.chargesFixes||[]).forEach(function(c,ci){ var m=-valAnnee({val:(c.montant!=null?c.montant:c.val),g:c.g,mode:c.mode,vals:c.vals},i)/SC;
+      if(c.personnel)persTot+=m;
+      else { opexTot+=m; var code="CF"+ci; if(!P.pl.OPEX_DETAIL[code])P.pl.OPEX_DETAIL[code]={lib:(c.name||("Charge "+(ci+1))),vals:{}}; P.pl.OPEX_DETAIL[code].vals[a]=m; }
+    });
     /* --- CAPEX de l'année & amortissements linéaires par poste --- */
     if(py>=1){ capex.forEach(function(c){ if(c.annee===py) brut+=c.montant; }); }
     var dot=0; capex.forEach(function(c){ if(c.annee<=py){ var restant=c.montant-c.amorti; if(restant>0.01){ var d=Math.min(c.montant/c.duree,restant); c.amorti+=d; dot+=d; } } });
@@ -2581,9 +2589,9 @@ function projeterModele(M,scenario){
     var rn=ebt+impots;
     deficits.forEach(function(d){d.resteAns--;}); deficits=deficits.filter(function(d){return d.resteAns>0;});
     if(ebt<0)deficits.push({montant:-ebt,resteAns:horizonDef});
-    /* --- BFR (jours ; DSO/DPO en TTC comme le reste de l'app) --- */
-    var clients=ca*1.18*(bfrH.dso||0)/360;
-    var stocks=Math.abs(cd)*(bfrH.dio||0)/360;
+    /* --- BFR (jours ; DSO/DPO en TTC comme le reste de l'app) — fJours = facteur scénario sur les délais actifs --- */
+    var clients=ca*1.18*((bfrH.dso||0)*fJours)/360;
+    var stocks=Math.abs(cd)*((bfrH.dio||0)*fJours)/360;
     var fournisseurs=-(Math.abs(cd)+Math.abs(opexTot)+Math.abs(persTot))*1.18*(bfrH.dpo||0)/360;
     var bfr=clients+stocks+fournisseurs;
     /* --- CP & trésorerie de bouclage --- */
@@ -4921,7 +4929,7 @@ function rendre(){
   else if(VUE==="licence") el.innerHTML=vueLicence();
   else if(VUE==="exports") el.innerHTML=vueExports();
   else if(VUE==="wizard") el.innerHTML=vueWizard();
-  else if(VUE==="modele"){el.innerHTML=vueModele();if(SOUS_MODELE==="res")dessinerFootball();}
+  else if(VUE==="modele"){el.innerHTML=vueModele();if(SOUS_MODELE==="valo")dessinerFootball();}
   document.querySelectorAll("#vue select[data-compte]").forEach(s=>{s.value=s.dataset.val;});
 }
 
@@ -6389,9 +6397,22 @@ function modeleParDefaut(){
     chargesFixes:[{name:"Salaires",montant:20000000,personnel:true,g:3},{name:"Loyer & charges",montant:8000000,g:2}],
     capex:[{name:"Investissement initial",montant:50000000,duree:5,annee:0}],
     financement:{mode:"auto",partFP:0.30,moisBFR:3,capital:20000000,apports:0,subvention:0,emprunt:{montant:30000000,taux:0.09,duree:5}},
-    bfr:{dso:30,dio:45,dpo:30}, valo:modeleValoDefaut()};
+    bfr:{dso:30,dio:45,dpo:30}, valo:modeleValoDefaut(),
+    scenario:"central",
+    scenarios:{central:{lab:"Central",dCA:0,dMarge:0,dJours:0},
+      optimiste:{lab:"Optimiste",dCA:0.10,dMarge:0.05,dJours:-0.10},
+      prudent:{lab:"Prudent",dCA:-0.10,dMarge:-0.05,dJours:0.10}}};
 }
-function assurerModele(){ if(!DOSSIER.modele)DOSSIER.modele=modeleParDefaut(); if(!DOSSIER.modele.valo)DOSSIER.modele.valo=modeleValoDefaut(); return DOSSIER.modele; }
+function modeleScenariosDefaut(){return {central:{lab:"Central",dCA:0,dMarge:0,dJours:0},optimiste:{lab:"Optimiste",dCA:0.10,dMarge:0.05,dJours:-0.10},prudent:{lab:"Prudent",dCA:-0.10,dMarge:-0.05,dJours:0.10}};}
+function assurerModele(){ if(!DOSSIER.modele)DOSSIER.modele=modeleParDefaut(); if(!DOSSIER.modele.valo)DOSSIER.modele.valo=modeleValoDefaut(); if(!DOSSIER.modele.scenarios){DOSSIER.modele.scenarios=modeleScenariosDefaut();DOSSIER.modele.scenario="central";} return DOSSIER.modele; }
+function mScenario(k){assurerModele().scenario=k;sauverDossier();rendre();}
+function mHNb(n){var M=assurerModele();M.nb=Math.max(3,Math.min(10,Math.round(+n)||5));sauverDossier();rendre();}
+function pillsScenariosModele(M){
+  return '<div class="row" style="margin-bottom:12px"><span class="mut">Scénario :</span>'
+    +Object.keys(M.scenarios).map(function(k){return '<button class="btn sm '+(M.scenario===k?"primary":"")+'" onclick="mScenario(\''+k+'\')">'+esc(M.scenarios[k].lab)+'</button>';}).join("")
+    +'<span class="mut" style="margin-left:14px">Durée du plan :</span>'
+    +'<input type="text" inputmode="decimal" class="nin" style="width:56px" value="'+(M.nb||5)+'" onchange="mHNb(this.value)"><span class="mut">ans</span></div>';
+}
 /* ETATS synthétique (année de référence = dernière projetée) pour la valo et les lecteurs de ETATS */
 function etatsFromModele(P){
   var aL=P.annees[P.annees.length-1], v={};
@@ -6492,8 +6513,15 @@ function vueModele(){
   var M=assurerModele();
   var P=projeterModele(M), A=P.annees, a0=A[0], aL=A[A.length-1], u=uni();
   ETATS=etatsFromModele(P);   /* aligne l'ETATS synthétique sur la projection affichée (les vues BP réutilisées lisent ETATS) */
-  var tabs=[["rev","Revenus"],["cout","Coûts directs"],["fixe","Charges fixes"],["capex","Investissements"],["fin","Financement"],["bfr","BFR"],["param","Paramètres"],["res","Résultats"]];
-  var barre=tabs.map(function(t){return '<button class="btn '+(SOUS_MODELE===t[0]?"primary":"")+'" onclick="mTab(\''+t[0]+'\')">'+t[1]+'</button>';}).join(" ");
+  /* Même présentation qu'un dossier avec historique : Hypothèses (constructeur) + P&L / Bilan /
+     Flux / Dette / Analyse & covenants / Valorisation en onglets séparés ; scénarios en tête. */
+  var HK=["rev","cout","fixe","capex","fin","bfr","param"];   /* sous-onglets de « Hypothèses » */
+  if(!SOUS_MODELE||(HK.indexOf(SOUS_MODELE)<0&&["pl","bs","tft","dette","analyse","valo"].indexOf(SOUS_MODELE)<0))SOUS_MODELE="rev";
+  var enHyp=HK.indexOf(SOUS_MODELE)>=0;
+  var topTabs=[["hyp","Hypothèses",enHyp],["pl","P&L prévisionnel",SOUS_MODELE==="pl"],["bs","Bilan prévisionnel",SOUS_MODELE==="bs"],["tft","Flux de trésorerie",SOUS_MODELE==="tft"],["dette","Dette",SOUS_MODELE==="dette"],["analyse","Analyse & covenants",SOUS_MODELE==="analyse"],["valo","Valorisation",SOUS_MODELE==="valo"]];
+  var barre=topTabs.map(function(t){return '<button class="btn '+(t[2]?"primary":"")+'" onclick="mTab(\''+(t[0]==="hyp"?"rev":t[0])+'\')">'+t[1]+'</button>';}).join(" ");
+  var vueBtn=SOUS_MODELE==="pl"?'<div class="segvue" style="margin-left:6px"><button class="'+(PL_VUE!=="detail"?"on":"")+'" onclick="PL_VUE=\'synth\';rendre()">Synthétique</button><button class="'+(PL_VUE==="detail"?"on":"")+'" onclick="PL_VUE=\'detail\';rendre()">Détaillée</button></div>':"";
+  var subTabs=enHyp?('<div class="row" style="margin:0 0 12px;flex-wrap:wrap">'+[["rev","Revenus"],["cout","Coûts directs"],["fixe","Charges fixes"],["capex","Investissements"],["fin","Financement"],["bfr","BFR"],["param","Paramètres"]].map(function(t){return '<button class="btn sm '+(SOUS_MODELE===t[0]?"primary":"")+'" onclick="mTab(\''+t[0]+'\')">'+t[1]+'</button>';}).join(" ")+'</div>'):"";
   var rnCum=A.reduce(function(s,a){return s+P.pl.RN[a];},0);
   var kpis='<div class="kpis">'
     +kpiCard("CA fin de plan (An "+A.length+")",fmt(P.pl.CA[aL])+" "+u.suf,"","","chart","#224289")
@@ -6569,33 +6597,44 @@ function vueModele(){
       +'<div class="hyp-l"><span>TVA</span><input class="sel" style="width:46%" value="'+((M.tva||0)*100)+'" onchange="mSet(\'tva\',(numFR(this.value)||0)/100)"> %</div>'
       +'<div class="hyp-l"><span>Impôt sur les sociétés</span><input class="sel" style="width:46%" value="'+((M.is_taux||0)*100)+'" onchange="mSet(\'is_taux\',(numFR(this.value)||0)/100)"> %</div>'
       +'<div class="hyp-l"><span>Impôt minimum forfaitaire (% du CA)</span><input class="sel" style="width:46%" value="'+((M.imf_taux||0)*100)+'" onchange="mSet(\'imf_taux\',(numFR(this.value)||0)/100)"> %</div></div>';
-  } else {
-    corps=mVueResultats(P,u);
+  } else if(SOUS_MODELE==="pl"){ corps=vueBPPl(P);
+  } else if(SOUS_MODELE==="bs"){ corps=vueBPBs(P);
+  } else if(SOUS_MODELE==="tft"){ corps=vueBPTft(P);
+  } else if(SOUS_MODELE==="dette"){ corps=vueBPDette(P);
+  } else if(SOUS_MODELE==="analyse"){ corps=vueModeleAnalyse(P);
+  } else if(SOUS_MODELE==="valo"){
+    try{ var Vv=valoriserBP(etatsFromModele(P),{is_taux:M.is_taux,valo:M.valo},P);
+      corps='<div class="mut" style="margin-bottom:8px">Référence : dernière année projetée (EBITDA, dette nette de clôture). Cliquez sur <b>« Modifier les hypothèses »</b> pour le build-up MEDAF (risque pays Damodaran), les multiples et la valeur terminale.</div>'+vueValoCorps(M,P,Vv);
+    }catch(e){ corps='<div class="mut">Valorisation indisponible ('+esc(e.message)+').</div>'; }
   }
   return '<h1>Business plan — modèle <span class="chip" style="background:#fff4e8;color:#b45608">sans balance</span></h1>'
-    +'<div class="mut" style="margin-bottom:12px">Le compte de résultat est construit à partir d\'inducteurs, puis le moteur enchaîne bilan bouclé, trésorerie et valorisation — comme un dossier avec historique.</div>'
+    +pillsScenariosModele(M)
     +kpis
-    +'<div class="row" style="margin:14px 0 12px;flex-wrap:wrap">'+barre+'</div>'
+    +'<div class="row" style="margin:14px 0 12px;align-items:center;flex-wrap:wrap">'+barre+vueBtn+'</div>'
+    +subTabs
     +corps;
 }
-function mVueResultats(P,u){
-  /* On réutilise EXACTEMENT les vues détaillées d'un dossier avec historique : cascade P&L
-     (frais généraux = frais + personnel réunis en une ligne, comme convenu), bilan en actif
-     net, TFT officiel SYSCOHADA et tableau de la dette. Colonne « historique » masquée
-     (mode modèle) via tableBP. → format et rubriques identiques au BP classique. */
-  var M=assurerModele();
-  var sep='<div style="height:16px"></div>';
-  var valo="";
-  try{
-    var V=valoriserBP(etatsFromModele(P),{is_taux:M.is_taux,valo:M.valo},P);
-    /* MÊME vue « Valorisation » qu'un dossier avec historique : build-up CAPM (risque pays Damodaran),
-       construction du FCFF, pont VE→fonds propres, sensibilité, football-field + pondération des méthodes */
-    valo=sep+'<h2 style="margin:8px 0 2px">Valorisation</h2>'
-      +'<div class="mut" style="margin-bottom:8px">Référence : dernière année projetée (EBITDA, dette nette de clôture). Cliquez sur <b>« Modifier les hypothèses »</b> pour le build-up MEDAF (risque pays Damodaran), les multiples et la valeur terminale.</div>'
-      +vueValoCorps(M,P,V);
-  }catch(e){ valo=sep+'<div class="mut">Valorisation indisponible ('+esc(e.message)+').</div>'; }
-  return vueBPPl(P)+sep+vueBPBs(P)+sep+vueBPTft(P)+sep+vueBPDette(P)+valo
-    +'<div class="mut" style="margin-top:12px">Ces états prévisionnels alimentent les mêmes exports (PPT / Excel) qu\'un dossier avec historique.</div>';
+/* Analyse & covenants du modèle : seuil de rentabilité + covenants (mutualisés avec le BP historique)
+   + comparaison des 3 scénarios (recalculés via projeterModele sans changer le scénario actif). */
+function vueModeleAnalyse(P){
+  var M=assurerModele(),u=uni(),aF=P.annees[P.annees.length-1];
+  var seuilCov=analyseSeuilCov(P);
+  var ordre=[["prudent","Prudent"],["central","Central"],["optimiste","Optimiste"]].filter(function(o){return M.scenarios&&M.scenarios[o[0]];});
+  var cols=ordre.map(function(o){
+    var Pi=projeterModele(M,o[0]), aL=Pi.annees[Pi.annees.length-1], eq=null;
+    try{eq=valoriserBP(etatsFromModele(Pi),{is_taux:M.is_taux,valo:M.valo},Pi).fourchette.retenue;}catch(e){}
+    return {lab:o[1],key:o[0],caF:Pi.pl.CA[aL],ebF:Pi.pl.EBITDA[aL],rnCum:Pi.annees.reduce(function(s,a){return s+Pi.pl.RN[a];},0),trF:Pi.bs.TRESO[aL],eq:eq};
+  });
+  var rowScen=function(lib,f){return '<tr><td>'+lib+'</td>'+cols.map(function(c){return '<td class="num"'+(c.key===M.scenario?' style="font-weight:700"':'')+'>'+fmt(f(c))+'</td>';}).join("")+'</tr>';};
+  var tabScen='<div class="card" style="padding:0;margin-top:14px"><div class="bande">'+esc(DOSSIER.societe.toUpperCase())+' — Comparaison des scénarios</div>'
+    +'<div class="tscroll"><table class="tb etat"><tr><th>'+u.lib+'</th>'+cols.map(function(c){return '<th class="num">'+c.lab+(c.key===M.scenario?" ★":"")+'</th>';}).join("")+'</tr>'
+    +rowScen("Chiffre d'affaires (FY"+String(aF).slice(-2)+"p)",function(c){return c.caF;})
+    +rowScen("EBITDA (FY"+String(aF).slice(-2)+"p)",function(c){return c.ebF;})
+    +rowScen("Résultat net cumulé sur l'horizon",function(c){return c.rnCum;})
+    +rowScen("Trésorerie nette finale",function(c){return c.trF;})
+    +rowScen("Valeur des fonds propres (retenue)",function(c){return c.eq;})
+    +'</table></div><div class="mut" style="margin:8px 12px">Facteurs de scénario (réglables dans les scénarios) : volume du CA ±, efficience des coûts ±, délais du BFR ±. ★ = scénario actif pour toutes les autres vues.</div></div>';
+  return seuilCov+tabScen;
 }
 function resetBP(){if(!confirm("Réinitialiser toutes les hypothèses depuis l'historique ?"))return;
   DOSSIER.bp=null;assurerBP();sauverDossier();rendre();}
@@ -6817,19 +6856,25 @@ function vueBPPl(P){
   const defs=[];
   DEF_PL.filter(d=>!d.detail).forEach(d=>{
     if(det&&d.code==="FRAIS_GENERAUX"){
-      /* mêmes catégories que la DD : les services extérieurs sont REGROUPÉS en une ligne
-         (cliquable pour voir les sous-postes), pas dépliés. Les lignes personnalisées OPEX
-         sont montrées séparément (pas fondues dans les services extérieurs). */
       const OD=P.pl.OPEX_DETAIL||{}, od=(c,a)=>OD[c]?(OD[c].vals[a]||0):0;
-      const push=(code,lib,pr,clic)=>defs.push({lib:lib,st:"det",clic:clic,hist:(v[code]&&v[code][a1])||0,proj:pr});
-      push("AUTRES_ACHATS","Autres achats",a=>od("AUTRES_ACHATS",a));
-      push("TRANSPORTS","Transports",a=>od("TRANSPORTS",a));
-      push("SERVICES_EXT","Services extérieurs",a=>BP_SERVICES_EXT.reduce((s,c)=>s+od(c,a),0),"detailBPServices()");
-      push("IMPOTS_TAXES","Impôts et taxes",a=>od("IMPOTS_TAXES",a));
-      push("AUTRES_CHARGES","Autres charges",a=>od("AUTRES_CHARGES",a));
-      Object.keys(OD).filter(c=>BP_OPEX_STD.indexOf(c)<0).forEach(c=>
-        defs.push({lib:OD[c].lib,st:"det",hist:(v[c]&&v[c][a1])||0,proj:a=>od(c,a)}));
-      defs.push({lib:"Charges de personnel",st:"det",hist:v.CHARGES_PERSONNEL[a1],proj:a=>P.pl.CHARGES_PERSONNEL[a]});
+      if(typeof modeleMode==="function"&&modeleMode()){
+        /* modèle sans balance : on déplie chaque charge fixe saisie (nom + montant) + le personnel */
+        Object.keys(OD).forEach(c=>defs.push({lib:OD[c].lib,st:"det",hist:0,proj:a=>od(c,a)}));
+        defs.push({lib:"Charges de personnel",st:"det",hist:0,proj:a=>P.pl.CHARGES_PERSONNEL[a]});
+      } else {
+        /* mêmes catégories que la DD : les services extérieurs sont REGROUPÉS en une ligne
+           (cliquable pour voir les sous-postes), pas dépliés. Les lignes personnalisées OPEX
+           sont montrées séparément (pas fondues dans les services extérieurs). */
+        const push=(code,lib,pr,clic)=>defs.push({lib:lib,st:"det",clic:clic,hist:(v[code]&&v[code][a1])||0,proj:pr});
+        push("AUTRES_ACHATS","Autres achats",a=>od("AUTRES_ACHATS",a));
+        push("TRANSPORTS","Transports",a=>od("TRANSPORTS",a));
+        push("SERVICES_EXT","Services extérieurs",a=>BP_SERVICES_EXT.reduce((s,c)=>s+od(c,a),0),"detailBPServices()");
+        push("IMPOTS_TAXES","Impôts et taxes",a=>od("IMPOTS_TAXES",a));
+        push("AUTRES_CHARGES","Autres charges",a=>od("AUTRES_CHARGES",a));
+        Object.keys(OD).filter(c=>BP_OPEX_STD.indexOf(c)<0).forEach(c=>
+          defs.push({lib:OD[c].lib,st:"det",hist:(v[c]&&v[c][a1])||0,proj:a=>od(c,a)}));
+        defs.push({lib:"Charges de personnel",st:"det",hist:v.CHARGES_PERSONNEL[a1],proj:a=>P.pl.CHARGES_PERSONNEL[a]});
+      }
     }
     if(det&&d.code==="RESULTAT_FIN"){
       defs.push({lib:"Produits financiers",st:"det",hist:(v.REVENUS_FIN&&v.REVENUS_FIN[a1])||0,proj:a=>P.pl.PRODUITS_FIN[a]});
@@ -6905,6 +6950,55 @@ function vueBPDette(P){
 }
 
 /* ---------- Analyse : seuil de rentabilité, covenants, sensibilité ---------- */
+/* Seuil de rentabilité + covenants — dépend UNIQUEMENT de la projection P (réutilisable modèle/historique) */
+function analyseSeuilCov(P){
+  const AP=P.annees,u=uni();
+  const th=`<th>${u.lib}</th>${AP.map(a=>`<th class="num">FY${String(a).slice(-2)}p</th>`).join("")}`;
+  const x1=x=>(x===null||!isFinite(x))?"n.s.":(Math.round(x*100)/100).toLocaleString("fr-FR",{minimumFractionDigits:0,maximumFractionDigits:2})+"×";
+  const pc=x=>(x===null||!isFinite(x))?"n.s.":Math.round(x*100)+" %";
+  const jr=x=>(x===null||!isFinite(x))?"n.s.":Math.round(x)+" j";
+  const cell=(txt,ok)=>`<td class="num"${ok===true?' style="color:#16904E;font-weight:700"':ok===false?' style="color:#c0392b;font-weight:700"':''}>${txt}</td>`;
+  const sr=a=>{const ca=P.pl.CA[a],taux=ca?P.pl.MARGE_BRUTE[a]/ca:0;
+    const fixes=-(P.pl.AUTRES_PROD[a]+P.pl.OPEX_TOTAL[a]+P.pl.CHARGES_PERSONNEL[a]+P.pl.DA[a]);
+    const seuil=taux?fixes/taux:0;
+    return{ca,taux,fixes,seuil,pm:ca?seuil/ca*360:NaN,marge:ca?(ca-seuil)/ca:NaN,levier:P.pl.EBIT[a]?P.pl.MARGE_BRUTE[a]/P.pl.EBIT[a]:NaN};};
+  const rowSR=(lib,f,fmtf,st)=>`<tr class="${st||""}"><td>${lib}</td>${AP.map(a=>`<td class="num">${fmtf(f(sr(a)))}</td>`).join("")}</tr>`;
+  const tabSR=`<div class="card" style="padding:0">
+    <div class="bande">${esc(DOSSIER.societe.toUpperCase())} — Seuil de rentabilité (point mort d'exploitation)</div>
+    <div class="tscroll"><table class="tb etat"><tr>${th}</tr>
+    ${rowSR("Chiffre d'affaires",x=>x.ca,fmt)}
+    ${rowSR("Taux de marge sur coûts variables",x=>x.taux,pc)}
+    ${rowSR("Charges fixes (nettes des autres produits)",x=>x.fixes,fmt)}
+    ${rowSR("Seuil de rentabilité (CA critique)",x=>x.seuil,fmt,"total")}
+    ${rowSR("Point mort (en jours de CA)",x=>x.pm,jr)}
+    ${rowSR("Marge de sécurité",x=>x.marge,pc)}
+    ${rowSR("Levier opérationnel",x=>x.levier,x1)}
+    </table></div>
+    <div class="mut" style="margin:8px 12px">Point mort où le résultat d'exploitation s'annule : coûts directs = charges variables, tout le reste (frais généraux, personnel, dotations) = charges fixes.</div></div>`;
+  const cov=a=>{
+    const service=(P.dette[a].remboursement||0)+(P.dette[a].interets||0)+(P.dette[a].interetsCT||0);
+    const cfads=P.pl.EBITDA[a]+P.pl.IS[a]+(P.tft[a]?P.tft[a].DBFR:0);
+    const detteFin=P.bs.DETTE[a]+(P.bs.LIGNE_CT[a]||0);
+    const detteNette=detteFin-(P.bs.TRESO_ACTIVE[a]!==undefined?P.bs.TRESO_ACTIVE[a]:Math.max(0,P.bs.TRESO[a]));
+    const acCirc=P.bs.STOCKS[a]+P.bs.CLIENTS[a]+P.bs.AUTRES_CREANCES[a]+(P.bs.TRESO_ACTIVE[a]||Math.max(0,P.bs.TRESO[a]));
+    const paCirc=-(P.bs.FOURNISSEURS[a]+P.bs.DETTES_FISC_SOC[a]+P.bs.AUTRES_DETTES[a])+(P.bs.LIGNE_CT[a]||0);
+    return {dscr:service>0.5?cfads/service:null, lev:P.pl.EBITDA[a]>0?detteNette/P.pl.EBITDA[a]:null,
+      gear:P.bs.CP[a]>0?detteFin/P.bs.CP[a]:null, couv:P.pl.FRAIS_FIN[a]<0?P.pl.EBITDA[a]/-P.pl.FRAIS_FIN[a]:null,
+      liq:paCirc>0?acCirc/paCirc:null};
+  };
+  const rowCov=(lib,key,test)=>`<tr><td>${lib}</td>${AP.map(a=>{const val=cov(a)[key];return cell(x1(val),val==null?null:test(val));}).join("")}</tr>`;
+  const tabCov=`<div class="card" style="padding:0;margin-top:14px">
+    <div class="bande">${esc(DOSSIER.societe.toUpperCase())} — Ratios prévisionnels & covenants bancaires</div>
+    <div class="tscroll"><table class="tb etat"><tr>${th}</tr>
+    ${rowCov("DSCR — couverture du service de la dette","dscr",v=>v>=1.2)}
+    ${rowCov("Dette nette / EBITDA","lev",v=>v<=3.5)}
+    ${rowCov("Gearing (dette fin. / capitaux propres)","gear",v=>v<=1.5)}
+    ${rowCov("Couverture des intérêts (EBITDA / frais fin.)","couv",v=>v>=3)}
+    ${rowCov("Liquidité générale","liq",v=>v>=1)}
+    </table></div>
+    <div class="mut" style="margin:8px 12px">Vert = seuil bancaire usuel respecté (DSCR ≥ 1,2 · dette nette/EBITDA ≤ 3,5 · gearing ≤ 1,5 · couverture des intérêts ≥ 3 · liquidité ≥ 1). CFADS = EBITDA − impôt − variation du BFR ; service de la dette = remboursements + intérêts (dette et découvert).</div></div>`;
+  return tabSR+tabCov;
+}
 function vueBPAnalyse(P){
   const AP=P.annees,H=assurerBP(),u=uni(),aF=AP[AP.length-1];
   const th=`<th>${u.lib}</th>${AP.map(a=>`<th class="num">FY${String(a).slice(-2)}p</th>`).join("")}`;

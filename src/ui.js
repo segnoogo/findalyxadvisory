@@ -302,7 +302,7 @@ function rendre(){
   else if(VUE==="licence") el.innerHTML=vueLicence();
   else if(VUE==="exports") el.innerHTML=vueExports();
   else if(VUE==="wizard") el.innerHTML=vueWizard();
-  else if(VUE==="modele"){el.innerHTML=vueModele();if(SOUS_MODELE==="res")dessinerFootball();}
+  else if(VUE==="modele"){el.innerHTML=vueModele();if(SOUS_MODELE==="valo")dessinerFootball();}
   document.querySelectorAll("#vue select[data-compte]").forEach(s=>{s.value=s.dataset.val;});
 }
 

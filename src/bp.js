@@ -295,8 +295,13 @@ function valAnnee(o,i){
 function projeterModele(M,scenario){
   var N=M.nb||5, startY=M.anneeDepart||2025;
   var AP=Array.from({length:N},function(_,i){return startY+i;});
-  var scLab=(M.scenarios&&M.scenario&&M.scenarios[M.scenario]&&M.scenarios[M.scenario].lab)||"Central";
-  var P={annees:AP,scenario:scLab,pl:{},bs:{},tft:{},dette:{}};
+  /* scénario : facteur global sur le volume (CA), l'efficience des coûts et les délais du BFR.
+     scenario (param) permet de projeter un scénario précis sans changer le scénario actif du dossier. */
+  var scKey=scenario||M.scenario||"central";
+  var SCN=(M.scenarios&&M.scenarios[scKey])||{lab:"Central",dCA:0,dMarge:0,dJours:0};
+  var scLab=SCN.lab||"Central";
+  var fCA=1+(+SCN.dCA||0), fCout=1-(+SCN.dMarge||0), fJours=1+(+SCN.dJours||0);
+  var P={annees:AP,scenario:scLab,scenarioKey:scKey,pl:{},bs:{},tft:{},dette:{}};
   ["CA","COUTS_DIRECTS","MARGE_BRUTE","AUTRES_PROD","OPEX_TOTAL","CHARGES_PERSONNEL","EBITDA","DA","EBIT","PRODUITS_FIN","FRAIS_FIN","RESULTAT_FIN","EBT","IS","RN"].forEach(function(c){P.pl[c]={};});
   P.pl.OPEX_DETAIL={};
   ["IMMO_BRUT","AMORT_CUM","IMMO_NET","STOCKS","CLIENTS","AUTRES_CREANCES","FOURNISSEURS","DETTES_FISC_SOC","AUTRES_DETTES","BFR","CP","DETTE","PROVISIONS","TRESO","LIGNE_CT","TRESO_ACTIVE"].forEach(function(c){P.bs[c]={};});
@@ -340,16 +345,19 @@ function projeterModele(M,scenario){
     /* --- revenus & coûts directs (par ligne d'inducteurs) --- */
     var ca=0, coutsD=0;
     (M.revenus||[]).forEach(function(L){
-      var vol=volInducteurs(L.rows,i), prix=valAnnee(L.prix,i), caL=vol*prix/SC;
+      var vol=volInducteurs(L.rows,i)*fCA, prix=valAnnee(L.prix,i), caL=vol*prix/SC;   /* fCA = facteur scénario sur le volume */
       ca+=caL;
       var cm=(L.cout&&L.cout.m)||"pct", cv=+((L.cout||{}).val)||0;
-      coutsD += (cm==="unit") ? vol*cv*Math.pow(1+infl,i)/SC : caL*cv/100;
+      coutsD += ((cm==="unit") ? vol*cv*Math.pow(1+infl,i)/SC : caL*cv/100)*fCout;   /* fCout = efficience des coûts (scénario) */
     });
     var cd=-coutsD;
     var autresProd=valAnnee(M.autresProd,i)/SC;
     /* --- charges fixes → OPEX / personnel (montant annuel, croissance ou par année) --- */
     var opexTot=0, persTot=0;
-    (M.chargesFixes||[]).forEach(function(c){ var m=-valAnnee({val:(c.montant!=null?c.montant:c.val),g:c.g,mode:c.mode,vals:c.vals},i)/SC; if(c.personnel)persTot+=m; else opexTot+=m; });
+    (M.chargesFixes||[]).forEach(function(c,ci){ var m=-valAnnee({val:(c.montant!=null?c.montant:c.val),g:c.g,mode:c.mode,vals:c.vals},i)/SC;
+      if(c.personnel)persTot+=m;
+      else { opexTot+=m; var code="CF"+ci; if(!P.pl.OPEX_DETAIL[code])P.pl.OPEX_DETAIL[code]={lib:(c.name||("Charge "+(ci+1))),vals:{}}; P.pl.OPEX_DETAIL[code].vals[a]=m; }
+    });
     /* --- CAPEX de l'année & amortissements linéaires par poste --- */
     if(py>=1){ capex.forEach(function(c){ if(c.annee===py) brut+=c.montant; }); }
     var dot=0; capex.forEach(function(c){ if(c.annee<=py){ var restant=c.montant-c.amorti; if(restant>0.01){ var d=Math.min(c.montant/c.duree,restant); c.amorti+=d; dot+=d; } } });
@@ -373,9 +381,9 @@ function projeterModele(M,scenario){
     var rn=ebt+impots;
     deficits.forEach(function(d){d.resteAns--;}); deficits=deficits.filter(function(d){return d.resteAns>0;});
     if(ebt<0)deficits.push({montant:-ebt,resteAns:horizonDef});
-    /* --- BFR (jours ; DSO/DPO en TTC comme le reste de l'app) --- */
-    var clients=ca*1.18*(bfrH.dso||0)/360;
-    var stocks=Math.abs(cd)*(bfrH.dio||0)/360;
+    /* --- BFR (jours ; DSO/DPO en TTC comme le reste de l'app) — fJours = facteur scénario sur les délais actifs --- */
+    var clients=ca*1.18*((bfrH.dso||0)*fJours)/360;
+    var stocks=Math.abs(cd)*((bfrH.dio||0)*fJours)/360;
     var fournisseurs=-(Math.abs(cd)+Math.abs(opexTot)+Math.abs(persTot))*1.18*(bfrH.dpo||0)/360;
     var bfr=clients+stocks+fournisseurs;
     /* --- CP & trésorerie de bouclage --- */
