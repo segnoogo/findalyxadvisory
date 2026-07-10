@@ -186,6 +186,16 @@ border-left:4px solid var(--orange)}
 .segvue{display:inline-flex;border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-left:auto}
 .segvue button{border:0;background:#fff;padding:6px 13px;font-size:11px;cursor:pointer;color:var(--muted);font-family:inherit}
 .segvue button.on{background:var(--navy);color:#fff;font-weight:600}
+.mind{border:1px solid var(--border);border-radius:9px;padding:9px 10px;margin-bottom:8px;background:#fff}
+.mind-top{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.mind .segvue,.mind-price .segvue{margin-left:0}
+.mind-vals{display:flex;align-items:flex-end;gap:10px 14px;flex-wrap:wrap;margin-top:9px;padding-left:42px}
+.mind-f,.mind-yv{display:flex;flex-direction:column;gap:3px}
+.mind-f label{font-size:10px;color:var(--muted);font-weight:600}
+.mind-yv label{text-align:center;font-size:9.5px;color:var(--muted)}
+.mind-yv .nin{width:72px}
+.mind-price{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:10px;font-size:13px}
+.mind-price .x{color:#fa6706;font-weight:700}
 .bande{background:var(--navy);color:#fff;font-weight:600;font-size:11.2px;padding:8px 12px;
 border-radius:16px 16px 0 0}
 .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:16px}
@@ -4667,6 +4677,9 @@ const esc=s=>String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"
 /* ---------- calcul ---------- */
 function recalculer(){
   if(!DOSSIER)  {ETATS=null;return;}
+  if(DOSSIER.sansHistorique){ /* BP sans balance : ETATS synthétique dérivé du modèle d'inducteurs */
+    try{ETATS=etatsFromModele(projeterModele(assurerModele()));}catch(e){ETATS=null;}
+    return; }
   if(!Array.isArray(DOSSIER.balances)) DOSSIER.balances=[];   /* dossier legacy/corrompu : pas d'écran blanc */
   if(!DOSSIER.balances.length){ETATS=null;return;}
   const tb=appliquerMapping(construireTbagr(DOSSIER.balances),DOSSIER.overrides||{});
@@ -4689,7 +4702,11 @@ const NAV=[
 ];
 function icone(d){return `<span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="${d}"/></svg></span>`;}
 function shell(){
-  const items=NAV.map(n=>`<div class="item ${VUE===n.id?"active":""}" onclick="aller('${n.id}')">${icone(n.ic)}${n.lab}</div>`).join("");
+  /* en mode « sans balance », les vues d'analyse historique n'ont pas de sens : nav réduite */
+  const navList=(DOSSIER&&DOSSIER.sansHistorique)
+    ?[NAV[0],{id:"modele",lab:"Business plan",ic:NAV[6].ic},NAV[8]]
+    :NAV;
+  const items=navList.map(n=>`<div class="item ${VUE===n.id?"active":""}" onclick="aller('${n.id}')">${icone(n.ic)}${n.lab}</div>`).join("");
   document.getElementById("app").innerHTML=`
   <div class="side">
     <div class="logo"><img class="brand-logo" src="${LOGO_FINDALYX}" alt="Findalyx">
@@ -4703,7 +4720,7 @@ function shell(){
   <div class="main">
     <div class="top">
       <div><div class="name">${DOSSIER?esc(DOSSIER.societe):"Aucun dossier ouvert"}</div>
-      <div class="sub">${DOSSIER&&DOSSIER.balances.length?DOSSIER.balances.map(b=>"FY"+b.annee).join(" · ")+" — montants en "+uni().lib:"créez ou ouvrez un dossier"}</div></div>
+      <div class="sub">${DOSSIER&&DOSSIER.sansHistorique?"Business plan sans historique — montants en "+uni().lib:(DOSSIER&&DOSSIER.balances.length?DOSSIER.balances.map(b=>"FY"+b.annee).join(" · ")+" — montants en "+uni().lib:"créez ou ouvrez un dossier")}</div></div>
       <div class="right">${barreDroite()}</div>
     </div>
     <div class="view" id="vue"></div>
@@ -4883,6 +4900,7 @@ function rendre(){
   else if(VUE==="licence") el.innerHTML=vueLicence();
   else if(VUE==="exports") el.innerHTML=vueExports();
   else if(VUE==="wizard") el.innerHTML=vueWizard();
+  else if(VUE==="modele") el.innerHTML=vueModele();
   document.querySelectorAll("#vue select[data-compte]").forEach(s=>{s.value=s.dataset.val;});
 }
 
@@ -4957,13 +4975,12 @@ function vueAccueil(){
   const l=chargerDossiers();
   const cartes=l.map(d=>`
     <div class="card doss">
-      <div><b>${esc(d.societe)}</b><div class="mut">${d.balances.length} balance(s)
-      ${d.balances.length?"— FY"+Math.min(...d.balances.map(b=>b.annee))+" à FY"+Math.max(...d.balances.map(b=>b.annee)):""}</div></div>
+      <div><b>${esc(d.societe)}</b><div class="mut">${d.sansHistorique?"Business plan — sans balance":(d.balances.length+" balance(s)"+(d.balances.length?" — FY"+Math.min(...d.balances.map(b=>b.annee))+" à FY"+Math.max(...d.balances.map(b=>b.annee)):""))}</div></div>
       <div><button class="btn primary sm" onclick="ouvrirDossier('${d.id}')">Ouvrir</button>
       <button class="btn sm" onclick="supprimerDossier('${d.id}')">Supprimer</button></div>
     </div>`).join("");
   let synth="";
-  if(DOSSIER&&ETATS){
+  if(DOSSIER&&ETATS&&!DOSSIER.sansHistorique){
     const AN=ETATS.annees,a1=AN[AN.length-1],a0=AN.length>1?AN[AN.length-2]:null,v=ETATS.v;
     const ca1=v.CA[a1];
     const ctl=controlesDossier().map(c=>`<div class="ctl"><div>${c.lib}
@@ -4993,14 +5010,30 @@ function vueAccueil(){
     <button class="btn sm primary" style="margin-left:auto" onclick="ouvrirWizard()">+ Nouvelle société</button>
   </div>`;
   const creation=`<div class="card">
-    <b>Nouveau dossier</b>
-    <div class="mut" style="margin:6px 0 12px">Assistant guidé en 4 étapes : secteur de comparaison, informations de la société, balances, puis lancement de l'analyse.</div>
-    <button class="btn primary" onclick="ouvrirWizard()">Créer une société (assistant)</button>
+    <b>Dossier avec comptabilité</b>
+    <div class="mut" style="margin:6px 0 12px">Assistant guidé : secteur, informations, balances, puis lancement de l'analyse (due diligence, business plan, valorisation).</div>
+    <button class="btn primary" onclick="ouvrirWizard()">Créer avec des balances (assistant)</button>
+  </div>`;
+  const creationModele=`<div class="card">
+    <b>Business plan sans historique</b>
+    <div class="mut" style="margin:6px 0 12px">Pas de comptabilité à importer ? Construisez le plan à partir d'inducteurs (volumes, prix, coûts) — idéal pour une startup ou un projet nouveau.</div>
+    <div class="row" style="gap:8px"><input id="nouvNomModele" class="sel" placeholder="Nom de la société" style="flex:1">
+    <button class="btn primary" onclick="creerModele()">Créer (sans balance)</button></div>
   </div>`;
   return `<h1>Accueil</h1>
   ${synth}
   ${barre}
-  ${ouverte?creation+(cartes||'<div class="mut" style="padding:14px 4px">Aucun dossier. Créez le premier ci-dessus.</div>'):""}`;
+  ${ouverte?`<div class="deux">${creation}${creationModele}</div>`+(cartes||'<div class="mut" style="padding:14px 4px">Aucun dossier. Créez le premier ci-dessus.</div>'):""}`;
+}
+async function creerModele(){
+  const el=document.getElementById("nouvNomModele");
+  const nom=el?el.value.trim():"";
+  if(!nom){toast("Entrez un nom de société");return;}
+  const id="d"+Date.now();
+  const q=await licAjouterSociete(id,nom);
+  if(!q.ok){toast("Quota atteint : votre licence permet "+q.max+" société(s) ("+q.used+" utilisées).");return;}
+  DOSSIER={id:id,societe:nom,secteur:"Général",balances:[],overrides:{},sansHistorique:true,modele:modeleParDefaut()};
+  recalculer();sauverDossier();localStorage.setItem(ACTIF_KEY,DOSSIER.id);SOUS_MODELE="rev";VUE="modele";shell();
 }
 async function creerDossier(){
   const nom=document.getElementById("nouvNom").value.trim();
@@ -5021,7 +5054,9 @@ function ouvrirDossier(id,garderVue){
   DOSSIER=d;
   localStorage.setItem(ACTIF_KEY,id);
   recalculer();
-  if(!garderVue)VUE=DOSSIER.balances.length?"etats":"import";
+  /* aligner la vue sur le type de dossier (évite d'ouvrir « modèle » sur un dossier avec balances et vice-versa) */
+  if(!garderVue || (DOSSIER.sansHistorique&&VUE!=="modele"&&VUE!=="params") || (!DOSSIER.sansHistorique&&VUE==="modele"))
+    VUE=DOSSIER.sansHistorique?"modele":(DOSSIER.balances.length?"etats":"import");
   shell();
 }
 function supprimerDossier(id){
@@ -6286,6 +6321,196 @@ function histSig(){
   return ETATS.annees.map(a=>a+":"+Math.round(v.CA[a]||0)+"/"+Math.round(v.EBITDA[a]||0)+"/"+Math.round(v.ACTIF_NET[a]||0)).join("|");
 }
 function bpDesynchronise(){return !!(DOSSIER&&DOSSIER.bp&&DOSSIER.bp._sig&&DOSSIER.bp._sig!==histSig());}
+
+/* ==================== BP SANS HISTORIQUE — écran « Modèle » ==================== */
+var SOUS_MODELE="rev";
+var M_PRESETS={
+  quantite:{lab:"Quantité directe",rows:[{op:'x',name:'Quantité',val:100000,unit:'u/an',g:0}]},
+  vierge:{lab:"Vierge (à composer)",rows:[{op:'x',name:'',val:0,unit:'',g:0}]},
+  production:{lab:"Production (capacité)",rows:[{op:'x',name:'Capacité',val:12000000,unit:'L/an',g:0},{op:'x',name:"Taux d'utilisation",val:92,unit:'%',g:0},{op:'x',name:"Taux d'écoulement",val:55,unit:'%',g:0}]},
+  mine:{lab:"Extraction (mine)",rows:[{op:'x',name:'Tonnage extrait',val:300000,unit:'t/an',g:2},{op:'x',name:'Teneur',val:2.5,unit:'g/t',g:0},{op:'x',name:'Taux de récupération',val:88,unit:'%',g:0}]},
+  energie:{lab:"Énergie (production)",rows:[{op:'x',name:'Puissance installée',val:1000,unit:'kWc',g:0},{op:'x',name:'Facteur de charge',val:18,unit:'%',g:0},{op:'x',name:'Heures',val:8760,unit:'h/an',g:0}]},
+  agriculture:{lab:"Agriculture (surface)",rows:[{op:'x',name:'Superficie',val:500,unit:'ha',g:0},{op:'x',name:'Rendement',val:3,unit:'t/ha',g:0},{op:'x',name:'Taux de commercialisation',val:90,unit:'%',g:0}]},
+  elevage:{lab:"Élevage (cheptel)",rows:[{op:'x',name:'Effectif',val:10000,unit:'têtes',g:0},{op:'x',name:'Production / tête',val:250,unit:'u/an',g:0},{op:'x',name:'Taux de réussite',val:92,unit:'%',g:0}]},
+  negoce:{lab:"Négoce / distribution",rows:[{op:'x',name:'Points de vente',val:3,unit:'PDV',g:0},{op:'x',name:'Ventes / PDV / jour',val:200,unit:'u',g:0},{op:'x',name:'Jours / an',val:300,unit:'j',g:0}]},
+  service:{lab:"Service (capacité)",rows:[{op:'x',name:'Nb postes',val:4,unit:'poste',g:0},{op:'x',name:'Heures / jour',val:8,unit:'h',g:0},{op:'x',name:'Jours / an',val:300,unit:'j',g:0},{op:'x',name:"Taux d'occupation",val:60,unit:'%',g:0},{op:'d',name:'Temps / client',val:0.5,unit:'h',g:0}]},
+  ecole:{lab:"École / formation",rows:[{op:'x',name:'Effectif élèves',val:400,unit:'élèves',g:5},{op:'x',name:'Taux de remplissage',val:85,unit:'%',g:0}]},
+  restauration:{lab:"Restauration",rows:[{op:'x',name:'Couverts / jour',val:120,unit:'couv.',g:0},{op:'x',name:'Jours / an',val:330,unit:'j',g:0},{op:'x',name:'Taux de remplissage',val:70,unit:'%',g:0}]},
+  hotellerie:{lab:"Hôtellerie",rows:[{op:'x',name:'Chambres',val:30,unit:'ch.',g:0},{op:'x',name:"Taux d'occupation",val:60,unit:'%',g:0},{op:'x',name:'Jours / an',val:365,unit:'j',g:0}]},
+  sante:{lab:"Santé (actes)",rows:[{op:'x',name:'Actes / jour',val:40,unit:'actes',g:0},{op:'x',name:'Jours / an',val:300,unit:'j',g:0}]},
+  abonnement:{lab:"Abonnements (ARPU)",rows:[{op:'x',name:'Abonnés',val:5000,unit:'ab.',g:8},{op:'x',name:'Mois',val:12,unit:'mois',g:0}]},
+  immobilier:{lab:"Immobilier locatif",rows:[{op:'x',name:'Nombre de lots',val:20,unit:'lots',g:0},{op:'x',name:"Taux d'occupation",val:90,unit:'%',g:0},{op:'x',name:'Mois',val:12,unit:'mois',g:0}]},
+  transport:{lab:"Transport",rows:[{op:'x',name:'Véhicules',val:10,unit:'véh.',g:0},{op:'x',name:'Trajets / jour',val:6,unit:'traj.',g:0},{op:'x',name:'Jours / an',val:300,unit:'j',g:0},{op:'x',name:'Places',val:15,unit:'pl.',g:0},{op:'x',name:'Taux de remplissage',val:70,unit:'%',g:0}]}
+};
+var M_GROUPS=[["Générique",["quantite","vierge"]],["Industrie / production",["production","mine","energie"]],["Agriculture / élevage",["agriculture","elevage"]],["Commerce",["negoce"]],["Services",["service","ecole","restauration","hotellerie","sante","abonnement"]],["Immobilier / transport",["immobilier","transport"]]];
+function modeleValoDefaut(){return {rf:0.06,primeMarche:0.07,beta:1.0,primePays:0.03,primeTaille:0.02,primeIlliquidite:0.015,coutDette:0.08,poidsDette:0.35,g:0.03,midYear:false,tvMode:"gordon",exitMultiple:5.5,multiplesComparables:{min:4,central:5.5,max:7},multiplesTransactions:{min:5,central:6.5,max:8},poids:{dcf:45,comp:20,trans:20,anr:15},bridge:[],anrAjustements:[]};}
+function modeleParDefaut(){
+  var y=(typeof CONF_ANNEE!=="undefined"&&CONF_ANNEE)||2025;
+  try{y=new Date().getFullYear();}catch(e){}
+  return {nb:5,anneeDepart:y,tva:0.18,is_taux:0.30,imf_taux:0.005,inflation:0.03,reportDef_horizon:3,decouvert_taux:0.12,
+    revenus:[{name:"Produit / service 1",tpl:"quantite",rows:JSON.parse(JSON.stringify(M_PRESETS.quantite.rows)),prix:{val:1000,unit:"FCFA",g:2},cout:{m:"pct",val:40}}],
+    chargesFixes:[{name:"Salaires",montant:20000000,personnel:true,g:3},{name:"Loyer & charges",montant:8000000,g:2}],
+    capex:[{name:"Investissement initial",montant:50000000,duree:5,annee:0}],
+    financement:{capital:20000000,apports:0,subvention:0,emprunt:{montant:30000000,taux:0.08,duree:5}},
+    bfr:{dso:30,dio:45,dpo:30}, valo:modeleValoDefaut()};
+}
+function assurerModele(){ if(!DOSSIER.modele)DOSSIER.modele=modeleParDefaut(); if(!DOSSIER.modele.valo)DOSSIER.modele.valo=modeleValoDefaut(); return DOSSIER.modele; }
+/* ETATS synthétique (année de référence = dernière projetée) pour la valo et les lecteurs de ETATS */
+function etatsFromModele(P){
+  var aL=P.annees[P.annees.length-1], v={};
+  var s=function(k,x){v[k]={};v[k][aL]=x;};
+  s('CA',P.pl.CA[aL]);s('EBITDA',P.pl.EBITDA[aL]);s('EBIT',P.pl.EBIT[aL]);s('RESULTAT_NET',P.pl.RN[aL]);s('MARGE_BRUTE',P.pl.MARGE_BRUTE[aL]);
+  s('CAPITAUX_PROPRES',P.bs.CP[aL]);s('DETTES_FINANCIERES',-P.bs.DETTE[aL]);s('TRESORERIE_NETTE',P.bs.TRESO[aL]);s('PROVISIONS_RC',-P.bs.PROVISIONS[aL]);
+  s('RESULTAT_FIN',P.pl.RESULTAT_FIN[aL]);s('BFR',P.bs.BFR[aL]);s('ACTIF_NET',P.bs.CP[aL]);
+  ['COUTS_DIRECTS','AUTRES_PROD','OPEX','CHARGES_PERSONNEL','DA','IMPOTS','ACTIFS_IMMOBILISES','AMORT_DEPREC','CLIENTS','STOCKS','FOURNISSEURS','AUTRES_CREANCES','AVANCES_FRS','HAO_ACTIF','HAO_PASSIF','DETTES_SOCIALES','DETTES_FISCALES','AUTRES_DETTES','CLIENTS_AVANCES','TRESO_ACTIF','TRESO_PASSIF','CAPITAL','PRIMES_RESERVES','RAN_RESULTATS_ANT','SUBV_PROV_REGL','RESULTAT_AVANT_IMPOT','PRODUITS_FIN','FRAIS_FIN'].forEach(function(k){if(!v[k])s(k,0);});
+  return {annees:[aL],v:v,tft:{}};
+}
+function modeleMode(){return !!(DOSSIER&&DOSSIER.sansHistorique);}
+
+/* ---- handlers ---- */
+function mTab(t){SOUS_MODELE=t;rendre();}
+function mSet(path,val,num){var M=assurerModele();var p=path.split('.');var o=M;for(var i=0;i<p.length-1;i++)o=o[p[i]];var k=p[p.length-1];o[k]=num?(numFR(val)===null?o[k]:numFR(val)):val;sauverDossier();rendre();}
+function mAddLigne(){var M=assurerModele();M.revenus.push({name:"Nouvelle ligne",tpl:"quantite",rows:JSON.parse(JSON.stringify(M_PRESETS.quantite.rows)),prix:{val:1000,unit:"FCFA",g:2},cout:{m:"pct",val:40}});sauverDossier();rendre();}
+function mDelLigne(li){var M=assurerModele();M.revenus.splice(li,1);sauverDossier();rendre();}
+function mLigneNom(li,val){assurerModele().revenus[li].name=val;sauverDossier();rendre();}
+function mTpl(li,tpl){var L=assurerModele().revenus[li];L.tpl=tpl;L.rows=JSON.parse(JSON.stringify(M_PRESETS[tpl].rows));sauverDossier();rendre();}
+function mAddInd(li){assurerModele().revenus[li].rows.push({op:'x',name:'',val:1,unit:'',g:0});sauverDossier();rendre();}
+function mDelInd(li,ri){var L=assurerModele().revenus[li];if(L.rows.length>1)L.rows.splice(ri,1);sauverDossier();rendre();}
+function mIndOp(li,ri){var r=assurerModele().revenus[li].rows[ri];r.op=r.op==='d'?'x':'d';sauverDossier();rendre();}
+function mInd(li,ri,champ,val){var r=assurerModele().revenus[li].rows[ri];if(champ==='name'||champ==='unit')r[champ]=val;else{var x=numFR(val);if(x!==null)r[champ]=x;}sauverDossier();rendre();}
+function mIndMode(li,ri,mode){var r=assurerModele().revenus[li].rows[ri];if(mode==='yearly'&&r.mode!=='yearly'){r.mode='yearly';r.vals=[];var N=assurerModele().nb||5;for(var k=0;k<N;k++)r.vals.push(Math.round((r.val||0)*Math.pow(1+(r.g||0)/100,k)*1000)/1000);}else if(mode!=='yearly'){r.mode='grow';if(r.vals&&r.vals.length)r.val=r.vals[0];}sauverDossier();rendre();}
+function mIndYv(li,ri,k,val){var r=assurerModele().revenus[li].rows[ri];if(!r.vals)r.vals=[];var x=numFR(val);if(x!==null)r.vals[k]=x;sauverDossier();rendre();}
+function mPrix(li,champ,val){var P=assurerModele().revenus[li].prix;if(champ==='unit')P.unit=val;else{var x=numFR(val);if(x!==null)P[champ]=x;}sauverDossier();rendre();}
+function mCoutM(li,m){assurerModele().revenus[li].cout.m=m;sauverDossier();rendre();}
+function mCoutV(li,val){var x=numFR(val);if(x!==null)assurerModele().revenus[li].cout.val=x;sauverDossier();rendre();}
+function mAddFixe(){assurerModele().chargesFixes.push({name:"Charge fixe",montant:0,g:0});sauverDossier();rendre();}
+function mDelFixe(i){assurerModele().chargesFixes.splice(i,1);sauverDossier();rendre();}
+function mFixe(i,champ,val){var c=assurerModele().chargesFixes[i];if(champ==='name')c.name=val;else if(champ==='personnel')c.personnel=val;else{var x=numFR(val);if(x!==null)c[champ]=x;}sauverDossier();rendre();}
+function mAddCapex(){assurerModele().capex.push({name:"Investissement",montant:0,duree:5,annee:0});sauverDossier();rendre();}
+function mDelCapex(i){assurerModele().capex.splice(i,1);sauverDossier();rendre();}
+function mCapex(i,champ,val){var c=assurerModele().capex[i];if(champ==='name')c.name=val;else{var x=numFR(val);if(x!==null)c[champ]=x;}sauverDossier();rendre();}
+
+/* ---- rendu ---- */
+function mCarteRevenu(L,li){
+  var N=assurerModele().nb||5;
+  var opts=M_GROUPS.map(function(g){return '<optgroup label="'+g[0]+'">'+g[1].map(function(k){return '<option value="'+k+'"'+(k===L.tpl?' selected':'')+'>'+M_PRESETS[k].lab+'</option>';}).join('')+'</optgroup>';}).join('');
+  var rows=(L.rows||[]).map(function(r,ri){
+    var vals;
+    if(r.mode==='yearly'){var cells='';for(var k=0;k<N;k++){var yv=(r.vals&&r.vals[k]!=null)?r.vals[k]:0;cells+='<span class="mind-yv"><label>An '+(k+1)+'</label><input class="nin" value="'+yv+'" onchange="mIndYv('+li+','+ri+','+k+',this.value)"></span>';}vals='<div class="mind-vals">'+cells+'</div>';}
+    else vals='<div class="mind-vals"><span class="mind-f"><label>Valeur an 1</label><input class="nin" value="'+r.val+'" onchange="mInd('+li+','+ri+',\'val\',this.value)"></span><span class="mind-f"><label>Croissance %/an</label><input class="nin" value="'+r.g+'" onchange="mInd('+li+','+ri+',\'g\',this.value)"></span></div>';
+    return '<div class="mind">'
+      +'<div class="mind-top"><button class="btn sm" title="× ou ÷" onclick="mIndOp('+li+','+ri+')" style="min-width:34px;font-weight:700">'+(r.op==='d'?'÷':'×')+'</button>'
+      +'<input class="sel" style="flex:1;min-width:130px" placeholder="Nom de l\'inducteur" value="'+esc(r.name)+'" onchange="mInd('+li+','+ri+',\'name\',this.value)">'
+      +'<input class="nin" style="width:78px" placeholder="unité" value="'+esc(r.unit)+'" onchange="mInd('+li+','+ri+',\'unit\',this.value)">'
+      +'<span class="segvue"><button class="'+(r.mode==='yearly'?'':'on')+'" onclick="mIndMode('+li+','+ri+',\'grow\')">Croissance</button><button class="'+(r.mode==='yearly'?'on':'')+'" onclick="mIndMode('+li+','+ri+',\'yearly\')">Par année</button></span>'
+      +'<button class="btn sm" title="Retirer" onclick="mDelInd('+li+','+ri+')">✕</button></div>'
+      +vals+'</div>';
+  }).join('');
+  var vol=volInducteurs(L.rows,0), prix=(L.prix&&L.prix.val)||0, ca=vol*prix;
+  return '<div class="card" style="padding:0">'
+    +'<div class="bande" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><input class="sel" style="flex:1;min-width:160px;font-weight:700" value="'+esc(L.name)+'" onchange="mLigneNom('+li+',this.value)">'
+    +'<span class="mut">Modèle</span><select class="sel" style="width:auto" onchange="mTpl('+li+',this.value)">'+opts+'</select>'
+    +'<button class="btn sm" title="Supprimer la ligne" onclick="mDelLigne('+li+')">Supprimer</button></div>'
+    +'<div style="padding:12px 14px">'
+    +'<div class="mut" style="text-transform:uppercase;letter-spacing:.5px;font-size:11px;font-weight:700;margin-bottom:8px">Inducteurs de volume (× ou ÷ · unité % = ratio)</div>'
+    +rows
+    +'<button class="btn sm" style="margin-top:2px" onclick="mAddInd('+li+')">+ inducteur</button>'
+    +'<div class="mind-price"><span class="x">= Volume an 1 : <b>'+fmt(vol/uni().f)+'</b></span></div>'
+    +'<div class="mind-price"><span class="x">×</span> <span class="mut">Prix an 1</span> <input class="nin" value="'+prix+'" onchange="mPrix('+li+',\'val\',this.value)"><input class="nin" style="width:70px" value="'+esc(L.prix.unit||'')+'" onchange="mPrix('+li+',\'unit\',this.value)">'
+    +'<span class="mut">croissance</span> <input class="nin" style="width:60px" value="'+(L.prix.g||0)+'" onchange="mPrix('+li+',\'g\',this.value)"> %'
+    +'<span style="margin-left:auto;font-weight:700;color:#16904E">CA an 1 : '+fmt(ca/uni().f)+' '+uni().suf+'</span></div>'
+    +'<div class="mind-price" style="border-top:1px dashed #e3e9f2;padding-top:10px;margin-top:6px"><span class="mut">Coûts directs</span>'
+    +'<span class="segvue"><button class="'+(L.cout.m==='pct'?'on':'')+'" onclick="mCoutM('+li+',\'pct\')">% du CA</button><button class="'+(L.cout.m==='unit'?'on':'')+'" onclick="mCoutM('+li+',\'unit\')">Coût unitaire</button></span>'
+    +'<input class="nin" value="'+L.cout.val+'" onchange="mCoutV('+li+',this.value)"> <span class="mut">'+(L.cout.m==='pct'?'% du CA':'par unité de volume')+'</span></div>'
+    +'</div></div>';
+}
+function vueModele(){
+  var M=assurerModele();
+  var P=projeterModele(M), A=P.annees, a0=A[0], aL=A[A.length-1], u=uni();
+  var tabs=[["rev","Revenus"],["cout","Coûts directs"],["fixe","Charges fixes"],["capex","Investissements"],["fin","Financement"],["bfr","BFR"],["param","Paramètres"],["res","Résultats"]];
+  var barre=tabs.map(function(t){return '<button class="btn '+(SOUS_MODELE===t[0]?"primary":"")+'" onclick="mTab(\''+t[0]+'\')">'+t[1]+'</button>';}).join(" ");
+  var rnCum=A.reduce(function(s,a){return s+P.pl.RN[a];},0);
+  var kpis='<div class="kpis">'
+    +kpiCard("CA fin de plan (An "+A.length+")",fmt(P.pl.CA[aL]/u.f)+" "+u.suf,"","","chart","#224289")
+    +kpiCard("EBITDA fin de plan",fmt(P.pl.EBITDA[aL]/u.f)+" "+u.suf,(P.pl.CA[aL]?Math.round(P.pl.EBITDA[aL]/P.pl.CA[aL]*100):0)+"% du CA","","coins","#FA6706")
+    +kpiCard("Résultat net cumulé",fmt(rnCum/u.f)+" "+u.suf,"sur "+A.length+" ans","","file","#172554")
+    +kpiCard("Trésorerie fin de plan",fmt(P.bs.TRESO[aL]/u.f)+" "+u.suf,P.bs.TRESO[aL]<0?"négative":"",P.bs.TRESO[aL]<0?"down":"up","wallet","#16904E")
+    +'</div>';
+  var corps="";
+  if(SOUS_MODELE==="rev"){
+    corps='<div class="mut" style="margin-bottom:10px">Chaque ligne construit son volume avec ses propres inducteurs (× ou ÷), puis × prix = CA. Les modèles sont des points de départ modifiables.</div>'
+      +M.revenus.map(function(L,li){return mCarteRevenu(L,li);}).join("")
+      +'<button class="btn" onclick="mAddLigne()">+ Ajouter une ligne de revenus</button>';
+  } else if(SOUS_MODELE==="cout"){
+    corps='<div class="card"><div class="sec-titre" style="margin-top:0">Coûts directs</div><div class="mut">Réglés par ligne (onglet Revenus) : % du CA ou coût unitaire × volume. Inflation partagée des coûts unitaires ci-dessous.</div>'
+      +'<div class="hyp-l" style="margin-top:10px"><span>Inflation des coûts unitaires</span><input class="sel" style="width:46%" value="'+((M.inflation||0)*100)+'" onchange="mSet(\'inflation\',(numFR(this.value)||0)/100)"> %</div></div>';
+  } else if(SOUS_MODELE==="fixe"){
+    corps='<div class="card" style="padding:0"><div class="bande">Charges fixes (montant annuel)</div><div class="tscroll"><table class="tb etat"><tr><th>Poste</th><th class="num">Montant / an</th><th class="num">Croissance %/an</th><th>Personnel ?</th><th></th></tr>'
+      +M.chargesFixes.map(function(c,i){return '<tr><td><input class="sel" value="'+esc(c.name)+'" onchange="mFixe('+i+',\'name\',this.value)"></td>'
+        +'<td class="num"><input class="nin" value="'+(c.montant||0)+'" onchange="mFixe('+i+',\'montant\',this.value)"></td>'
+        +'<td class="num"><input class="nin" style="width:60px" value="'+(c.g||0)+'" onchange="mFixe('+i+',\'g\',this.value)"></td>'
+        +'<td><input type="checkbox" '+(c.personnel?'checked':'')+' onchange="mFixe('+i+',\'personnel\',this.checked)"></td>'
+        +'<td><button class="btn sm" onclick="mDelFixe('+i+')">✕</button></td></tr>';}).join("")
+      +'</table></div><div style="padding:10px 14px"><button class="btn sm" onclick="mAddFixe()">+ Ajouter une charge</button></div></div>';
+  } else if(SOUS_MODELE==="capex"){
+    corps='<div class="card" style="padding:0"><div class="bande">Investissements (CAPEX)</div><div class="tscroll"><table class="tb etat"><tr><th>Poste</th><th class="num">Montant</th><th class="num">Durée (ans)</th><th class="num">Année (0 = départ)</th><th></th></tr>'
+      +M.capex.map(function(c,i){return '<tr><td><input class="sel" value="'+esc(c.name||'')+'" onchange="mCapex('+i+',\'name\',this.value)"></td>'
+        +'<td class="num"><input class="nin" value="'+(c.montant||0)+'" onchange="mCapex('+i+',\'montant\',this.value)"></td>'
+        +'<td class="num"><input class="nin" style="width:60px" value="'+(c.duree||5)+'" onchange="mCapex('+i+',\'duree\',this.value)"></td>'
+        +'<td class="num"><input class="nin" style="width:60px" value="'+(c.annee||0)+'" onchange="mCapex('+i+',\'annee\',this.value)"></td>'
+        +'<td><button class="btn sm" onclick="mDelCapex('+i+')">✕</button></td></tr>';}).join("")
+      +'</table></div><div style="padding:10px 14px"><button class="btn sm" onclick="mAddCapex()">+ Ajouter un investissement</button><div class="mut" style="margin-top:6px">Amortissement linéaire par poste sur sa durée. Année 0 = investissement initial (bilan d\'ouverture).</div></div></div>';
+  } else if(SOUS_MODELE==="fin"){
+    var f=M.financement, e=f.emprunt||{};
+    corps='<div class="card"><div class="sec-titre" style="margin-top:0">Financement — bilan d\'ouverture</div>'
+      +'<div class="hyp-l"><span>Capital social</span><input class="sel" style="width:46%" value="'+(f.capital||0)+'" onchange="mSet(\'financement.capital\',this.value,1)"></div>'
+      +'<div class="hyp-l"><span>Apports en compte courant</span><input class="sel" style="width:46%" value="'+(f.apports||0)+'" onchange="mSet(\'financement.apports\',this.value,1)"></div>'
+      +'<div class="hyp-l"><span>Subvention</span><input class="sel" style="width:46%" value="'+(f.subvention||0)+'" onchange="mSet(\'financement.subvention\',this.value,1)"></div>'
+      +'<div class="hyp-l"><span>Emprunt — montant</span><input class="sel" style="width:46%" value="'+(e.montant||0)+'" onchange="mSet(\'financement.emprunt.montant\',this.value,1)"></div>'
+      +'<div class="hyp-l"><span>Emprunt — taux</span><input class="sel" style="width:46%" value="'+((e.taux||0)*100)+'" onchange="mSet(\'financement.emprunt.taux\',(numFR(this.value)||0)/100)"> %</div>'
+      +'<div class="hyp-l"><span>Emprunt — durée</span><input class="sel" style="width:46%" value="'+(e.duree||5)+'" onchange="mSet(\'financement.emprunt.duree\',this.value,1)"> ans</div>'
+      +'<div class="mut" style="margin-top:8px">Trésorerie d\'ouverture = capital + apports + subvention + emprunt − CAPEX initial = <b>'+fmt(P.ouverture.treso/u.f)+' '+u.suf+'</b>.</div></div>';
+  } else if(SOUS_MODELE==="bfr"){
+    var b=M.bfr;
+    corps='<div class="card"><div class="sec-titre" style="margin-top:0">Besoin en fonds de roulement (en jours)</div>'
+      +'<div class="hyp-l"><span>Délai clients (DSO)</span><input class="sel" style="width:46%" value="'+(b.dso||0)+'" onchange="mSet(\'bfr.dso\',this.value,1)"> j</div>'
+      +'<div class="hyp-l"><span>Rotation stocks (DIO)</span><input class="sel" style="width:46%" value="'+(b.dio||0)+'" onchange="mSet(\'bfr.dio\',this.value,1)"> j</div>'
+      +'<div class="hyp-l"><span>Délai fournisseurs (DPO)</span><input class="sel" style="width:46%" value="'+(b.dpo||0)+'" onchange="mSet(\'bfr.dpo\',this.value,1)"> j</div></div>';
+  } else if(SOUS_MODELE==="param"){
+    corps='<div class="card"><div class="sec-titre" style="margin-top:0">Paramètres du modèle</div>'
+      +'<div class="hyp-l"><span>Année de départ</span><input class="sel" style="width:46%" value="'+(M.anneeDepart||2025)+'" onchange="mSet(\'anneeDepart\',this.value,1)"></div>'
+      +'<div class="hyp-l"><span>Horizon (années)</span><input class="sel" style="width:46%" value="'+(M.nb||5)+'" onchange="mSet(\'nb\',this.value,1)"></div>'
+      +'<div class="hyp-l"><span>TVA</span><input class="sel" style="width:46%" value="'+((M.tva||0)*100)+'" onchange="mSet(\'tva\',(numFR(this.value)||0)/100)"> %</div>'
+      +'<div class="hyp-l"><span>Impôt sur les sociétés</span><input class="sel" style="width:46%" value="'+((M.is_taux||0)*100)+'" onchange="mSet(\'is_taux\',(numFR(this.value)||0)/100)"> %</div>'
+      +'<div class="hyp-l"><span>Impôt minimum forfaitaire (% du CA)</span><input class="sel" style="width:46%" value="'+((M.imf_taux||0)*100)+'" onchange="mSet(\'imf_taux\',(numFR(this.value)||0)/100)"> %</div></div>';
+  } else {
+    corps=mVueResultats(P,u);
+  }
+  return '<h1>Business plan — modèle <span class="chip" style="background:#fff4e8;color:#b45608">sans balance</span></h1>'
+    +'<div class="mut" style="margin-bottom:12px">Le compte de résultat est construit à partir d\'inducteurs, puis le moteur enchaîne bilan bouclé, trésorerie et valorisation — comme un dossier avec historique.</div>'
+    +kpis
+    +'<div class="row" style="margin:14px 0 12px;flex-wrap:wrap">'+barre+'</div>'
+    +corps;
+}
+function mVueResultats(P,u){
+  var A=P.annees, fyp=A.map(function(a){return "FY"+String(a).slice(-2)+"p";});
+  var val=null; try{ val=valoriserBP(etatsFromModele(P),{is_taux:assurerModele().is_taux,valo:assurerModele().valo},P); }catch(e){}
+  var lignes=[["CA","Chiffre d'affaires"],["COUTS_DIRECTS","Coûts directs"],["MARGE_BRUTE","Marge brute"],["OPEX_TOTAL","Frais généraux"],["CHARGES_PERSONNEL","Charges de personnel"],["EBITDA","EBITDA"],["DA","Dotations"],["EBIT","EBIT"],["RESULTAT_FIN","Résultat financier"],["EBT","Résultat avant impôt"],["IS","Impôt"],["RN","Résultat net"]];
+  var pl='<div class="card" style="padding:0"><div class="bande">Compte de résultat prévisionnel</div><div class="tscroll"><table class="tb etat"><tr><th>'+u.lib+'</th>'+fyp.map(function(f){return '<th class="num">'+f+'</th>';}).join("")+'</tr>'
+    +lignes.map(function(d){var st=(d[0]==="EBITDA"||d[0]==="MARGE_BRUTE"||d[0]==="EBIT"||d[0]==="RN"||d[0]==="EBT")?' class="total"':'';return '<tr'+st+'><td>'+d[1]+'</td>'+A.map(function(a){return '<td class="num">'+fmt(P.pl[d[0]][a]/u.f)+'</td>';}).join("")+'</tr>';}).join("")
+    +'</table></div></div>';
+  var bsL=[["IMMO_NET","Immobilisations nettes"],["BFR","Besoin en fonds de roulement"],["TRESO","Trésorerie nette"],["CP","Capitaux propres"],["DETTE","Dettes financières"]];
+  var bs='<div class="card" style="padding:0;margin-top:14px"><div class="bande">Bilan prévisionnel (grandes masses)</div><div class="tscroll"><table class="tb etat"><tr><th>'+u.lib+'</th>'+fyp.map(function(f){return '<th class="num">'+f+'</th>';}).join("")+'</tr>'
+    +bsL.map(function(d){return '<tr><td>'+d[1]+'</td>'+A.map(function(a){return '<td class="num">'+fmt(P.bs[d[0]][a]/u.f)+'</td>';}).join("")+'</tr>';}).join("")
+    +'</table></div></div>';
+  var valo="";
+  if(val){valo='<div class="kpis" style="margin-top:14px">'
+    +kpiCard("Valeur des fonds propres (retenue)",fmt(val.fourchette.retenue/u.f)+" "+u.suf,"multi-méthodes","","wallet","#16904E")
+    +kpiCard("Fonds propres — DCF",fmt(val.equityDcf/u.f)+" "+u.suf,"WACC "+Math.round(val.wacc*100)+" %","","coins","#FA6706")
+    +kpiCard("Valeur d'entreprise (EV)",fmt(val.ev/u.f)+" "+u.suf,"","","chart","#224289")
+    +'</div>';}
+  return pl+bs+valo+'<div class="mut" style="margin-top:10px">Ces résultats alimentent les mêmes exports (PPT/Excel) qu\'un dossier avec historique.</div>';
+}
 function resetBP(){if(!confirm("Réinitialiser toutes les hypothèses depuis l'historique ?"))return;
   DOSSIER.bp=null;assurerBP();sauverDossier();rendre();}
 function hBP(k,val,div){const H=assurerBP();const x=numFR(val);

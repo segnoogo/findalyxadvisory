@@ -79,6 +79,9 @@ const esc=s=>String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"
 /* ---------- calcul ---------- */
 function recalculer(){
   if(!DOSSIER)  {ETATS=null;return;}
+  if(DOSSIER.sansHistorique){ /* BP sans balance : ETATS synthétique dérivé du modèle d'inducteurs */
+    try{ETATS=etatsFromModele(projeterModele(assurerModele()));}catch(e){ETATS=null;}
+    return; }
   if(!Array.isArray(DOSSIER.balances)) DOSSIER.balances=[];   /* dossier legacy/corrompu : pas d'écran blanc */
   if(!DOSSIER.balances.length){ETATS=null;return;}
   const tb=appliquerMapping(construireTbagr(DOSSIER.balances),DOSSIER.overrides||{});
@@ -101,7 +104,11 @@ const NAV=[
 ];
 function icone(d){return `<span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="${d}"/></svg></span>`;}
 function shell(){
-  const items=NAV.map(n=>`<div class="item ${VUE===n.id?"active":""}" onclick="aller('${n.id}')">${icone(n.ic)}${n.lab}</div>`).join("");
+  /* en mode « sans balance », les vues d'analyse historique n'ont pas de sens : nav réduite */
+  const navList=(DOSSIER&&DOSSIER.sansHistorique)
+    ?[NAV[0],{id:"modele",lab:"Business plan",ic:NAV[6].ic},NAV[8]]
+    :NAV;
+  const items=navList.map(n=>`<div class="item ${VUE===n.id?"active":""}" onclick="aller('${n.id}')">${icone(n.ic)}${n.lab}</div>`).join("");
   document.getElementById("app").innerHTML=`
   <div class="side">
     <div class="logo"><img class="brand-logo" src="${LOGO_FINDALYX}" alt="Findalyx">
@@ -115,7 +122,7 @@ function shell(){
   <div class="main">
     <div class="top">
       <div><div class="name">${DOSSIER?esc(DOSSIER.societe):"Aucun dossier ouvert"}</div>
-      <div class="sub">${DOSSIER&&DOSSIER.balances.length?DOSSIER.balances.map(b=>"FY"+b.annee).join(" · ")+" — montants en "+uni().lib:"créez ou ouvrez un dossier"}</div></div>
+      <div class="sub">${DOSSIER&&DOSSIER.sansHistorique?"Business plan sans historique — montants en "+uni().lib:(DOSSIER&&DOSSIER.balances.length?DOSSIER.balances.map(b=>"FY"+b.annee).join(" · ")+" — montants en "+uni().lib:"créez ou ouvrez un dossier")}</div></div>
       <div class="right">${barreDroite()}</div>
     </div>
     <div class="view" id="vue"></div>
@@ -295,6 +302,7 @@ function rendre(){
   else if(VUE==="licence") el.innerHTML=vueLicence();
   else if(VUE==="exports") el.innerHTML=vueExports();
   else if(VUE==="wizard") el.innerHTML=vueWizard();
+  else if(VUE==="modele") el.innerHTML=vueModele();
   document.querySelectorAll("#vue select[data-compte]").forEach(s=>{s.value=s.dataset.val;});
 }
 
@@ -369,13 +377,12 @@ function vueAccueil(){
   const l=chargerDossiers();
   const cartes=l.map(d=>`
     <div class="card doss">
-      <div><b>${esc(d.societe)}</b><div class="mut">${d.balances.length} balance(s)
-      ${d.balances.length?"— FY"+Math.min(...d.balances.map(b=>b.annee))+" à FY"+Math.max(...d.balances.map(b=>b.annee)):""}</div></div>
+      <div><b>${esc(d.societe)}</b><div class="mut">${d.sansHistorique?"Business plan — sans balance":(d.balances.length+" balance(s)"+(d.balances.length?" — FY"+Math.min(...d.balances.map(b=>b.annee))+" à FY"+Math.max(...d.balances.map(b=>b.annee)):""))}</div></div>
       <div><button class="btn primary sm" onclick="ouvrirDossier('${d.id}')">Ouvrir</button>
       <button class="btn sm" onclick="supprimerDossier('${d.id}')">Supprimer</button></div>
     </div>`).join("");
   let synth="";
-  if(DOSSIER&&ETATS){
+  if(DOSSIER&&ETATS&&!DOSSIER.sansHistorique){
     const AN=ETATS.annees,a1=AN[AN.length-1],a0=AN.length>1?AN[AN.length-2]:null,v=ETATS.v;
     const ca1=v.CA[a1];
     const ctl=controlesDossier().map(c=>`<div class="ctl"><div>${c.lib}
@@ -405,14 +412,30 @@ function vueAccueil(){
     <button class="btn sm primary" style="margin-left:auto" onclick="ouvrirWizard()">+ Nouvelle société</button>
   </div>`;
   const creation=`<div class="card">
-    <b>Nouveau dossier</b>
-    <div class="mut" style="margin:6px 0 12px">Assistant guidé en 4 étapes : secteur de comparaison, informations de la société, balances, puis lancement de l'analyse.</div>
-    <button class="btn primary" onclick="ouvrirWizard()">Créer une société (assistant)</button>
+    <b>Dossier avec comptabilité</b>
+    <div class="mut" style="margin:6px 0 12px">Assistant guidé : secteur, informations, balances, puis lancement de l'analyse (due diligence, business plan, valorisation).</div>
+    <button class="btn primary" onclick="ouvrirWizard()">Créer avec des balances (assistant)</button>
+  </div>`;
+  const creationModele=`<div class="card">
+    <b>Business plan sans historique</b>
+    <div class="mut" style="margin:6px 0 12px">Pas de comptabilité à importer ? Construisez le plan à partir d'inducteurs (volumes, prix, coûts) — idéal pour une startup ou un projet nouveau.</div>
+    <div class="row" style="gap:8px"><input id="nouvNomModele" class="sel" placeholder="Nom de la société" style="flex:1">
+    <button class="btn primary" onclick="creerModele()">Créer (sans balance)</button></div>
   </div>`;
   return `<h1>Accueil</h1>
   ${synth}
   ${barre}
-  ${ouverte?creation+(cartes||'<div class="mut" style="padding:14px 4px">Aucun dossier. Créez le premier ci-dessus.</div>'):""}`;
+  ${ouverte?`<div class="deux">${creation}${creationModele}</div>`+(cartes||'<div class="mut" style="padding:14px 4px">Aucun dossier. Créez le premier ci-dessus.</div>'):""}`;
+}
+async function creerModele(){
+  const el=document.getElementById("nouvNomModele");
+  const nom=el?el.value.trim():"";
+  if(!nom){toast("Entrez un nom de société");return;}
+  const id="d"+Date.now();
+  const q=await licAjouterSociete(id,nom);
+  if(!q.ok){toast("Quota atteint : votre licence permet "+q.max+" société(s) ("+q.used+" utilisées).");return;}
+  DOSSIER={id:id,societe:nom,secteur:"Général",balances:[],overrides:{},sansHistorique:true,modele:modeleParDefaut()};
+  recalculer();sauverDossier();localStorage.setItem(ACTIF_KEY,DOSSIER.id);SOUS_MODELE="rev";VUE="modele";shell();
 }
 async function creerDossier(){
   const nom=document.getElementById("nouvNom").value.trim();
@@ -433,7 +456,9 @@ function ouvrirDossier(id,garderVue){
   DOSSIER=d;
   localStorage.setItem(ACTIF_KEY,id);
   recalculer();
-  if(!garderVue)VUE=DOSSIER.balances.length?"etats":"import";
+  /* aligner la vue sur le type de dossier (évite d'ouvrir « modèle » sur un dossier avec balances et vice-versa) */
+  if(!garderVue || (DOSSIER.sansHistorique&&VUE!=="modele"&&VUE!=="params") || (!DOSSIER.sansHistorique&&VUE==="modele"))
+    VUE=DOSSIER.sansHistorique?"modele":(DOSSIER.balances.length?"etats":"import");
   shell();
 }
 function supprimerDossier(id){
