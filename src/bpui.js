@@ -290,7 +290,7 @@ function vueModele(){
       +'<div class="hyp-l"><span>Impôt minimum forfaitaire (% du CA)</span><input class="sel" style="width:46%" value="'+((M.imf_taux||0)*100)+'" onchange="mSet(\'imf_taux\',(numFR(this.value)||0)/100)"> %</div></div>';
   } else if(SOUS_MODELE==="pl"){ corps=vueBPPl(P);
   } else if(SOUS_MODELE==="bs"){ corps=vueBPBs(P);
-  } else if(SOUS_MODELE==="tft"){ corps=vueBPTft(P);
+  } else if(SOUS_MODELE==="tft"){ corps=vueModeleTft(P);
   } else if(SOUS_MODELE==="dette"){ corps=vueBPDette(P);
   } else if(SOUS_MODELE==="analyse"){ corps=vueModeleAnalyse(P);
   } else if(SOUS_MODELE==="valo"){
@@ -625,6 +625,23 @@ function vueBPTft(P){
     <div class="bande">${esc(DOSSIER.societe.toUpperCase())} — TFT prévisionnel (modèle officiel) · scénario ${P.scenario}</div>
     <div class="tscroll"><table class="tb etat"><tr><th>${uni().lib}</th>
     ${AP.map(a=>`<th class="num">FY${String(a).slice(-2)}p</th>`).join("")}</tr>${lignes}</table></div></div>`;
+}
+/* TFT du modèle avec une colonne « Ouverture » (année 0) : mise en place — capital / emprunt /
+   subvention levés et investissements initiaux (sinon l'investissement de départ, logé au bilan
+   d'ouverture, n'apparaît dans aucun flux). Clôture d'ouverture = ouverture de la 1ʳᵉ année. */
+function vueModeleTft(P){
+  const AP=P.annees, ouv=P.ouvertureTFT||{}, oy=(P.ouverture?P.ouverture.annee:(AP[0]-1));
+  const lignes=TFT_DEF.map(([code,lib,st])=>{
+    if(!code) return `<tr class="sec"><td colspan="${AP.length+2}">${lib}</td></tr>`;
+    return `<tr class="${st||""}"><td>${lib}</td>`
+      +`<td class="num" style="opacity:.85">${fmt(ouv[code]||0)}</td>`
+      +AP.map(a=>`<td class="num">${fmt(P.tft[a][code])}</td>`).join("")+`</tr>`;
+  }).join("");
+  return `<div class="card" style="padding:0">
+    <div class="bande">${esc(DOSSIER.societe.toUpperCase())} — TFT prévisionnel (modèle officiel) · scénario ${P.scenario}</div>
+    <div class="tscroll"><table class="tb etat"><tr><th>${uni().lib}</th>
+    <th class="num" style="opacity:.85">Ouverture</th>${AP.map(a=>`<th class="num">FY${String(a).slice(-2)}p</th>`).join("")}</tr>${lignes}</table></div>
+    <div class="mut" style="margin:8px 12px">Colonne « Ouverture » (année ${oy}) : mise en place initiale — apports en capital, emprunt et subvention (sources) et investissements de départ (emplois). La trésorerie de clôture de l'ouverture devient la trésorerie d'ouverture de la première année projetée. Les investissements réalisés <b>pendant</b> le plan (année ≥ 1) apparaissent dans la colonne de l'année concernée.</div></div>`;
 }
 function vueBPDette(P){
   const AP=P.annees;

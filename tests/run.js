@@ -144,6 +144,10 @@ near(Pa.financement.besoin, Pa.financement.capexInit + Pa.financement.bfrDemarra
 near(Pa.financement.capital, Pa.financement.besoin*0.4, 0.001, 'financement auto : fonds propres = besoin × part FP');
 near(Pa.financement.capital + Pa.financement.dette, Pa.financement.besoin, 0.001, 'financement auto : fonds propres + dette = besoin');
 ok(Math.abs((Pa.ouverture.immoNet + Pa.ouverture.bfr + Pa.ouverture.treso) - (Pa.ouverture.cp + Pa.ouverture.dette)) < 0.001, 'bilan d\'ouverture équilibré (financement auto)');
+// TFT d'ouverture : l'investissement initial (année 0) apparaît dans les flux d'investissement d'ouverture
+near(Pm.ouvertureTFT.ACQUIS_IMMO, -Pm.ouverture.immoNet, 0.001, 'TFT ouverture : acquisitions d\'immobilisations = − CAPEX initial');
+near(Pm.ouvertureTFT.ZG, Pm.tft[Pm.annees[0]].ZA, 0.001, 'TFT ouverture : trésorerie de clôture d\'ouverture = ouverture de l\'An 1');
+near(Pm.ouvertureTFT.ZF, Pm.ouvertureTFT.ZB + Pm.ouvertureTFT.ZC + Pm.ouvertureTFT.ZFIN, 0.001, 'TFT ouverture : variation = opérationnel + investissement + financement');
 
 console.log(`\n${fail ? '❌ ÉCHEC' : '✅ SUCCÈS'} — ${pass} assertions passées, ${fail} échec(s).`);
 process.exit(fail ? 1 : 0);

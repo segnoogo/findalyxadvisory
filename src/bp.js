@@ -421,7 +421,14 @@ function projeterModele(M,scenario){
   /* bilan d'ouverture exposé (année 0) pour l'affichage éventuel */
   P.ouverture={annee:startY-1,cp:cp0,capital:(fin.mode==="auto"?besoin*partFP:((+fin.capital||0)+(+fin.apports||0))/SC),subvention:(+fin.subvention||0)/SC,dette:emp,immoNet:capexInit,treso:treso0,bfr:0};
   /* synthèse du financement (pour l'onglet Financement) — valeurs en base KFCFA */
-  P.financement={mode:(fin.mode||"manuel"),partFP:partFP,moisBFR:moisBFR,capexInit:capexInit,bfrDemarrage:bfrDem,besoin:besoin,capital:cp0-((+fin.subvention||0)/SC),subvention:(+fin.subvention||0)/SC,dette:emp,taux:dTaux,duree:dDuree};
+  var subvOuv=(+fin.subvention||0)/SC, capOuv=cp0-subvOuv;
+  P.financement={mode:(fin.mode||"manuel"),partFP:partFP,moisBFR:moisBFR,capexInit:capexInit,bfrDemarrage:bfrDem,besoin:besoin,capital:capOuv,subvention:subvOuv,dette:emp,taux:dTaux,duree:dDuree};
+  /* TFT d'OUVERTURE (année 0) : mise en place — sources (capital, emprunt, subvention) & emplois
+     (investissements initiaux) → trésorerie de départ. Clôture d'ouverture = ouverture de l'An 1. */
+  P.ouvertureTFT={ZA:0,FA:0,FB:0,FC:0,FD:0,FE:0,VAR_CREANCES:0,ZB:0,
+    FF:0,FG:-capexInit,FH:0,FI:0,ACQUIS_IMMO:-capexInit,CESSION_IMMO:0,ZC:-capexInit,
+    FK:capOuv,FL:subvOuv,FN:0,EMPRUNT:emp,REMBOURS:0,ZFIN:capOuv+subvOuv+emp,ZD:0,ZE:0,
+    ZF:(capOuv+subvOuv+emp-capexInit),ZG:treso0};
   P.pl.AUTRES_PRODUITS=P.pl.AUTRES_PROD;P.pl.PERSONNEL=P.pl.CHARGES_PERSONNEL;
   P.pl.AUTRES_OPEX=P.pl.OPEX_TOTAL;P.pl.DOTATIONS=P.pl.DA;P.pl.ACHATS=P.pl.COUTS_DIRECTS;
   P.bs.TRESO_NETTE=P.bs.TRESO;
