@@ -6424,7 +6424,7 @@ async function exporterExcelModele(){
     (M.chargesFixes||[]).forEach(c=>{
       const vals=[];for(let j=0;j<N;j++)vals.push(mnt(valAnnee({val:(c.montant!=null?c.montant:c.val),g:c.g,mode:c.mode,vals:c.vals},j)/1000));
       const rw=ser((c.personnel?"Personnel — ":"Frais généraux — ")+(c.name||"Charge")+" (an 1..an "+N+")",vals,NF);
-      (c.personnel?H.pers:H.opex).push(rw);
+      (c.personnel?H.pers:H.opex).push({row:rw,name:c.name||"Charge"});
     });
     sec("Investissements (CAPEX)");
     H.capM=[];H.capDur=[];H.capAn=[];
@@ -6487,8 +6487,11 @@ async function exporterExcelModele(){
     });
     row("CD","Coûts directs",(i,X)=>H.lignes.length?H.lignes.map((_,k)=>`${X}${rr("CDL"+k)}`).join("+"):"0",NF);
     row("MB","Marge brute",(i,X)=>`${X}${rr("CA")}+${X}${rr("CD")}`,NF,true);
-    row("OPEX","Frais généraux",(i,X)=>{const oi=`MAX(1,${X}${rr("IDX")}-${rH}!${H.nc})`;return `-${X}${rr("FO")}*(${H.opex.length?H.opex.map(rw=>`INDEX(${rng(rw)},${oi})`).join("+"):"0"})`;},NF);
-    row("PERS","Charges de personnel",(i,X)=>{const oi=`MAX(1,${X}${rr("IDX")}-${rH}!${H.nc})`;return `-${X}${rr("FO")}*(${H.pers.length?H.pers.map(rw=>`INDEX(${rng(rw)},${oi})`).join("+"):"0"})`;},NF);
+    /* frais généraux & personnel DÉPLIÉS par poste (P&L détaillé) puis sous-totaux */
+    H.opex.forEach((o,k)=>row("OPL"+k,"Frais généraux — "+o.name,(i,X)=>`-${X}${rr("FO")}*INDEX(${rng(o.row)},MAX(1,${X}${rr("IDX")}-${rH}!${H.nc}))`,NF));
+    H.pers.forEach((o,k)=>row("PEL"+k,"Personnel — "+o.name,(i,X)=>`-${X}${rr("FO")}*INDEX(${rng(o.row)},MAX(1,${X}${rr("IDX")}-${rH}!${H.nc}))`,NF));
+    row("OPEX","Frais généraux (sous-total)",(i,X)=>H.opex.length?H.opex.map((_,k)=>`${X}${rr("OPL"+k)}`).join("+"):"0",NF);
+    row("PERS","Charges de personnel (sous-total)",(i,X)=>H.pers.length?H.pers.map((_,k)=>`${X}${rr("PEL"+k)}`).join("+"):"0",NF);
     row("EBITDA","EBITDA",(i,X)=>`${X}${rr("MB")}+${X}${rr("OPEX")}+${X}${rr("PERS")}`,NF,true);
     /* CAPEX & amortissements par poste */
     row("CAPEX","CAPEX de l'année",(i,X)=>(M.capex||[]).length?(M.capex||[]).map((_,k)=>`IF(${rH}!${H.capAn[k]}=${X}${rr("IDX")},${rH}!${H.capM[k]},0)`).join("+"):"0",NF);
@@ -6544,6 +6547,16 @@ async function exporterExcelModele(){
     row("ECART","Contrôle (clôture − trésorerie)",(i,X)=>`${X}${rr("ZG")}-${X}${rr("TRES")}`,NF);
     /* FCFF pour la valo */
     row("FCFF","FCFF",(i,X)=>`${X}${rr("EBIT")}*(1-IF(${X}${rr("EBIT")}>0,${rH}!${H.is},0))+${X}${rr("DOT")}-(${X}${rr("BFR")}-${pRef("BFR",i)})-${X}${rr("CAPEX")}`,NF);
+    /* lignes de DÉTAIL pour les états détaillés (P&L & bilan) */
+    row("INTP","Intérêts sur emprunts (charge)",(i,X)=>`-${X}${rr("INT")}`,NF);
+    row("DECP","Intérêts sur découvert (charge)",(i,X)=>`-${X}${rr("INTCT")}`,NF);
+    row("AMCN","Amortissements cumulés (−)",(i,X)=>`-${X}${rr("AMC")}`,NF);
+    row("TRA","Trésorerie active",(i,X)=>`${X}${rr("TRES")}+${X}${rr("LCT")}`,NF);
+    row("DECN","Concours bancaires (découvert, −)",(i,X)=>`-${X}${rr("LCT")}`,NF);
+    row("FRNP","Dettes fournisseurs (passif)",(i,X)=>`${X}${rr("FRN")}`,NF);
+    row("CAPSOC","Capital social",(i,X)=>`${rH}!${H.capital}`,NF);
+    row("SUBVR","Subventions d'investissement",(i,X)=>`${rH}!${H.subv}`,NF);
+    row("RANR","Report à nouveau & résultats antérieurs",(i,X)=>`${X}${rr("CP")}-${rH}!${H.capital}-${rH}!${H.subv}-${X}${rr("RN")}`,NF);
     /* PASSE 1 : réserver tous les n° de ligne (toute réf croisée résout) ; PASSE 2 : écrire libellés + formules */
     CROWS.forEach((d,idx)=>{R[d[0]]=cr+1+idx;});
     CROWS.forEach(d=>{const rn=R[d[0]];wsC.getCell(rn,2).value=d[1];
@@ -6558,6 +6571,7 @@ async function exporterExcelModele(){
       styliserEntete(ws.addRow([null,u.lib,...fyp]),1);
       defs.forEach(d=>{
         const r=ws.addRow([null,d[0]]);
+        if(d[1]==null){r.getCell(2).font={bold:true,italic:true,color:{argb:"FF224289"}};return;}   /* en-tête de section */
         for(let i=0;i<N;i++){const c=r.getCell(3+i);c.value={formula:`${rC}!${CL(i)}${rr(d[1])}`};c.numFmt=d[3]||NF;}
         if(d[2]){r.font={bold:true,color:{argb:"FF172554"}};for(let c=2;c<3+N;c++)r.getCell(c).fill=FOND_TOTAL;}
       });
@@ -6565,17 +6579,40 @@ async function exporterExcelModele(){
       ws.columns=[{width:3},{width:42},...fyp.map(()=>({width:13}))];
       return ws;
     };
-    feuille(nP,"Compte de résultat prévisionnel — "+u.lib,[
-      ["Chiffre d'affaires","CA"],["Coûts directs","CD"],["Marge brute","MB",1],
-      ["Frais généraux","OPEX"],["Charges de personnel","PERS"],["EBITDA","EBITDA",1],
-      ["Dotations aux amortissements","DA"],["EBIT","EBIT",1],["Résultat financier","RFIN"],
-      ["Résultat avant impôt","EBT",1],["Impôt sur les sociétés","IS"],["Résultat net","RN",1]],
-      "Cellules calculées à partir de l'onglet Hypothèses (jaune) via l'onglet Calculs.");
-    feuille(nB,"Bilan prévisionnel (actif net) — "+u.lib,[
-      ["Immobilisations nettes","IMN"],["Stocks","STK"],["Créances clients","CLI"],["Dettes fournisseurs","FRN"],
-      ["Besoin en fonds de roulement","BFR",1],["Trésorerie nette","TRES",1],
-      ["Capitaux propres","CP",1],["Dettes financières","DETTE",1]],
-      "Trésorerie = capitaux propres + dette − immobilisations nettes − BFR (bilan bouclé par la trésorerie).");
+    /* ---- P&L DÉTAILLÉ : chaque ligne de revenus / coûts, chaque charge dépliée, résultat financier décomposé ---- */
+    const plDefs=[["Produits d'exploitation",null]];
+    H.lignes.forEach((L,k)=>plDefs.push(["   Ventes — "+(L.name||"Ligne "+(k+1)),"CAL"+k]));
+    plDefs.push(["Chiffre d'affaires","CA",1]);
+    H.lignes.forEach((L,k)=>plDefs.push(["   Coûts directs — "+(L.name||"Ligne "+(k+1)),"CDL"+k]));
+    plDefs.push(["Coûts directs (total)","CD"]);
+    plDefs.push(["Marge brute","MB",1]);
+    if(H.opex.length){plDefs.push(["Frais généraux",null]);H.opex.forEach((o,k)=>plDefs.push(["   "+o.name,"OPL"+k]));plDefs.push(["Total frais généraux","OPEX"]);}
+    if(H.pers.length){plDefs.push(["Charges de personnel",null]);H.pers.forEach((o,k)=>plDefs.push(["   "+o.name,"PEL"+k]));plDefs.push(["Total charges de personnel","PERS"]);}
+    plDefs.push(["EBITDA","EBITDA",1]);
+    plDefs.push(["Dotations aux amortissements","DA"]);
+    plDefs.push(["EBIT","EBIT",1]);
+    plDefs.push(["   Intérêts sur emprunts","INTP"]);
+    plDefs.push(["   Intérêts sur découvert","DECP"]);
+    plDefs.push(["Résultat financier","RFIN",1]);
+    plDefs.push(["Résultat avant impôt","EBT",1]);
+    plDefs.push(["Impôt sur les sociétés","IS"]);
+    plDefs.push(["Résultat net","RN",1]);
+    feuille(nP,"Compte de résultat prévisionnel détaillé — "+u.lib,plDefs,
+      "Chaque ligne de revenus, de coûts et chaque charge est dépliée. Cellules calculées à partir des Hypothèses (jaune) via Calculs.");
+    /* ---- BILAN DÉTAILLÉ (présentation actif net) ---- */
+    const bsDefs=[
+      ["Actif immobilisé",null],
+      ["   Immobilisations brutes","BRUT"],["   Amortissements cumulés","AMCN"],["Immobilisations nettes","IMN",1],
+      ["Besoin en fonds de roulement",null],
+      ["   Stocks","STK"],["   Créances clients","CLI"],["   Dettes fournisseurs","FRNP"],["Besoin en fonds de roulement","BFR",1],
+      ["Trésorerie",null],
+      ["   Trésorerie active","TRA"],["   Concours bancaires (découvert)","DECN"],["Trésorerie nette","TRES",1],
+      ["Dettes financières","DETTE"],
+      ["Capitaux propres",null],
+      ["   Capital social","CAPSOC"],["   Subventions d'investissement","SUBVR"],
+      ["   Report à nouveau & résultats antérieurs","RANR"],["   Résultat net de l'exercice","RN"],["Capitaux propres","CP",1]];
+    feuille(nB,"Bilan prévisionnel détaillé (actif net) — "+u.lib,bsDefs,
+      "Immobilisations nettes + BFR + trésorerie nette − dettes financières = capitaux propres (bilan bouclé par la trésorerie).");
     feuille(nT,"Tableau des flux de trésorerie — "+u.lib,[
       ["Trésorerie nette à l'ouverture","ZA"],["Capacité d'autofinancement (CAFG)","FA"],
       ["Variation des créances","VCR"],["Variation des stocks","VST"],["Variation des dettes d'exploitation","VFR"],
