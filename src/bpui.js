@@ -86,8 +86,13 @@ function etatsFromModele(P){
   s('CA',P.pl.CA[aL]);s('EBITDA',P.pl.EBITDA[aL]);s('EBIT',P.pl.EBIT[aL]);s('RESULTAT_NET',P.pl.RN[aL]);s('MARGE_BRUTE',P.pl.MARGE_BRUTE[aL]);
   s('CAPITAUX_PROPRES',P.bs.CP[aL]);s('DETTES_FINANCIERES',-P.bs.DETTE[aL]);s('TRESORERIE_NETTE',P.bs.TRESO[aL]);s('PROVISIONS_RC',-P.bs.PROVISIONS[aL]);
   s('RESULTAT_FIN',P.pl.RESULTAT_FIN[aL]);s('BFR',P.bs.BFR[aL]);s('ACTIF_NET',P.bs.CP[aL]);
-  ['COUTS_DIRECTS','AUTRES_PROD','OPEX','CHARGES_PERSONNEL','DA','IMPOTS','ACTIFS_IMMOBILISES','AMORT_DEPREC','CLIENTS','STOCKS','FOURNISSEURS','AUTRES_CREANCES','AVANCES_FRS','HAO_ACTIF','HAO_PASSIF','DETTES_SOCIALES','DETTES_FISCALES','AUTRES_DETTES','CLIENTS_AVANCES','TRESO_ACTIF','TRESO_PASSIF','CAPITAL','PRIMES_RESERVES','RAN_RESULTATS_ANT','SUBV_PROV_REGL','RESULTAT_AVANT_IMPOT','PRODUITS_FIN','FRAIS_FIN'].forEach(function(k){if(!v[k])s(k,0);});
-  return {annees:[aL],v:v,tft:{}};
+  s('ACTIFS_IMMOBILISES',P.bs.IMMO_NET[aL]);s('CLIENTS',P.bs.CLIENTS[aL]);s('STOCKS',P.bs.STOCKS[aL]);s('FOURNISSEURS',P.bs.FOURNISSEURS[aL]);
+  /* capitaux propres décomposés à partir du bilan d'ouverture (capital + subventions figés,
+     le report à nouveau absorbe les résultats accumulés) → décomposition CP correcte en mode modèle */
+  var ouv=P.ouverture||{};
+  s('CAPITAL',ouv.capital||0);s('SUBV_PROV_REGL',ouv.subvention||0);
+  ['COUTS_DIRECTS','AUTRES_PROD','OPEX','CHARGES_PERSONNEL','DA','IMPOTS','AMORT_DEPREC','AUTRES_CREANCES','AVANCES_FRS','HAO_ACTIF','HAO_PASSIF','DETTES_SOCIALES','DETTES_FISCALES','AUTRES_DETTES','CLIENTS_AVANCES','TRESO_ACTIF','TRESO_PASSIF','PRIMES_RESERVES','RAN_RESULTATS_ANT','RESULTAT_AVANT_IMPOT','PRODUITS_FIN','FRAIS_FIN'].forEach(function(k){if(!v[k])s(k,0);});
+  return {annees:[aL],v:v,tft:P.tft||{}};
 }
 function modeleMode(){return !!(DOSSIER&&DOSSIER.sansHistorique);}
 
@@ -114,14 +119,36 @@ function mAddCapex(){assurerModele().capex.push({name:"Investissement",montant:0
 function mDelCapex(i){assurerModele().capex.splice(i,1);sauverDossier();rendre();}
 function mCapex(i,champ,val){var c=assurerModele().capex[i];if(champ==='name')c.name=val;else{var x=numFR(val);if(x!==null)c[champ]=x;}sauverDossier();rendre();}
 
+/* ---- séparateurs de milliers dans les champs de saisie (on voit ce qu'on tape) ---- */
+function mAmt(x){ if(x==null||x==='')return ''; var n=(typeof x==='number')?x:numFR(x); if(n==null||isNaN(n))return String(x);
+  return n.toLocaleString('fr-FR',{maximumFractionDigits:6}); }   /* espace fine insécable fr-FR */
+function mSep(el){
+  var raw=el.value, caret=(el.selectionStart==null)?raw.length:el.selectionStart;
+  var digitsBefore=(raw.slice(0,caret).match(/\d/g)||[]).length;
+  var neg=/^\s*-/.test(raw);
+  var body=raw.replace(/[^\d.,]/g,'');
+  var sepIdx=Math.max(body.lastIndexOf('.'),body.lastIndexOf(','));   /* dernier séparateur = décimal */
+  var intp,dec=null;
+  if(sepIdx>=0){intp=body.slice(0,sepIdx).replace(/[.,]/g,'');dec=body.slice(sepIdx+1).replace(/[.,]/g,'');}
+  else intp=body.replace(/[.,]/g,'');
+  intp=intp.replace(/^0+(?=\d)/,'');
+  var out=intp.replace(/\B(?=(\d{3})+(?!\d))/g,' ');
+  if(dec!==null)out=(out||'0')+','+dec;
+  if(neg&&out!=='')out='-'+out;
+  el.value=out;
+  var np=0;
+  if(digitsBefore>0){var seen=0;for(np=0;np<out.length;np++){if(/\d/.test(out.charAt(np))){seen++;if(seen===digitsBefore){np++;break;}}}}
+  try{el.setSelectionRange(np,np);}catch(e){}
+}
+
 /* ---- rendu ---- */
 function mCarteRevenu(L,li){
   var N=assurerModele().nb||5;
   var opts=M_GROUPS.map(function(g){return '<optgroup label="'+g[0]+'">'+g[1].map(function(k){return '<option value="'+k+'"'+(k===L.tpl?' selected':'')+'>'+M_PRESETS[k].lab+'</option>';}).join('')+'</optgroup>';}).join('');
   var rows=(L.rows||[]).map(function(r,ri){
     var vals;
-    if(r.mode==='yearly'){var cells='';for(var k=0;k<N;k++){var yv=(r.vals&&r.vals[k]!=null)?r.vals[k]:0;cells+='<span class="mind-yv"><label>An '+(k+1)+'</label><input class="nin" value="'+yv+'" onchange="mIndYv('+li+','+ri+','+k+',this.value)"></span>';}vals='<div class="mind-vals">'+cells+'</div>';}
-    else vals='<div class="mind-vals"><span class="mind-f"><label>Valeur an 1</label><input class="nin" value="'+r.val+'" onchange="mInd('+li+','+ri+',\'val\',this.value)"></span><span class="mind-f"><label>Croissance %/an</label><input class="nin" value="'+r.g+'" onchange="mInd('+li+','+ri+',\'g\',this.value)"></span></div>';
+    if(r.mode==='yearly'){var cells='';for(var k=0;k<N;k++){var yv=(r.vals&&r.vals[k]!=null)?r.vals[k]:0;cells+='<span class="mind-yv"><label>An '+(k+1)+'</label><input class="nin ninm" value="'+mAmt(yv)+'" oninput="mSep(this)" onchange="mIndYv('+li+','+ri+','+k+',this.value)"></span>';}vals='<div class="mind-vals">'+cells+'</div>';}
+    else vals='<div class="mind-vals"><span class="mind-f"><label>Valeur an 1</label><input class="nin ninm" value="'+mAmt(r.val)+'" oninput="mSep(this)" onchange="mInd('+li+','+ri+',\'val\',this.value)"></span><span class="mind-f"><label>Croissance %/an</label><input class="nin" value="'+r.g+'" onchange="mInd('+li+','+ri+',\'g\',this.value)"></span></div>';
     return '<div class="mind">'
       +'<div class="mind-top"><button class="btn sm" title="× ou ÷" onclick="mIndOp('+li+','+ri+')" style="min-width:34px;font-weight:700">'+(r.op==='d'?'÷':'×')+'</button>'
       +'<input class="sel" style="flex:1;min-width:130px" placeholder="Nom de l\'inducteur" value="'+esc(r.name)+'" onchange="mInd('+li+','+ri+',\'name\',this.value)">'
@@ -140,17 +167,18 @@ function mCarteRevenu(L,li){
     +rows
     +'<button class="btn sm" style="margin-top:2px" onclick="mAddInd('+li+')">+ inducteur</button>'
     +'<div class="mind-price"><span class="x">= Volume an 1 : <b>'+fmt(vol/uni().f)+'</b></span></div>'
-    +'<div class="mind-price"><span class="x">×</span> <span class="mut">Prix an 1</span> <input class="nin" value="'+prix+'" onchange="mPrix('+li+',\'val\',this.value)"><input class="nin" style="width:70px" value="'+esc(L.prix.unit||'')+'" onchange="mPrix('+li+',\'unit\',this.value)">'
+    +'<div class="mind-price"><span class="x">×</span> <span class="mut">Prix an 1</span> <input class="nin ninm" value="'+mAmt(prix)+'" oninput="mSep(this)" onchange="mPrix('+li+',\'val\',this.value)"><input class="nin" style="width:70px" value="'+esc(L.prix.unit||'')+'" onchange="mPrix('+li+',\'unit\',this.value)">'
     +'<span class="mut">croissance</span> <input class="nin" style="width:60px" value="'+(L.prix.g||0)+'" onchange="mPrix('+li+',\'g\',this.value)"> %'
     +'<span style="margin-left:auto;font-weight:700;color:#16904E">CA an 1 : '+fmt(ca/uni().f)+' '+uni().suf+'</span></div>'
     +'<div class="mind-price" style="border-top:1px dashed #e3e9f2;padding-top:10px;margin-top:6px"><span class="mut">Coûts directs</span>'
     +'<span class="segvue"><button class="'+(L.cout.m==='pct'?'on':'')+'" onclick="mCoutM('+li+',\'pct\')">% du CA</button><button class="'+(L.cout.m==='unit'?'on':'')+'" onclick="mCoutM('+li+',\'unit\')">Coût unitaire</button></span>'
-    +'<input class="nin" value="'+L.cout.val+'" onchange="mCoutV('+li+',this.value)"> <span class="mut">'+(L.cout.m==='pct'?'% du CA':'par unité de volume')+'</span></div>'
+    +'<input class="nin ninm" value="'+mAmt(L.cout.val)+'" oninput="mSep(this)" onchange="mCoutV('+li+',this.value)"> <span class="mut">'+(L.cout.m==='pct'?'% du CA':'par unité de volume')+'</span></div>'
     +'</div></div>';
 }
 function vueModele(){
   var M=assurerModele();
   var P=projeterModele(M), A=P.annees, a0=A[0], aL=A[A.length-1], u=uni();
+  ETATS=etatsFromModele(P);   /* aligne l'ETATS synthétique sur la projection affichée (les vues BP réutilisées lisent ETATS) */
   var tabs=[["rev","Revenus"],["cout","Coûts directs"],["fixe","Charges fixes"],["capex","Investissements"],["fin","Financement"],["bfr","BFR"],["param","Paramètres"],["res","Résultats"]];
   var barre=tabs.map(function(t){return '<button class="btn '+(SOUS_MODELE===t[0]?"primary":"")+'" onclick="mTab(\''+t[0]+'\')">'+t[1]+'</button>';}).join(" ");
   var rnCum=A.reduce(function(s,a){return s+P.pl.RN[a];},0);
@@ -171,7 +199,7 @@ function vueModele(){
   } else if(SOUS_MODELE==="fixe"){
     corps='<div class="card" style="padding:0"><div class="bande">Charges fixes (montant annuel)</div><div class="tscroll"><table class="tb etat"><tr><th>Poste</th><th class="num">Montant / an</th><th class="num">Croissance %/an</th><th>Personnel ?</th><th></th></tr>'
       +M.chargesFixes.map(function(c,i){return '<tr><td><input class="sel" value="'+esc(c.name)+'" onchange="mFixe('+i+',\'name\',this.value)"></td>'
-        +'<td class="num"><input class="nin" value="'+(c.montant||0)+'" onchange="mFixe('+i+',\'montant\',this.value)"></td>'
+        +'<td class="num"><input class="nin ninm" value="'+mAmt(c.montant||0)+'" oninput="mSep(this)" onchange="mFixe('+i+',\'montant\',this.value)"></td>'
         +'<td class="num"><input class="nin" style="width:60px" value="'+(c.g||0)+'" onchange="mFixe('+i+',\'g\',this.value)"></td>'
         +'<td><input type="checkbox" '+(c.personnel?'checked':'')+' onchange="mFixe('+i+',\'personnel\',this.checked)"></td>'
         +'<td><button class="btn sm" onclick="mDelFixe('+i+')">✕</button></td></tr>';}).join("")
@@ -179,7 +207,7 @@ function vueModele(){
   } else if(SOUS_MODELE==="capex"){
     corps='<div class="card" style="padding:0"><div class="bande">Investissements (CAPEX)</div><div class="tscroll"><table class="tb etat"><tr><th>Poste</th><th class="num">Montant</th><th class="num">Durée (ans)</th><th class="num">Année (0 = départ)</th><th></th></tr>'
       +M.capex.map(function(c,i){return '<tr><td><input class="sel" value="'+esc(c.name||'')+'" onchange="mCapex('+i+',\'name\',this.value)"></td>'
-        +'<td class="num"><input class="nin" value="'+(c.montant||0)+'" onchange="mCapex('+i+',\'montant\',this.value)"></td>'
+        +'<td class="num"><input class="nin ninm" value="'+mAmt(c.montant||0)+'" oninput="mSep(this)" onchange="mCapex('+i+',\'montant\',this.value)"></td>'
         +'<td class="num"><input class="nin" style="width:60px" value="'+(c.duree||5)+'" onchange="mCapex('+i+',\'duree\',this.value)"></td>'
         +'<td class="num"><input class="nin" style="width:60px" value="'+(c.annee||0)+'" onchange="mCapex('+i+',\'annee\',this.value)"></td>'
         +'<td><button class="btn sm" onclick="mDelCapex('+i+')">✕</button></td></tr>';}).join("")
@@ -187,10 +215,10 @@ function vueModele(){
   } else if(SOUS_MODELE==="fin"){
     var f=M.financement, e=f.emprunt||{};
     corps='<div class="card"><div class="sec-titre" style="margin-top:0">Financement — bilan d\'ouverture</div>'
-      +'<div class="hyp-l"><span>Capital social</span><input class="sel" style="width:46%" value="'+(f.capital||0)+'" onchange="mSet(\'financement.capital\',this.value,1)"></div>'
-      +'<div class="hyp-l"><span>Apports en compte courant</span><input class="sel" style="width:46%" value="'+(f.apports||0)+'" onchange="mSet(\'financement.apports\',this.value,1)"></div>'
-      +'<div class="hyp-l"><span>Subvention</span><input class="sel" style="width:46%" value="'+(f.subvention||0)+'" onchange="mSet(\'financement.subvention\',this.value,1)"></div>'
-      +'<div class="hyp-l"><span>Emprunt — montant</span><input class="sel" style="width:46%" value="'+(e.montant||0)+'" onchange="mSet(\'financement.emprunt.montant\',this.value,1)"></div>'
+      +'<div class="hyp-l"><span>Capital social</span><input class="sel ninm" style="width:46%" value="'+mAmt(f.capital||0)+'" oninput="mSep(this)" onchange="mSet(\'financement.capital\',this.value,1)"></div>'
+      +'<div class="hyp-l"><span>Apports en compte courant</span><input class="sel ninm" style="width:46%" value="'+mAmt(f.apports||0)+'" oninput="mSep(this)" onchange="mSet(\'financement.apports\',this.value,1)"></div>'
+      +'<div class="hyp-l"><span>Subvention</span><input class="sel ninm" style="width:46%" value="'+mAmt(f.subvention||0)+'" oninput="mSep(this)" onchange="mSet(\'financement.subvention\',this.value,1)"></div>'
+      +'<div class="hyp-l"><span>Emprunt — montant</span><input class="sel ninm" style="width:46%" value="'+mAmt(e.montant||0)+'" oninput="mSep(this)" onchange="mSet(\'financement.emprunt.montant\',this.value,1)"></div>'
       +'<div class="hyp-l"><span>Emprunt — taux</span><input class="sel" style="width:46%" value="'+((e.taux||0)*100)+'" onchange="mSet(\'financement.emprunt.taux\',(numFR(this.value)||0)/100)"> %</div>'
       +'<div class="hyp-l"><span>Emprunt — durée</span><input class="sel" style="width:46%" value="'+(e.duree||5)+'" onchange="mSet(\'financement.emprunt.duree\',this.value,1)"> ans</div>'
       +'<div class="mut" style="margin-top:8px">Trésorerie d\'ouverture = capital + apports + subvention + emprunt − CAPEX initial = <b>'+fmt(P.ouverture.treso/u.f)+' '+u.suf+'</b>.</div></div>';
@@ -217,23 +245,21 @@ function vueModele(){
     +corps;
 }
 function mVueResultats(P,u){
-  var A=P.annees, fyp=A.map(function(a){return "FY"+String(a).slice(-2)+"p";});
-  var val=null; try{ val=valoriserBP(etatsFromModele(P),{is_taux:assurerModele().is_taux,valo:assurerModele().valo},P); }catch(e){}
-  var lignes=[["CA","Chiffre d'affaires"],["COUTS_DIRECTS","Coûts directs"],["MARGE_BRUTE","Marge brute"],["OPEX_TOTAL","Frais généraux"],["CHARGES_PERSONNEL","Charges de personnel"],["EBITDA","EBITDA"],["DA","Dotations"],["EBIT","EBIT"],["RESULTAT_FIN","Résultat financier"],["EBT","Résultat avant impôt"],["IS","Impôt"],["RN","Résultat net"]];
-  var pl='<div class="card" style="padding:0"><div class="bande">Compte de résultat prévisionnel</div><div class="tscroll"><table class="tb etat"><tr><th>'+u.lib+'</th>'+fyp.map(function(f){return '<th class="num">'+f+'</th>';}).join("")+'</tr>'
-    +lignes.map(function(d){var st=(d[0]==="EBITDA"||d[0]==="MARGE_BRUTE"||d[0]==="EBIT"||d[0]==="RN"||d[0]==="EBT")?' class="total"':'';return '<tr'+st+'><td>'+d[1]+'</td>'+A.map(function(a){return '<td class="num">'+fmt(P.pl[d[0]][a]/u.f)+'</td>';}).join("")+'</tr>';}).join("")
-    +'</table></div></div>';
-  var bsL=[["IMMO_NET","Immobilisations nettes"],["BFR","Besoin en fonds de roulement"],["TRESO","Trésorerie nette"],["CP","Capitaux propres"],["DETTE","Dettes financières"]];
-  var bs='<div class="card" style="padding:0;margin-top:14px"><div class="bande">Bilan prévisionnel (grandes masses)</div><div class="tscroll"><table class="tb etat"><tr><th>'+u.lib+'</th>'+fyp.map(function(f){return '<th class="num">'+f+'</th>';}).join("")+'</tr>'
-    +bsL.map(function(d){return '<tr><td>'+d[1]+'</td>'+A.map(function(a){return '<td class="num">'+fmt(P.bs[d[0]][a]/u.f)+'</td>';}).join("")+'</tr>';}).join("")
-    +'</table></div></div>';
+  /* On réutilise EXACTEMENT les vues détaillées d'un dossier avec historique : cascade P&L
+     (frais généraux = frais + personnel réunis en une ligne, comme convenu), bilan en actif
+     net, TFT officiel SYSCOHADA et tableau de la dette. Colonne « historique » masquée
+     (mode modèle) via tableBP. → format et rubriques identiques au BP classique. */
+  var M=assurerModele();
+  var val=null; try{ val=valoriserBP(etatsFromModele(P),{is_taux:M.is_taux,valo:M.valo},P); }catch(e){}
+  var sep='<div style="height:16px"></div>';
   var valo="";
-  if(val){valo='<div class="kpis" style="margin-top:14px">'
-    +kpiCard("Valeur des fonds propres (retenue)",fmt(val.fourchette.retenue/u.f)+" "+u.suf,"multi-méthodes","","wallet","#16904E")
-    +kpiCard("Fonds propres — DCF",fmt(val.equityDcf/u.f)+" "+u.suf,"WACC "+Math.round(val.wacc*100)+" %","","coins","#FA6706")
-    +kpiCard("Valeur d'entreprise (EV)",fmt(val.ev/u.f)+" "+u.suf,"","","chart","#224289")
-    +'</div>';}
-  return pl+bs+valo+'<div class="mut" style="margin-top:10px">Ces résultats alimentent les mêmes exports (PPT/Excel) qu\'un dossier avec historique.</div>';
+  if(val){valo=sep+'<div class="card"><div class="sec-titre" style="margin-top:0">Valorisation (multi-méthodes)</div><div class="kpis">'
+    +kpiCard("Valeur des fonds propres (retenue)",fmt(val.fourchette.retenue/u.f)+" "+u.suf,"fourchette "+fmt(val.fourchette.min/u.f)+" – "+fmt(val.fourchette.max/u.f)+" "+u.suf,"","wallet","#16904E")
+    +kpiCard("Fonds propres — DCF",fmt(val.equityDcf/u.f)+" "+u.suf,"WACC "+Math.round(val.wacc*1000)/10+" %","","coins","#FA6706")
+    +kpiCard("Valeur d'entreprise (EV)",fmt(val.ev/u.f)+" "+u.suf,"dont VT "+Math.round((val.vtPv/(val.ev||1))*100)+" %","","chart","#224289")
+    +'</div><div class="mut" style="margin-top:8px">Référence de valorisation : dernière année projetée (EBITDA, dette nette). Réglages détaillés dans les hypothèses de valorisation d\'un dossier avec historique — repris ici tels quels.</div></div>';}
+  return vueBPPl(P)+sep+vueBPBs(P)+sep+vueBPTft(P)+sep+vueBPDette(P)+valo
+    +'<div class="mut" style="margin-top:12px">Ces états prévisionnels alimentent les mêmes exports (PPT / Excel) qu\'un dossier avec historique.</div>';
 }
 function resetBP(){if(!confirm("Réinitialiser toutes les hypothèses depuis l'historique ?"))return;
   DOSSIER.bp=null;assurerBP();sauverDossier();rendre();}
@@ -295,16 +321,18 @@ function pillsScenarios(H){
 /* table générique hist + prévisionnel */
 function tableBP(P,defs,titre){
   const A0=ETATS.annees,a1=A0[A0.length-1],AP=P.annees,v=ETATS.v;
-  const th=`<th class="num" style="opacity:.75">FY${String(a1).slice(-2)}</th>`
+  const mm=(typeof modeleMode==="function"&&modeleMode());   /* pas de colonne « historique » en mode modèle */
+  const th=(mm?"":`<th class="num" style="opacity:.75">FY${String(a1).slice(-2)}</th>`)
     +AP.map(a=>`<th class="num">FY${String(a).slice(-2)}p</th>`).join("");
   const lignes=defs.map(d=>{
-    if(d.sec!==undefined) return `<tr class="sec"><td colspan="${AP.length+2}">${d.sec}</td></tr>`;
+    if(d.sec!==undefined) return `<tr class="sec"><td colspan="${AP.length+(mm?1:2)}">${d.sec}</td></tr>`;
     if(d.type==="pct"){
-      const cells=[d.hist,...AP.map(a=>d.proj(a))].map(x=>`<td class="num pctl">${x===null?"-":Math.round(x*100)+"%"}</td>`).join("");
+      const arr=mm?AP.map(a=>d.proj(a)):[d.hist,...AP.map(a=>d.proj(a))];
+      const cells=arr.map(x=>`<td class="num pctl">${x===null?"-":Math.round(x*100)+"%"}</td>`).join("");
       return `<tr class="pct"><td>${d.lib}</td>${cells}</tr>`;
     }
-    const hist=d.hist!==undefined&&d.hist!==null?fmt(d.hist):"-";
-    return `<tr class="${d.st||""}${d.clic?" cliquable":""}"${d.clic?` onclick="${d.clic}" title="Voir le détail"`:""}><td>${d.lib}${d.clic?' <span class="chev">›</span>':""}</td><td class="num" style="opacity:.75">${hist}</td>
+    const histCell=mm?"":`<td class="num" style="opacity:.75">${d.hist!==undefined&&d.hist!==null?fmt(d.hist):"-"}</td>`;
+    return `<tr class="${d.st||""}${d.clic?" cliquable":""}"${d.clic?` onclick="${d.clic}" title="Voir le détail"`:""}><td>${d.lib}${d.clic?' <span class="chev">›</span>':""}</td>${histCell}
       ${AP.map(a=>`<td class="num">${fmt(d.proj(a))}</td>`).join("")}</tr>`;
   }).join("");
   return `<div class="card" style="padding:0">

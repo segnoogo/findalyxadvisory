@@ -330,7 +330,7 @@ function projeterModele(M,scenario){
     var autresProd=valAnnee(M.autresProd,i);
     /* --- charges fixes → OPEX / personnel (montant annuel, croissance ou par année) --- */
     var opexTot=0, persTot=0;
-    (M.chargesFixes||[]).forEach(function(c){ var m=-valAnnee(c,i); if(c.personnel)persTot+=m; else opexTot+=m; });
+    (M.chargesFixes||[]).forEach(function(c){ var m=-valAnnee({val:(c.montant!=null?c.montant:c.val),g:c.g,mode:c.mode,vals:c.vals},i); if(c.personnel)persTot+=m; else opexTot+=m; });
     /* --- CAPEX de l'année & amortissements linéaires par poste --- */
     if(py>=1){ capex.forEach(function(c){ if(c.annee===py) brut+=c.montant; }); }
     var dot=0; capex.forEach(function(c){ if(c.annee<=py){ var restant=c.montant-c.amorti; if(restant>0.01){ var d=Math.min(c.montant/c.duree,restant); c.amorti+=d; dot+=d; } } });
@@ -392,7 +392,7 @@ function projeterModele(M,scenario){
     bfrP=bfr;tresoP=treso;rnPrec=rn;
   });
   /* bilan d'ouverture exposé (année 0) pour l'affichage éventuel */
-  P.ouverture={annee:startY-1,cp:cp0,dette:emp,immoNet:capexInit,treso:treso0,bfr:0};
+  P.ouverture={annee:startY-1,cp:cp0,capital:(+fin.capital||0)+(+fin.apports||0),subvention:(+fin.subvention||0),dette:emp,immoNet:capexInit,treso:treso0,bfr:0};
   P.pl.AUTRES_PRODUITS=P.pl.AUTRES_PROD;P.pl.PERSONNEL=P.pl.CHARGES_PERSONNEL;
   P.pl.AUTRES_OPEX=P.pl.OPEX_TOTAL;P.pl.DOTATIONS=P.pl.DA;P.pl.ACHATS=P.pl.COUTS_DIRECTS;
   P.bs.TRESO_NETTE=P.bs.TRESO;
