@@ -122,7 +122,7 @@ function shell(){
   <div class="main">
     <div class="top">
       <div><div class="name">${DOSSIER?esc(DOSSIER.societe):"Aucun dossier ouvert"}</div>
-      <div class="sub">${DOSSIER&&DOSSIER.sansHistorique?"Business plan sans historique — montants en "+uni().lib:(DOSSIER&&DOSSIER.balances.length?DOSSIER.balances.map(b=>"FY"+b.annee).join(" · ")+" — montants en "+uni().lib:"créez ou ouvrez un dossier")}</div></div>
+      <div class="sub">${DOSSIER&&DOSSIER.sansHistorique?"Business plan sans historique — saisie en FCFA · affichage en "+uni().lib:(DOSSIER&&DOSSIER.balances.length?DOSSIER.balances.map(b=>"FY"+b.annee).join(" · ")+" — montants en "+uni().lib:"créez ou ouvrez un dossier")}</div></div>
       <div class="right">${barreDroite()}</div>
     </div>
     <div class="view" id="vue"></div>

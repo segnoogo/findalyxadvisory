@@ -129,10 +129,11 @@ const modele = {
 };
 const Pm = BP.projeterModele(modele);
 ok(BP.volInducteurs(modele.revenus[1].rows,0) === 5000*0.8, 'volInducteurs : chaîne × avec unité % traitée en ratio');
-near(Pm.pl.CA[2025], 100000*1000 + 5000*0.8*2000, 0.001, 'CA modèle an 1 = Σ (volume × prix) par ligne');
+// montants saisis en FCFA → base interne KFCFA (÷1000), comme le reste de l'app
+near(Pm.pl.CA[2025], (100000*1000 + 5000*0.8*2000)/1000, 0.001, 'CA modèle an 1 = Σ (volume × prix) par ligne, en base KFCFA');
 // INVARIANT 5 — bilan modèle bouclé : ECART du TFT ≈ 0 chaque année
 Pm.annees.forEach(a => near(Pm.tft[a].ECART, 0, 0.01, `BP modèle bouclé ${a} (ECART TFT ≈ 0)`));
-near(Pm.ouverture.treso, 100000000 + 150000000 - 200000000, 0.001, 'trésorerie d\'ouverture = capital + emprunt − CAPEX initial');
+near(Pm.ouverture.treso, (100000000 + 150000000 - 200000000)/1000, 0.001, 'trésorerie d\'ouverture = (capital + emprunt − CAPEX initial) en base KFCFA');
 ok(Math.abs((Pm.ouverture.immoNet + Pm.ouverture.bfr + Pm.ouverture.treso) - (Pm.ouverture.cp + Pm.ouverture.dette)) < 0.001, 'bilan d\'ouverture équilibré (actif = passif)');
 ok(Pm.annees.every(a => Pm.pl.IS[a] <= -(modele.imf_taux * Pm.pl.CA[a]) + 1e-6), 'impôt minimum forfaitaire appliqué chaque année (modèle)');
 

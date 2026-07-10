@@ -166,10 +166,10 @@ function mCarteRevenu(L,li){
     +'<div class="mut" style="text-transform:uppercase;letter-spacing:.5px;font-size:11px;font-weight:700;margin-bottom:8px">Inducteurs de volume (× ou ÷ · unité % = ratio)</div>'
     +rows
     +'<button class="btn sm" style="margin-top:2px" onclick="mAddInd('+li+')">+ inducteur</button>'
-    +'<div class="mind-price"><span class="x">= Volume an 1 : <b>'+fmt(vol/uni().f)+'</b></span></div>'
-    +'<div class="mind-price"><span class="x">×</span> <span class="mut">Prix an 1</span> <input class="nin ninm" value="'+mAmt(prix)+'" oninput="mSep(this)" onchange="mPrix('+li+',\'val\',this.value)"><input class="nin" style="width:70px" value="'+esc(L.prix.unit||'')+'" onchange="mPrix('+li+',\'unit\',this.value)">'
+    +'<div class="mind-price"><span class="x">= Volume an 1 : <b>'+Math.round(vol).toLocaleString("fr-FR").replace(/[  ]/g," ")+'</b> <span class="mut">(en volume, pas en FCFA)</span></span></div>'
+    +'<div class="mind-price"><span class="x">×</span> <span class="mut">Prix an 1 (FCFA)</span> <input class="nin ninm" value="'+mAmt(prix)+'" oninput="mSep(this)" onchange="mPrix('+li+',\'val\',this.value)"><input class="nin" style="width:70px" value="'+esc(L.prix.unit||'')+'" onchange="mPrix('+li+',\'unit\',this.value)">'
     +'<span class="mut">croissance</span> <input class="nin" style="width:60px" value="'+(L.prix.g||0)+'" onchange="mPrix('+li+',\'g\',this.value)"> %'
-    +'<span style="margin-left:auto;font-weight:700;color:#16904E">CA an 1 : '+fmt(ca/uni().f)+' '+uni().suf+'</span></div>'
+    +'<span style="margin-left:auto;font-weight:700;color:#16904E">CA an 1 : '+fmt(ca/1000)+' '+uni().suf+'</span></div>'
     +'<div class="mind-price" style="border-top:1px dashed #e3e9f2;padding-top:10px;margin-top:6px"><span class="mut">Coûts directs</span>'
     +'<span class="segvue"><button class="'+(L.cout.m==='pct'?'on':'')+'" onclick="mCoutM('+li+',\'pct\')">% du CA</button><button class="'+(L.cout.m==='unit'?'on':'')+'" onclick="mCoutM('+li+',\'unit\')">Coût unitaire</button></span>'
     +'<input class="nin ninm" value="'+mAmt(L.cout.val)+'" oninput="mSep(this)" onchange="mCoutV('+li+',this.value)"> <span class="mut">'+(L.cout.m==='pct'?'% du CA':'par unité de volume')+'</span></div>'
@@ -183,10 +183,10 @@ function vueModele(){
   var barre=tabs.map(function(t){return '<button class="btn '+(SOUS_MODELE===t[0]?"primary":"")+'" onclick="mTab(\''+t[0]+'\')">'+t[1]+'</button>';}).join(" ");
   var rnCum=A.reduce(function(s,a){return s+P.pl.RN[a];},0);
   var kpis='<div class="kpis">'
-    +kpiCard("CA fin de plan (An "+A.length+")",fmt(P.pl.CA[aL]/u.f)+" "+u.suf,"","","chart","#224289")
-    +kpiCard("EBITDA fin de plan",fmt(P.pl.EBITDA[aL]/u.f)+" "+u.suf,(P.pl.CA[aL]?Math.round(P.pl.EBITDA[aL]/P.pl.CA[aL]*100):0)+"% du CA","","coins","#FA6706")
-    +kpiCard("Résultat net cumulé",fmt(rnCum/u.f)+" "+u.suf,"sur "+A.length+" ans","","file","#172554")
-    +kpiCard("Trésorerie fin de plan",fmt(P.bs.TRESO[aL]/u.f)+" "+u.suf,P.bs.TRESO[aL]<0?"négative":"",P.bs.TRESO[aL]<0?"down":"up","wallet","#16904E")
+    +kpiCard("CA fin de plan (An "+A.length+")",fmt(P.pl.CA[aL])+" "+u.suf,"","","chart","#224289")
+    +kpiCard("EBITDA fin de plan",fmt(P.pl.EBITDA[aL])+" "+u.suf,(P.pl.CA[aL]?Math.round(P.pl.EBITDA[aL]/P.pl.CA[aL]*100):0)+"% du CA","","coins","#FA6706")
+    +kpiCard("Résultat net cumulé",fmt(rnCum)+" "+u.suf,"sur "+A.length+" ans","","file","#172554")
+    +kpiCard("Trésorerie fin de plan",fmt(P.bs.TRESO[aL])+" "+u.suf,P.bs.TRESO[aL]<0?"négative":"",P.bs.TRESO[aL]<0?"down":"up","wallet","#16904E")
     +'</div>';
   var corps="";
   if(SOUS_MODELE==="rev"){
@@ -221,7 +221,7 @@ function vueModele(){
       +'<div class="hyp-l"><span>Emprunt — montant</span><input class="sel ninm" style="width:46%" value="'+mAmt(e.montant||0)+'" oninput="mSep(this)" onchange="mSet(\'financement.emprunt.montant\',this.value,1)"></div>'
       +'<div class="hyp-l"><span>Emprunt — taux</span><input class="sel" style="width:46%" value="'+((e.taux||0)*100)+'" onchange="mSet(\'financement.emprunt.taux\',(numFR(this.value)||0)/100)"> %</div>'
       +'<div class="hyp-l"><span>Emprunt — durée</span><input class="sel" style="width:46%" value="'+(e.duree||5)+'" onchange="mSet(\'financement.emprunt.duree\',this.value,1)"> ans</div>'
-      +'<div class="mut" style="margin-top:8px">Trésorerie d\'ouverture = capital + apports + subvention + emprunt − CAPEX initial = <b>'+fmt(P.ouverture.treso/u.f)+' '+u.suf+'</b>.</div></div>';
+      +'<div class="mut" style="margin-top:8px">Trésorerie d\'ouverture = capital + apports + subvention + emprunt − CAPEX initial = <b>'+fmt(P.ouverture.treso)+' '+u.suf+'</b>.</div></div>';
   } else if(SOUS_MODELE==="bfr"){
     var b=M.bfr;
     corps='<div class="card"><div class="sec-titre" style="margin-top:0">Besoin en fonds de roulement (en jours)</div>'
@@ -254,9 +254,9 @@ function mVueResultats(P,u){
   var sep='<div style="height:16px"></div>';
   var valo="";
   if(val){valo=sep+'<div class="card"><div class="sec-titre" style="margin-top:0">Valorisation (multi-méthodes)</div><div class="kpis">'
-    +kpiCard("Valeur des fonds propres (retenue)",fmt(val.fourchette.retenue/u.f)+" "+u.suf,"fourchette "+fmt(val.fourchette.min/u.f)+" – "+fmt(val.fourchette.max/u.f)+" "+u.suf,"","wallet","#16904E")
-    +kpiCard("Fonds propres — DCF",fmt(val.equityDcf/u.f)+" "+u.suf,"WACC "+Math.round(val.wacc*1000)/10+" %","","coins","#FA6706")
-    +kpiCard("Valeur d'entreprise (EV)",fmt(val.ev/u.f)+" "+u.suf,"dont VT "+Math.round((val.vtPv/(val.ev||1))*100)+" %","","chart","#224289")
+    +kpiCard("Valeur des fonds propres (retenue)",fmt(val.fourchette.retenue)+" "+u.suf,"fourchette "+fmt(val.fourchette.min)+" – "+fmt(val.fourchette.max)+" "+u.suf,"","wallet","#16904E")
+    +kpiCard("Fonds propres — DCF",fmt(val.equityDcf)+" "+u.suf,"WACC "+Math.round(val.wacc*1000)/10+" %","","coins","#FA6706")
+    +kpiCard("Valeur d'entreprise (EV)",fmt(val.ev)+" "+u.suf,"dont VT "+Math.round((val.vtPv/(val.ev||1))*100)+" %","","chart","#224289")
     +'</div><div class="mut" style="margin-top:8px">Référence de valorisation : dernière année projetée (EBITDA, dette nette). Réglages détaillés dans les hypothèses de valorisation d\'un dossier avec historique — repris ici tels quels.</div></div>';}
   return vueBPPl(P)+sep+vueBPBs(P)+sep+vueBPTft(P)+sep+vueBPDette(P)+valo
     +'<div class="mut" style="margin-top:12px">Ces états prévisionnels alimentent les mêmes exports (PPT / Excel) qu\'un dossier avec historique.</div>';

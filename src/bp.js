@@ -302,13 +302,18 @@ function projeterModele(M,scenario){
   ["IMMO_BRUT","AMORT_CUM","IMMO_NET","STOCKS","CLIENTS","AUTRES_CREANCES","FOURNISSEURS","DETTES_FISC_SOC","AUTRES_DETTES","BFR","CP","DETTE","PROVISIONS","TRESO","LIGNE_CT","TRESO_ACTIVE"].forEach(function(c){P.bs[c]={};});
   var infl=M.inflation||0.03, bfrH=M.bfr||{dso:30,dio:45,dpo:30};
   var isTx=(M.is_taux!=null?M.is_taux:0.30);
+  /* Les montants du modèle sont SAISIS EN FCFA (prix unitaires, charges, CAPEX, financement).
+     La base interne de l'app est le KFCFA (uni().f : F=1000, K=1, M=1/1000, fmt = valeur×f).
+     → on convertit tout montant FCFA en base KFCFA (÷1000) pour que l'affichage soit correct
+     dans TOUTES les unités (sinon tout est 1000× trop grand, invisible en K mais faux en M). */
+  var SC=1000;
   /* financement → bilan d'ouverture (année 0) */
   var fin=M.financement||{};
-  var cp0=(+fin.capital||0)+(+fin.apports||0)+(+fin.subvention||0);
-  var emp=(fin.emprunt&&+fin.emprunt.montant)||0;
+  var cp0=((+fin.capital||0)+(+fin.apports||0)+(+fin.subvention||0))/SC;
+  var emp=((fin.emprunt&&+fin.emprunt.montant)||0)/SC;
   var dTaux=(fin.emprunt&&+fin.emprunt.taux)||0.08, dDuree=(fin.emprunt&&+fin.emprunt.duree)||5;
   /* CAPEX : liste {montant,duree,annee} ; annee 0 = investissement initial (ouverture), k = année projetée k */
-  var capex=(M.capex||[]).map(function(c){return {montant:(c.montant!=null?+c.montant:(+c.nombre||0)*(+c.coutUnitaire||0)),duree:+c.duree||5,annee:+c.annee||0,amorti:0};});
+  var capex=(M.capex||[]).map(function(c){return {montant:(c.montant!=null?+c.montant:(+c.nombre||0)*(+c.coutUnitaire||0))/SC,duree:+c.duree||5,annee:+c.annee||0,amorti:0};});
   var capexInit=capex.filter(function(c){return c.annee<=0;}).reduce(function(s,c){return s+c.montant;},0);
   var treso0=cp0+emp-capexInit;
   var brut=capexInit, amortCum=0, cp=cp0, provisions=0, detteSolde=emp, ligneCT=0, bfrP=0, tresoP=treso0, rnPrec=0;
@@ -321,16 +326,16 @@ function projeterModele(M,scenario){
     /* --- revenus & coûts directs (par ligne d'inducteurs) --- */
     var ca=0, coutsD=0;
     (M.revenus||[]).forEach(function(L){
-      var vol=volInducteurs(L.rows,i), prix=valAnnee(L.prix,i), caL=vol*prix;
+      var vol=volInducteurs(L.rows,i), prix=valAnnee(L.prix,i), caL=vol*prix/SC;
       ca+=caL;
       var cm=(L.cout&&L.cout.m)||"pct", cv=+((L.cout||{}).val)||0;
-      coutsD += (cm==="unit") ? vol*cv*Math.pow(1+infl,i) : caL*cv/100;
+      coutsD += (cm==="unit") ? vol*cv*Math.pow(1+infl,i)/SC : caL*cv/100;
     });
     var cd=-coutsD;
-    var autresProd=valAnnee(M.autresProd,i);
+    var autresProd=valAnnee(M.autresProd,i)/SC;
     /* --- charges fixes → OPEX / personnel (montant annuel, croissance ou par année) --- */
     var opexTot=0, persTot=0;
-    (M.chargesFixes||[]).forEach(function(c){ var m=-valAnnee({val:(c.montant!=null?c.montant:c.val),g:c.g,mode:c.mode,vals:c.vals},i); if(c.personnel)persTot+=m; else opexTot+=m; });
+    (M.chargesFixes||[]).forEach(function(c){ var m=-valAnnee({val:(c.montant!=null?c.montant:c.val),g:c.g,mode:c.mode,vals:c.vals},i)/SC; if(c.personnel)persTot+=m; else opexTot+=m; });
     /* --- CAPEX de l'année & amortissements linéaires par poste --- */
     if(py>=1){ capex.forEach(function(c){ if(c.annee===py) brut+=c.montant; }); }
     var dot=0; capex.forEach(function(c){ if(c.annee<=py){ var restant=c.montant-c.amorti; if(restant>0.01){ var d=Math.min(c.montant/c.duree,restant); c.amorti+=d; dot+=d; } } });
@@ -344,7 +349,7 @@ function projeterModele(M,scenario){
     /* --- cascade P&L --- */
     var ebitda=ca+cd+autresProd+opexTot+persTot;
     var ebit=ebitda-dot;
-    var pf=valAnnee(M.produitsFin,i);
+    var pf=valAnnee(M.produitsFin,i)/SC;
     var rf=pf-interets-interetsCT;
     var ebt=ebit+rf;
     var baseIS=ebt;
@@ -392,7 +397,7 @@ function projeterModele(M,scenario){
     bfrP=bfr;tresoP=treso;rnPrec=rn;
   });
   /* bilan d'ouverture exposé (année 0) pour l'affichage éventuel */
-  P.ouverture={annee:startY-1,cp:cp0,capital:(+fin.capital||0)+(+fin.apports||0),subvention:(+fin.subvention||0),dette:emp,immoNet:capexInit,treso:treso0,bfr:0};
+  P.ouverture={annee:startY-1,cp:cp0,capital:((+fin.capital||0)+(+fin.apports||0))/SC,subvention:(+fin.subvention||0)/SC,dette:emp,immoNet:capexInit,treso:treso0,bfr:0};
   P.pl.AUTRES_PRODUITS=P.pl.AUTRES_PROD;P.pl.PERSONNEL=P.pl.CHARGES_PERSONNEL;
   P.pl.AUTRES_OPEX=P.pl.OPEX_TOTAL;P.pl.DOTATIONS=P.pl.DA;P.pl.ACHATS=P.pl.COUTS_DIRECTS;
   P.bs.TRESO_NETTE=P.bs.TRESO;
