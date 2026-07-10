@@ -67,7 +67,19 @@ var M_PRESETS={
   transport:{lab:"Transport",rows:[{op:'x',name:'Véhicules',val:10,unit:'véh.',g:0},{op:'x',name:'Trajets / jour',val:6,unit:'traj.',g:0},{op:'x',name:'Jours / an',val:300,unit:'j',g:0},{op:'x',name:'Places',val:15,unit:'pl.',g:0},{op:'x',name:'Taux de remplissage',val:70,unit:'%',g:0}]}
 };
 var M_GROUPS=[["Générique",["quantite","vierge"]],["Industrie / production",["production","mine","energie"]],["Agriculture / élevage",["agriculture","elevage"]],["Commerce",["negoce"]],["Services",["service","ecole","restauration","hotellerie","sante","abonnement"]],["Immobilier / transport",["immobilier","transport"]]];
-function modeleValoDefaut(){return {rf:0.06,primeMarche:0.07,beta:1.0,primePays:0.03,primeTaille:0.02,primeIlliquidite:0.015,coutDette:0.08,poidsDette:0.35,g:0.03,midYear:false,tvMode:"gordon",exitMultiple:5.5,multiplesComparables:{min:4,central:5.5,max:7},multiplesTransactions:{min:5,central:6.5,max:8},poids:{dcf:45,comp:20,trans:20,anr:15},bridge:[],anrAjustements:[]};}
+function modeleValoDefaut(){return {rf:0.06,primeMarche:0.055,beta:1.0,pays:"Sénégal",primePays:0.07,primeTaille:0.02,primeIlliquidite:0.015,coutDette:0.09,poidsDette:0.35,g:0.03,midYear:false,tvMode:"gordon",exitMultiple:5.5,multiplesComparables:{min:4,central:5.5,max:7},multiplesTransactions:{min:5,central:6.5,max:8},poids:{dcf:45,comp:20,trans:20,anr:15},bridge:[],anrAjustements:[]};}
+/* Risque pays — méthode Damodaran (prime de risque « actions » du pays = spread souverain × volatilité
+   relative actions/obligations). Valeurs INDICATIVES à valider/actualiser (Damodaran publie chaque année).
+   La prime pays s'ADDITIONNE au build-up : ke = rf + β·(prime marché mûr) + prime pays + taille + illiquidité. */
+const PAYS_RISQUE_SRC="Primes indicatives — méthode Damodaran (réf. janv. 2025), à valider/actualiser";
+const PAYS_RISQUE=[
+  ["UEMOA (zone franc · XOF)",[["Sénégal","Ba3",0.070],["Côte d'Ivoire","Ba2",0.055],["Bénin","B1",0.079],["Burkina Faso","CCC+",0.133],["Mali","Caa2",0.133],["Niger","—",0.133],["Togo","B3",0.096],["Guinée-Bissau","—",0.160]]],
+  ["CEMAC (zone franc · XAF)",[["Cameroun","B2",0.096],["Gabon","Caa1",0.115],["Congo","Caa2",0.133],["Tchad","—",0.160],["Guinée équatoriale","—",0.110],["Centrafrique","—",0.180]]],
+  ["Autres Afrique",[["Nigeria","Caa1",0.115],["Ghana","défaut",0.180],["Maroc","Ba1",0.036],["Kenya","Caa1",0.115],["Afrique du Sud","Ba2",0.059],["Égypte","Caa1",0.115],["RD Congo","B3",0.133],["Guinée","—",0.133]]],
+  ["Références",[["France","Aa2",0.007],["États-Unis (marché mûr)","Aaa",0.000]]]
+];
+function paysCRP(nom){for(var i=0;i<PAYS_RISQUE.length;i++){var l=PAYS_RISQUE[i][1];for(var j=0;j<l.length;j++)if(l[j][0]===nom)return l[j][2];}return null;}
+function hValoPays(nom){var H=assurerValoH();if(nom){var c=paysCRP(nom);if(c!=null)H.valo.primePays=c;}H.valo.pays=nom;sauverDossier();rendre();}
 function modeleParDefaut(){
   var y=(typeof CONF_ANNEE!=="undefined"&&CONF_ANNEE)||2025;
   try{y=new Date().getFullYear();}catch(e){}
@@ -75,7 +87,7 @@ function modeleParDefaut(){
     revenus:[{name:"Produit / service 1",tpl:"quantite",rows:JSON.parse(JSON.stringify(M_PRESETS.quantite.rows)),prix:{val:1000,unit:"FCFA",g:2},cout:{m:"pct",val:40}}],
     chargesFixes:[{name:"Salaires",montant:20000000,personnel:true,g:3},{name:"Loyer & charges",montant:8000000,g:2}],
     capex:[{name:"Investissement initial",montant:50000000,duree:5,annee:0}],
-    financement:{capital:20000000,apports:0,subvention:0,emprunt:{montant:30000000,taux:0.08,duree:5}},
+    financement:{mode:"auto",partFP:0.30,moisBFR:3,capital:20000000,apports:0,subvention:0,emprunt:{montant:30000000,taux:0.09,duree:5}},
     bfr:{dso:30,dio:45,dpo:30}, valo:modeleValoDefaut()};
 }
 function assurerModele(){ if(!DOSSIER.modele)DOSSIER.modele=modeleParDefaut(); if(!DOSSIER.modele.valo)DOSSIER.modele.valo=modeleValoDefaut(); return DOSSIER.modele; }
@@ -213,15 +225,36 @@ function vueModele(){
         +'<td><button class="btn sm" onclick="mDelCapex('+i+')">✕</button></td></tr>';}).join("")
       +'</table></div><div style="padding:10px 14px"><button class="btn sm" onclick="mAddCapex()">+ Ajouter un investissement</button><div class="mut" style="margin-top:6px">Amortissement linéaire par poste sur sa durée. Année 0 = investissement initial (bilan d\'ouverture).</div></div></div>';
   } else if(SOUS_MODELE==="fin"){
-    var f=M.financement, e=f.emprunt||{};
-    corps='<div class="card"><div class="sec-titre" style="margin-top:0">Financement — bilan d\'ouverture</div>'
-      +'<div class="hyp-l"><span>Capital social</span><input class="sel ninm" style="width:46%" value="'+mAmt(f.capital||0)+'" oninput="mSep(this)" onchange="mSet(\'financement.capital\',this.value,1)"></div>'
-      +'<div class="hyp-l"><span>Apports en compte courant</span><input class="sel ninm" style="width:46%" value="'+mAmt(f.apports||0)+'" oninput="mSep(this)" onchange="mSet(\'financement.apports\',this.value,1)"></div>'
-      +'<div class="hyp-l"><span>Subvention</span><input class="sel ninm" style="width:46%" value="'+mAmt(f.subvention||0)+'" oninput="mSep(this)" onchange="mSet(\'financement.subvention\',this.value,1)"></div>'
-      +'<div class="hyp-l"><span>Emprunt — montant</span><input class="sel ninm" style="width:46%" value="'+mAmt(e.montant||0)+'" oninput="mSep(this)" onchange="mSet(\'financement.emprunt.montant\',this.value,1)"></div>'
-      +'<div class="hyp-l"><span>Emprunt — taux</span><input class="sel" style="width:46%" value="'+((e.taux||0)*100)+'" onchange="mSet(\'financement.emprunt.taux\',(numFR(this.value)||0)/100)"> %</div>'
-      +'<div class="hyp-l"><span>Emprunt — durée</span><input class="sel" style="width:46%" value="'+(e.duree||5)+'" onchange="mSet(\'financement.emprunt.duree\',this.value,1)"> ans</div>'
-      +'<div class="mut" style="margin-top:8px">Trésorerie d\'ouverture = capital + apports + subvention + emprunt − CAPEX initial = <b>'+fmt(P.ouverture.treso)+' '+u.suf+'</b>.</div></div>';
+    var f=M.financement||{}, e=f.emprunt||{}, Pf=P.financement, auto=(f.mode==="auto");
+    var modeSeg='<div class="hyp-l"><span>Mode de financement</span><span class="segvue">'
+      +'<button class="'+(auto?"on":"")+'" onclick="mSet(\'financement.mode\',\'auto\')">Automatique</button>'
+      +'<button class="'+(auto?"":"on")+'" onclick="mSet(\'financement.mode\',\'manuel\')">Manuel</button></span></div>';
+    var empBloc='<div class="hyp-l"><span>Emprunt — taux d\'intérêt</span><input class="sel" style="width:46%" value="'+((e.taux||0)*100)+'" onchange="mSet(\'financement.emprunt.taux\',(numFR(this.value)||0)/100)"> %</div>'
+      +'<div class="hyp-l"><span>Emprunt — durée de remboursement</span><input class="sel" style="width:46%" value="'+(e.duree||5)+'" onchange="mSet(\'financement.emprunt.duree\',this.value,1)"> ans</div>';
+    if(auto){
+      corps='<div class="card"><div class="sec-titre" style="margin-top:0">Financement — automatique</div>'+modeSeg
+        +'<div class="hyp-l"><span>Part de fonds propres (gearing cible)</span><input class="sel" style="width:46%" value="'+(Math.round((f.partFP!=null?f.partFP:0.30)*1000)/10)+'" onchange="mSet(\'financement.partFP\',(numFR(this.value)||0)/100)"> %</div>'
+        +'<div class="hyp-l"><span>BFR de démarrage</span><input class="sel" style="width:46%" value="'+(f.moisBFR!=null?f.moisBFR:3)+'" onchange="mSet(\'financement.moisBFR\',this.value,1)"> mois de charges</div>'
+        +'<div class="hyp-l"><span>Subvention (optionnel, hors besoin)</span><input class="sel ninm" style="width:46%" value="'+mAmt(f.subvention||0)+'" oninput="mSep(this)" onchange="mSet(\'financement.subvention\',this.value,1)"></div>'
+        +empBloc
+        +'<div class="card" style="background:#f6f8fc;margin-top:12px"><div class="sec-titre" style="margin-top:0">Besoin de financement calculé</div>'
+        +'<div class="hyp-l"><span>Investissements initiaux (CAPEX année 0)</span><b>'+fmt(Pf.capexInit)+' '+u.suf+'</b></div>'
+        +'<div class="hyp-l"><span>+ BFR de démarrage ('+Pf.moisBFR+' mois de coûts An 1)</span><b>'+fmt(Pf.bfrDemarrage)+' '+u.suf+'</b></div>'
+        +'<div class="hyp-l" style="border-top:2px solid #224289;padding-top:6px"><span><b>= Besoin total à financer</b></span><b>'+fmt(Pf.besoin)+' '+u.suf+'</b></div>'
+        +'<div class="hyp-l" style="margin-top:8px"><span>› Fonds propres ('+Math.round(Pf.partFP*100)+' %)</span><b style="color:#16904E">'+fmt(Pf.capital)+' '+u.suf+'</b></div>'
+        +'<div class="hyp-l"><span>› Dette bancaire ('+Math.round((1-Pf.partFP)*100)+' %)</span><b style="color:#224289">'+fmt(Pf.dette)+' '+u.suf+'</b></div>'
+        +(Pf.subvention?'<div class="hyp-l"><span>+ Subvention</span><b>'+fmt(Pf.subvention)+' '+u.suf+'</b></div>':'')
+        +'</div>'
+        +'<div class="mut" style="margin-top:8px">Le besoin (CAPEX + BFR de démarrage) est réparti automatiquement selon la part de fonds propres choisie ; la dette est amortie sur sa durée. Trésorerie d\'ouverture = <b>'+fmt(P.ouverture.treso)+' '+u.suf+'</b> (marge de démarrage).</div></div>';
+    } else {
+      corps='<div class="card"><div class="sec-titre" style="margin-top:0">Financement — bilan d\'ouverture (manuel)</div>'+modeSeg
+        +'<div class="hyp-l"><span>Capital social</span><input class="sel ninm" style="width:46%" value="'+mAmt(f.capital||0)+'" oninput="mSep(this)" onchange="mSet(\'financement.capital\',this.value,1)"></div>'
+        +'<div class="hyp-l"><span>Apports en compte courant</span><input class="sel ninm" style="width:46%" value="'+mAmt(f.apports||0)+'" oninput="mSep(this)" onchange="mSet(\'financement.apports\',this.value,1)"></div>'
+        +'<div class="hyp-l"><span>Subvention</span><input class="sel ninm" style="width:46%" value="'+mAmt(f.subvention||0)+'" oninput="mSep(this)" onchange="mSet(\'financement.subvention\',this.value,1)"></div>'
+        +'<div class="hyp-l"><span>Emprunt — montant</span><input class="sel ninm" style="width:46%" value="'+mAmt(e.montant||0)+'" oninput="mSep(this)" onchange="mSet(\'financement.emprunt.montant\',this.value,1)"></div>'
+        +empBloc
+        +'<div class="mut" style="margin-top:8px">Trésorerie d\'ouverture = capital + apports + subvention + emprunt − CAPEX initial = <b>'+fmt(P.ouverture.treso)+' '+u.suf+'</b>.</div></div>';
+    }
   } else if(SOUS_MODELE==="bfr"){
     var b=M.bfr;
     corps='<div class="card"><div class="sec-titre" style="margin-top:0">Besoin en fonds de roulement (en jours)</div>'
@@ -250,14 +283,16 @@ function mVueResultats(P,u){
      net, TFT officiel SYSCOHADA et tableau de la dette. Colonne « historique » masquée
      (mode modèle) via tableBP. → format et rubriques identiques au BP classique. */
   var M=assurerModele();
-  var val=null; try{ val=valoriserBP(etatsFromModele(P),{is_taux:M.is_taux,valo:M.valo},P); }catch(e){}
   var sep='<div style="height:16px"></div>';
   var valo="";
-  if(val){valo=sep+'<div class="card"><div class="sec-titre" style="margin-top:0">Valorisation (multi-méthodes)</div><div class="kpis">'
-    +kpiCard("Valeur des fonds propres (retenue)",fmt(val.fourchette.retenue)+" "+u.suf,"fourchette "+fmt(val.fourchette.min)+" – "+fmt(val.fourchette.max)+" "+u.suf,"","wallet","#16904E")
-    +kpiCard("Fonds propres — DCF",fmt(val.equityDcf)+" "+u.suf,"WACC "+Math.round(val.wacc*1000)/10+" %","","coins","#FA6706")
-    +kpiCard("Valeur d'entreprise (EV)",fmt(val.ev)+" "+u.suf,"dont VT "+Math.round((val.vtPv/(val.ev||1))*100)+" %","","chart","#224289")
-    +'</div><div class="mut" style="margin-top:8px">Référence de valorisation : dernière année projetée (EBITDA, dette nette). Réglages détaillés dans les hypothèses de valorisation d\'un dossier avec historique — repris ici tels quels.</div></div>';}
+  try{
+    var V=valoriserBP(etatsFromModele(P),{is_taux:M.is_taux,valo:M.valo},P);
+    /* MÊME vue « Valorisation » qu'un dossier avec historique : build-up CAPM (risque pays Damodaran),
+       construction du FCFF, pont VE→fonds propres, sensibilité, football-field + pondération des méthodes */
+    valo=sep+'<h2 style="margin:8px 0 2px">Valorisation</h2>'
+      +'<div class="mut" style="margin-bottom:8px">Référence : dernière année projetée (EBITDA, dette nette de clôture). Cliquez sur <b>« Modifier les hypothèses »</b> pour le build-up MEDAF (risque pays Damodaran), les multiples et la valeur terminale.</div>'
+      +vueValoCorps(M,P,V);
+  }catch(e){ valo=sep+'<div class="mut">Valorisation indisponible ('+esc(e.message)+').</div>'; }
   return vueBPPl(P)+sep+vueBPBs(P)+sep+vueBPTft(P)+sep+vueBPDette(P)+valo
     +'<div class="mut" style="margin-top:12px">Ces états prévisionnels alimentent les mêmes exports (PPT / Excel) qu\'un dossier avec historique.</div>';
 }
@@ -274,9 +309,11 @@ function hOpex(code,champ,val,div){const H=assurerBP();const o=H.opex.find(x=>x.
   if(champ==="mode"){o.mode=val;sauverDossier();rendre();return;}
   const x=numFR(val);if(x===null){rendre();return;}
   o[champ]=x/(div||1);sauverDossier();rendre();}
-function hValo(k,val,div){const H=assurerBP();const x=numFR(val);
+/* hypothèses de valo partagées : dossier avec historique (assurerBP) OU modèle sans balance (assurerModele) */
+function assurerValoH(){return (typeof modeleMode==="function"&&modeleMode())?assurerModele():assurerBP();}
+function hValo(k,val,div){const H=assurerValoH();const x=numFR(val);
   if(x===null){rendre();return;}H.valo[k]=x/(div||1);sauverDossier();rendre();}
-function hValoM(grp,k,val,div){const H=assurerBP();const x=numFR(val);
+function hValoM(grp,k,val,div){const H=assurerValoH();const x=numFR(val);
   if(x===null){rendre();return;}H.valo[grp][k]=x/(div||1);sauverDossier();rendre();}
 function choisirScenario(s){assurerBP().scenario=s;sauverDossier();rendre();}
 function hNbPlan(n){
@@ -290,15 +327,15 @@ function hNbPlan(n){
   H.nb=n;sauverDossier();rendre();
   toast("Plan sur "+n+" ans — séries annuelles ajustées");
 }
-function ajAnr(){assurerBP().valo.anrAjustements.push({lib:"Réévaluation…",montant:0});sauverDossier();rendre();}
-function majAnr(i,champ,val){const l=assurerBP().valo.anrAjustements[i];
+function ajAnr(){assurerValoH().valo.anrAjustements.push({lib:"Réévaluation…",montant:0});sauverDossier();rendre();}
+function majAnr(i,champ,val){const l=assurerValoH().valo.anrAjustements[i];
   if(l){l[champ]=champ==="montant"?(+val)/uni().f:val;sauverDossier();if(champ==="montant")rendre();}}
-function supAnr(i){assurerBP().valo.anrAjustements.splice(i,1);sauverDossier();rendre();}
-function ajBridge(){const V=assurerBP().valo;(V.bridge=V.bridge||[]).push({lib:"Ajustement…",montant:0});sauverDossier();rendre();}
-function majBridge(i,champ,val){const l=assurerBP().valo.bridge[i];
+function supAnr(i){assurerValoH().valo.anrAjustements.splice(i,1);sauverDossier();rendre();}
+function ajBridge(){const V=assurerValoH().valo;(V.bridge=V.bridge||[]).push({lib:"Ajustement…",montant:0});sauverDossier();rendre();}
+function majBridge(i,champ,val){const l=assurerValoH().valo.bridge[i];
   if(l){l[champ]=champ==="montant"?(+val)/uni().f:val;sauverDossier();if(champ==="montant")rendre();}}
-function supBridge(i){assurerBP().valo.bridge.splice(i,1);sauverDossier();rendre();}
-function setTVMode(m){assurerBP().valo.tvMode=m;sauverDossier();rendre();}
+function supBridge(i){assurerValoH().valo.bridge.splice(i,1);sauverDossier();rendre();}
+function setTVMode(m){assurerValoH().valo.tvMode=m;sauverDossier();rendre();}
 
 /* champs de saisie */
 const inPct=(fn,val,step)=>`<span class="ctl-h"><input type="text" inputmode="decimal" class="nin" value="${+(val*100).toFixed(2)}" step="${step||0.5}" onchange="${fn}(this.value,100)"><span class="mut" style="width:34px">%</span></span>`;
@@ -692,6 +729,11 @@ let VALO_HYP_OUVERT=false;
 function vueValo(){
   if(!ETATS) return '<div class="mut">Importez d\'abord des balances.</div>';
   const H=assurerBP(),P=projeterBP(ETATS,H),V=valoriserBP(ETATS,H,P);
+  return `<h1>Valorisation</h1>${pillsScenarios(H)}${vueValoCorps(H,P,V)}`;
+}
+/* corps de valorisation RÉUTILISABLE : dossier avec historique OU modèle sans balance
+   (build-up CAPM éditable, table risque-pays Damodaran, FCFF, pont VE→FP, sensibilité, football-field) */
+function vueValoCorps(H,P,V){
   VALO_CACHE=V;
   const u=uni(),AP=P.annees,Vh=H.valo;
   const pc=x=>(x*100).toFixed(2).replace(/\.?0+$/,"")+" %";
@@ -709,7 +751,9 @@ function vueValo(){
     ${hypLigne("Taux sans risque",inPct("hValo.bind(null,'rf')",Vh.rf,0.25))}
     ${hypLigne("Prime de risque marché",inPct("hValo.bind(null,'primeMarche')",Vh.primeMarche,0.25))}
     ${hypLigne("Beta",inN("hValo.bind(null,'beta')",Vh.beta,""))}
-    ${hypLigne("Prime de risque pays (spread souverain)",inPct("hValo.bind(null,'primePays')",Vh.primePays||0,0.25))}
+    ${hypLigne("Pays (risque souverain — Damodaran)",`<select class="sel" style="max-width:230px" onchange="hValoPays(this.value)"><option value="">— personnalisé —</option>${PAYS_RISQUE.map(g=>`<optgroup label="${g[0]}">${g[1].map(p=>`<option value="${esc(p[0])}"${Vh.pays===p[0]?" selected":""}>${esc(p[0])} · ${p[1]} · ${(p[2]*100).toFixed(1)}%</option>`).join("")}</optgroup>`).join("")}</select>`)}
+    ${hypLigne("Prime de risque pays (CRP)",inPct("hValo.bind(null,'primePays')",Vh.primePays||0,0.25))}
+    <div class="mut" style="margin:-4px 0 6px;font-size:11px">${PAYS_RISQUE_SRC}</div>
     ${hypLigne("Prime de taille (petite entreprise)",inPct("hValo.bind(null,'primeTaille')",Vh.primeTaille||0,0.25))}
     ${hypLigne("Prime d'illiquidité (non cotée)",inPct("hValo.bind(null,'primeIlliquidite')",Vh.primeIlliquidite||0,0.25))}
     ${hypLigne("Coût de la dette (brut)",inPct("hValo.bind(null,'coutDette')",Vh.coutDette,0.25))}
@@ -718,7 +762,7 @@ function vueValo(){
     ${(Vh.tvMode||'gordon')==='gordon'
       ?hypLigne("Croissance à l'infini (g)",inPct("hValo.bind(null,'g')",Vh.g,0.25))
       :hypLigne("Multiple de sortie (× EBITDA terminal)",`<span class="ctl-h"><input type="text" inputmode="decimal" class="nin" value="${Vh.exitMultiple||0}" step="0.5" onchange="hValo('exitMultiple',this.value,1)"><span class="mut" style="width:34px">×</span></span>`)}
-    ${hypLigne("Convention d'actualisation",`<span class="segvue"><button class="${!Vh.midYear?'on':''}" onclick="assurerBP().valo.midYear=false;sauverDossier();rendre()">Fin d'année</button><button class="${Vh.midYear?'on':''}" onclick="assurerBP().valo.midYear=true;sauverDossier();rendre()">Mi-année</button></span>`)}
+    ${hypLigne("Convention d'actualisation",`<span class="segvue"><button class="${!Vh.midYear?'on':''}" onclick="assurerValoH().valo.midYear=false;sauverDossier();rendre()">Fin d'année</button><button class="${Vh.midYear?'on':''}" onclick="assurerValoH().valo.midYear=true;sauverDossier();rendre()">Mi-année</button></span>`)}
     <div class="row" style="margin-top:10px">
       <span class="chip ok">Coût des fonds propres : ${pc(V.ke)}</span>
       <span class="chip ok">Coût de la dette net d'IS : ${pc(V.kd)}</span>
@@ -788,7 +832,7 @@ function vueValo(){
       <span class="chip" style="background:#172554;color:#fff">Fourchette (méthodes pondérées) : ${fmt(V.fourchette.min)} – ${fmt(V.fourchette.max)} ${u.suf}</span>
       <span class="chip ok">Valeur retenue (moyenne pondérée) : ${fmt(V.fourchette.retenue)} ${u.suf}</span></div>
   </div>`;
-  return `<h1>Valorisation</h1>${pillsScenarios(H)}${resume}${VALO_HYP_OUVERT?capm:""}${fcffT}${bridge}${ff}`;
+  return `${resume}${VALO_HYP_OUVERT?capm:""}${fcffT}${bridge}${ff}`;
 }
 function dessinerFootball(){
   const el=document.getElementById("gFF");

@@ -315,6 +315,20 @@ function projeterModele(M,scenario){
   /* CAPEX : liste {montant,duree,annee} ; annee 0 = investissement initial (ouverture), k = année projetée k */
   var capex=(M.capex||[]).map(function(c){return {montant:(c.montant!=null?+c.montant:(+c.nombre||0)*(+c.coutUnitaire||0))/SC,duree:+c.duree||5,annee:+c.annee||0,amorti:0};});
   var capexInit=capex.filter(function(c){return c.annee<=0;}).reduce(function(s,c){return s+c.montant;},0);
+  /* mode financement AUTO (inspiré du modèle « Funds ») : besoin = CAPEX initial + BFR de démarrage
+     (N mois de coûts d'exploitation de l'An 1), réparti fonds propres / dette selon la part choisie. */
+  var moisBFR=(fin.moisBFR!=null?+fin.moisBFR:3);
+  var partFP=(fin.partFP!=null?+fin.partFP:0.30);
+  var bfrDem=0, besoin=capexInit;
+  if(fin.mode==="auto"){
+    var coutsD1=0, charges1=0;
+    (M.revenus||[]).forEach(function(L){ var vol=volInducteurs(L.rows,0), prix=valAnnee(L.prix,0), caL=vol*prix/SC; var cm=(L.cout&&L.cout.m)||"pct", cv=+((L.cout||{}).val)||0; coutsD1+=(cm==="unit")?vol*cv/SC:caL*cv/100; });
+    (M.chargesFixes||[]).forEach(function(c){ charges1+=valAnnee({val:(c.montant!=null?c.montant:c.val),g:c.g,mode:c.mode,vals:c.vals},0)/SC; });
+    bfrDem=(moisBFR/12)*(coutsD1+charges1);
+    besoin=capexInit+bfrDem;
+    cp0=besoin*partFP+((+fin.subvention||0)/SC);
+    emp=besoin*(1-partFP);
+  }
   var treso0=cp0+emp-capexInit;
   var brut=capexInit, amortCum=0, cp=cp0, provisions=0, detteSolde=emp, ligneCT=0, bfrP=0, tresoP=treso0, rnPrec=0;
   var amortAnnuel=dDuree>0?emp/dDuree:emp;
@@ -397,7 +411,9 @@ function projeterModele(M,scenario){
     bfrP=bfr;tresoP=treso;rnPrec=rn;
   });
   /* bilan d'ouverture exposé (année 0) pour l'affichage éventuel */
-  P.ouverture={annee:startY-1,cp:cp0,capital:((+fin.capital||0)+(+fin.apports||0))/SC,subvention:(+fin.subvention||0)/SC,dette:emp,immoNet:capexInit,treso:treso0,bfr:0};
+  P.ouverture={annee:startY-1,cp:cp0,capital:(fin.mode==="auto"?besoin*partFP:((+fin.capital||0)+(+fin.apports||0))/SC),subvention:(+fin.subvention||0)/SC,dette:emp,immoNet:capexInit,treso:treso0,bfr:0};
+  /* synthèse du financement (pour l'onglet Financement) — valeurs en base KFCFA */
+  P.financement={mode:(fin.mode||"manuel"),partFP:partFP,moisBFR:moisBFR,capexInit:capexInit,bfrDemarrage:bfrDem,besoin:besoin,capital:cp0-((+fin.subvention||0)/SC),subvention:(+fin.subvention||0)/SC,dette:emp,taux:dTaux,duree:dDuree};
   P.pl.AUTRES_PRODUITS=P.pl.AUTRES_PROD;P.pl.PERSONNEL=P.pl.CHARGES_PERSONNEL;
   P.pl.AUTRES_OPEX=P.pl.OPEX_TOTAL;P.pl.DOTATIONS=P.pl.DA;P.pl.ACHATS=P.pl.COUTS_DIRECTS;
   P.bs.TRESO_NETTE=P.bs.TRESO;

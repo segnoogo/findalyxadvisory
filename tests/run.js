@@ -136,6 +136,14 @@ Pm.annees.forEach(a => near(Pm.tft[a].ECART, 0, 0.01, `BP modèle bouclé ${a} (
 near(Pm.ouverture.treso, (100000000 + 150000000 - 200000000)/1000, 0.001, 'trésorerie d\'ouverture = (capital + emprunt − CAPEX initial) en base KFCFA');
 ok(Math.abs((Pm.ouverture.immoNet + Pm.ouverture.bfr + Pm.ouverture.treso) - (Pm.ouverture.cp + Pm.ouverture.dette)) < 0.001, 'bilan d\'ouverture équilibré (actif = passif)');
 ok(Pm.annees.every(a => Pm.pl.IS[a] <= -(modele.imf_taux * Pm.pl.CA[a]) + 1e-6), 'impôt minimum forfaitaire appliqué chaque année (modèle)');
+// financement AUTOMATIQUE : besoin = CAPEX initial + BFR de démarrage, réparti CP/dette selon la part FP
+const modeleAuto = JSON.parse(JSON.stringify(modele));
+modeleAuto.financement = {mode:'auto', partFP:0.4, moisBFR:3, emprunt:{taux:0.1, duree:5}};
+const Pa = BP.projeterModele(modeleAuto);
+near(Pa.financement.besoin, Pa.financement.capexInit + Pa.financement.bfrDemarrage, 0.001, 'financement auto : besoin = CAPEX initial + BFR de démarrage');
+near(Pa.financement.capital, Pa.financement.besoin*0.4, 0.001, 'financement auto : fonds propres = besoin × part FP');
+near(Pa.financement.capital + Pa.financement.dette, Pa.financement.besoin, 0.001, 'financement auto : fonds propres + dette = besoin');
+ok(Math.abs((Pa.ouverture.immoNet + Pa.ouverture.bfr + Pa.ouverture.treso) - (Pa.ouverture.cp + Pa.ouverture.dette)) < 0.001, 'bilan d\'ouverture équilibré (financement auto)');
 
 console.log(`\n${fail ? '❌ ÉCHEC' : '✅ SUCCÈS'} — ${pass} assertions passées, ${fail} échec(s).`);
 process.exit(fail ? 1 : 0);
