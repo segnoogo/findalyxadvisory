@@ -303,7 +303,7 @@ function projeterModele(M,scenario){
   var fCA=1+(+SCN.dCA||0), fCout=1-(+SCN.dMarge||0), fJours=1+(+SCN.dJours||0);
   var P={annees:AP,scenario:scLab,scenarioKey:scKey,pl:{},bs:{},tft:{},dette:{}};
   ["CA","COUTS_DIRECTS","MARGE_BRUTE","AUTRES_PROD","OPEX_TOTAL","CHARGES_PERSONNEL","EBITDA","DA","EBIT","PRODUITS_FIN","FRAIS_FIN","RESULTAT_FIN","EBT","IS","RN"].forEach(function(c){P.pl[c]={};});
-  P.pl.OPEX_DETAIL={};
+  P.pl.OPEX_DETAIL={};P.pl.PERS_DETAIL={};   /* frais généraux dépliés : hors personnel (OPEX_DETAIL) + personnel (PERS_DETAIL) — le personnel FAIT PARTIE des frais généraux */
   P.pl.CA_DETAIL={};P.pl.CD_DETAIL={};   /* détail par ligne de revenus : ventes & coûts directs (vue détaillée) */
   ["IMMO_BRUT","AMORT_CUM","IMMO_NET","STOCKS","CLIENTS","AUTRES_CREANCES","FOURNISSEURS","DETTES_FISC_SOC","AUTRES_DETTES","BFR","CP","DETTE","PROVISIONS","TRESO","LIGNE_CT","TRESO_ACTIVE"].forEach(function(c){P.bs[c]={};});
   var infl=M.inflation||0.03, bfrH=M.bfr||{dso:30,dio:45,dpo:30};
@@ -368,7 +368,7 @@ function projeterModele(M,scenario){
     /* --- charges fixes (uniquement en exploitation) → OPEX / personnel --- */
     var opexTot=0, persTot=0;
     if(isOp){ (M.chargesFixes||[]).forEach(function(c,ci){ var m=-valAnnee({val:(c.montant!=null?c.montant:c.val),g:c.g,mode:c.mode,vals:c.vals},oi)/SC;
-      if(c.personnel)persTot+=m;
+      if(c.personnel){ persTot+=m; var pc="PF"+ci; if(!P.pl.PERS_DETAIL[pc])P.pl.PERS_DETAIL[pc]={lib:(c.name||("Personnel "+(ci+1))),vals:{}}; P.pl.PERS_DETAIL[pc].vals[a]=m; }
       else { opexTot+=m; var code="CF"+ci; if(!P.pl.OPEX_DETAIL[code])P.pl.OPEX_DETAIL[code]={lib:(c.name||("Charge "+(ci+1))),vals:{}}; P.pl.OPEX_DETAIL[code].vals[a]=m; }
     }); }
     /* --- CAPEX de l'année --- */

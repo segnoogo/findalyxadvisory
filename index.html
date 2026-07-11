@@ -2511,7 +2511,7 @@ function projeterModele(M,scenario){
   var fCA=1+(+SCN.dCA||0), fCout=1-(+SCN.dMarge||0), fJours=1+(+SCN.dJours||0);
   var P={annees:AP,scenario:scLab,scenarioKey:scKey,pl:{},bs:{},tft:{},dette:{}};
   ["CA","COUTS_DIRECTS","MARGE_BRUTE","AUTRES_PROD","OPEX_TOTAL","CHARGES_PERSONNEL","EBITDA","DA","EBIT","PRODUITS_FIN","FRAIS_FIN","RESULTAT_FIN","EBT","IS","RN"].forEach(function(c){P.pl[c]={};});
-  P.pl.OPEX_DETAIL={};
+  P.pl.OPEX_DETAIL={};P.pl.PERS_DETAIL={};   /* frais généraux dépliés : hors personnel (OPEX_DETAIL) + personnel (PERS_DETAIL) — le personnel FAIT PARTIE des frais généraux */
   P.pl.CA_DETAIL={};P.pl.CD_DETAIL={};   /* détail par ligne de revenus : ventes & coûts directs (vue détaillée) */
   ["IMMO_BRUT","AMORT_CUM","IMMO_NET","STOCKS","CLIENTS","AUTRES_CREANCES","FOURNISSEURS","DETTES_FISC_SOC","AUTRES_DETTES","BFR","CP","DETTE","PROVISIONS","TRESO","LIGNE_CT","TRESO_ACTIVE"].forEach(function(c){P.bs[c]={};});
   var infl=M.inflation||0.03, bfrH=M.bfr||{dso:30,dio:45,dpo:30};
@@ -2576,7 +2576,7 @@ function projeterModele(M,scenario){
     /* --- charges fixes (uniquement en exploitation) → OPEX / personnel --- */
     var opexTot=0, persTot=0;
     if(isOp){ (M.chargesFixes||[]).forEach(function(c,ci){ var m=-valAnnee({val:(c.montant!=null?c.montant:c.val),g:c.g,mode:c.mode,vals:c.vals},oi)/SC;
-      if(c.personnel)persTot+=m;
+      if(c.personnel){ persTot+=m; var pc="PF"+ci; if(!P.pl.PERS_DETAIL[pc])P.pl.PERS_DETAIL[pc]={lib:(c.name||("Personnel "+(ci+1))),vals:{}}; P.pl.PERS_DETAIL[pc].vals[a]=m; }
       else { opexTot+=m; var code="CF"+ci; if(!P.pl.OPEX_DETAIL[code])P.pl.OPEX_DETAIL[code]={lib:(c.name||("Charge "+(ci+1))),vals:{}}; P.pl.OPEX_DETAIL[code].vals[a]=m; }
     }); }
     /* --- CAPEX de l'année --- */
@@ -6499,9 +6499,9 @@ async function exporterExcelModele(){
     /* frais généraux & personnel DÉPLIÉS par poste (P&L détaillé) puis sous-totaux */
     H.opex.forEach((o,k)=>row("OPL"+k,"Frais généraux — "+o.name,(i,X)=>`-${X}${rr("FO")}*INDEX(${rng(o.row)},MAX(1,${X}${rr("IDX")}-${rH}!${H.nc}))`,NF));
     H.pers.forEach((o,k)=>row("PEL"+k,"Personnel — "+o.name,(i,X)=>`-${X}${rr("FO")}*INDEX(${rng(o.row)},MAX(1,${X}${rr("IDX")}-${rH}!${H.nc}))`,NF));
-    row("OPEX","Frais généraux (sous-total)",(i,X)=>H.opex.length?H.opex.map((_,k)=>`${X}${rr("OPL"+k)}`).join("+"):"0",NF);
-    row("PERS","Charges de personnel (sous-total)",(i,X)=>H.pers.length?H.pers.map((_,k)=>`${X}${rr("PEL"+k)}`).join("+"):"0",NF);
-    row("EBITDA","EBITDA",(i,X)=>`${X}${rr("MB")}+${X}${rr("OPEX")}+${X}${rr("PERS")}`,NF,true);
+    /* le PERSONNEL fait partie des frais généraux → un seul sous-total (pas de séparation) */
+    row("FGT","Frais généraux (dont personnel)",(i,X)=>{const t=[...H.opex.map((_,k)=>`${X}${rr("OPL"+k)}`),...H.pers.map((_,k)=>`${X}${rr("PEL"+k)}`)];return t.length?t.join("+"):"0";},NF);
+    row("EBITDA","EBITDA",(i,X)=>`${X}${rr("MB")}+${X}${rr("FGT")}`,NF,true);
     /* CAPEX & amortissements par poste */
     row("CAPEX","CAPEX de l'année",(i,X)=>(M.capex||[]).length?(M.capex||[]).map((_,k)=>`IF(${rH}!${H.capAn[k]}=${X}${rr("IDX")},${rH}!${H.capM[k]},0)`).join("+"):"0",NF);
     (M.capex||[]).forEach((_,k)=>{
@@ -6534,7 +6534,7 @@ async function exporterExcelModele(){
     /* BFR */
     row("CLI","Créances clients",(i,X)=>`${X}${rr("FO")}*${X}${rr("CA")}*1.18*${rH}!${H.dso}/360`,NF);
     row("STK","Stocks",(i,X)=>`${X}${rr("FO")}*(-${X}${rr("CD")})*${rH}!${H.dio}/360`,NF);
-    row("FRN","Dettes fournisseurs",(i,X)=>`-${X}${rr("FO")}*(-${X}${rr("CD")}-${X}${rr("OPEX")}-${X}${rr("PERS")})*1.18*${rH}!${H.dpo}/360`,NF);
+    row("FRN","Dettes fournisseurs",(i,X)=>`-${X}${rr("FO")}*(-${X}${rr("CD")}-${X}${rr("FGT")})*1.18*${rH}!${H.dpo}/360`,NF);
     row("BFR","Besoin en fonds de roulement",(i,X)=>`${X}${rr("CLI")}+${X}${rr("STK")}+${X}${rr("FRN")}`,NF,true);
     /* capitaux propres, trésorerie de bouclage */
     row("CP","Capitaux propres",(i,X)=>`${pRef("CP",i)}+${X}${rr("RN")}+IF(${X}${rr("IDX")}=1,${rH}!${H.capital}+${rH}!${H.subv},0)`,NF,true);
@@ -6599,8 +6599,13 @@ async function exporterExcelModele(){
     H.lignes.forEach((L,k)=>plDefs.push(["   Coûts directs — "+(L.name||"Ligne "+(k+1)),"CDL"+k]));
     plDefs.push(["Coûts directs (total)","CD"]);
     plDefs.push(["Marge brute","MB",1]);
-    if(H.opex.length){plDefs.push(["Frais généraux",null]);H.opex.forEach((o,k)=>plDefs.push(["   "+o.name,"OPL"+k]));plDefs.push(["Total frais généraux","OPEX"]);}
-    if(H.pers.length){plDefs.push(["Charges de personnel",null]);H.pers.forEach((o,k)=>plDefs.push(["   "+o.name,"PEL"+k]));plDefs.push(["Total charges de personnel","PERS"]);}
+    /* frais généraux = postes hors personnel + postes de personnel, un seul total (le personnel en fait partie) */
+    if(H.opex.length||H.pers.length){
+      plDefs.push(["Frais généraux",null]);
+      H.opex.forEach((o,k)=>plDefs.push(["   "+o.name,"OPL"+k]));
+      H.pers.forEach((o,k)=>plDefs.push(["   "+o.name,"PEL"+k]));
+      plDefs.push(["Total frais généraux","FGT"]);
+    }
     plDefs.push(["EBITDA","EBITDA",1]);
     plDefs.push(["Dotations aux amortissements","DA"]);
     plDefs.push(["EBIT","EBIT",1]);
@@ -7310,9 +7315,11 @@ function vueBPPl(P){
     if(det&&d.code==="FRAIS_GENERAUX"){
       const OD=P.pl.OPEX_DETAIL||{}, od=(c,a)=>OD[c]?(OD[c].vals[a]||0):0;
       if(typeof modeleMode==="function"&&modeleMode()){
-        /* modèle sans balance : on déplie chaque charge fixe saisie (nom + montant) + le personnel */
+        /* modèle sans balance : chaque charge fixe saisie (nom + montant) est un poste des frais
+           généraux — le PERSONNEL en fait partie (pas de sous-total séparé), listé par poste. */
         Object.keys(OD).forEach(c=>defs.push({lib:OD[c].lib,st:"det",hist:0,proj:a=>od(c,a)}));
-        defs.push({lib:"Charges de personnel",st:"det",hist:0,proj:a=>P.pl.CHARGES_PERSONNEL[a]});
+        const PD=P.pl.PERS_DETAIL||{};
+        Object.keys(PD).forEach(c=>defs.push({lib:PD[c].lib,st:"det",hist:0,proj:a=>PD[c].vals[a]||0}));
       } else {
         /* mêmes catégories que la DD : les services extérieurs sont REGROUPÉS en une ligne
            (cliquable pour voir les sous-postes), pas dépliés. Les lignes personnalisées OPEX

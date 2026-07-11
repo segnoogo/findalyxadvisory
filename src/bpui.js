@@ -569,9 +569,11 @@ function vueBPPl(P){
     if(det&&d.code==="FRAIS_GENERAUX"){
       const OD=P.pl.OPEX_DETAIL||{}, od=(c,a)=>OD[c]?(OD[c].vals[a]||0):0;
       if(typeof modeleMode==="function"&&modeleMode()){
-        /* modèle sans balance : on déplie chaque charge fixe saisie (nom + montant) + le personnel */
+        /* modèle sans balance : chaque charge fixe saisie (nom + montant) est un poste des frais
+           généraux — le PERSONNEL en fait partie (pas de sous-total séparé), listé par poste. */
         Object.keys(OD).forEach(c=>defs.push({lib:OD[c].lib,st:"det",hist:0,proj:a=>od(c,a)}));
-        defs.push({lib:"Charges de personnel",st:"det",hist:0,proj:a=>P.pl.CHARGES_PERSONNEL[a]});
+        const PD=P.pl.PERS_DETAIL||{};
+        Object.keys(PD).forEach(c=>defs.push({lib:PD[c].lib,st:"det",hist:0,proj:a=>PD[c].vals[a]||0}));
       } else {
         /* mêmes catégories que la DD : les services extérieurs sont REGROUPÉS en une ligne
            (cliquable pour voir les sous-postes), pas dépliés. Les lignes personnalisées OPEX
