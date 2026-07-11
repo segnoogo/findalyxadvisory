@@ -552,8 +552,19 @@ function vueBPPl(P){
     RESULTAT_FIN:rf, RAO:a=>P.pl.EBIT[a]+rf(a), RESULTAT_HAO:a=>0,
     RESULTAT_AVANT_IMPOT:a=>P.pl.EBT[a], IMPOTS:a=>P.pl.IS[a], RESULTAT_NET:a=>P.pl.RN[a]};
   const det=(typeof PL_VUE!=="undefined"&&PL_VUE==="detail");
+  const mm=(typeof modeleMode==="function"&&modeleMode());
   const defs=[];
   DEF_PL.filter(d=>!d.detail).forEach(d=>{
+    if(det&&mm&&d.code==="CA"){
+      /* modèle : déplier le chiffre d'affaires par ligne de revenus (ventes par produit) */
+      const CAD=P.pl.CA_DETAIL||{};
+      Object.keys(CAD).forEach(c=>defs.push({lib:"Ventes — "+CAD[c].lib,st:"det",hist:0,proj:a=>CAD[c].vals[a]||0}));
+    }
+    if(det&&mm&&d.code==="COUTS_DIRECTS"){
+      /* modèle : déplier les coûts directs par ligne de revenus */
+      const CDD=P.pl.CD_DETAIL||{};
+      Object.keys(CDD).forEach(c=>defs.push({lib:"Coûts directs — "+CDD[c].lib,st:"det",hist:0,proj:a=>CDD[c].vals[a]||0}));
+    }
     if(det&&d.code==="FRAIS_GENERAUX"){
       const OD=P.pl.OPEX_DETAIL||{}, od=(c,a)=>OD[c]?(OD[c].vals[a]||0):0;
       if(typeof modeleMode==="function"&&modeleMode()){

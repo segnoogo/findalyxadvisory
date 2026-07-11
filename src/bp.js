@@ -304,6 +304,7 @@ function projeterModele(M,scenario){
   var P={annees:AP,scenario:scLab,scenarioKey:scKey,pl:{},bs:{},tft:{},dette:{}};
   ["CA","COUTS_DIRECTS","MARGE_BRUTE","AUTRES_PROD","OPEX_TOTAL","CHARGES_PERSONNEL","EBITDA","DA","EBIT","PRODUITS_FIN","FRAIS_FIN","RESULTAT_FIN","EBT","IS","RN"].forEach(function(c){P.pl[c]={};});
   P.pl.OPEX_DETAIL={};
+  P.pl.CA_DETAIL={};P.pl.CD_DETAIL={};   /* détail par ligne de revenus : ventes & coûts directs (vue détaillée) */
   ["IMMO_BRUT","AMORT_CUM","IMMO_NET","STOCKS","CLIENTS","AUTRES_CREANCES","FOURNISSEURS","DETTES_FISC_SOC","AUTRES_DETTES","BFR","CP","DETTE","PROVISIONS","TRESO","LIGNE_CT","TRESO_ACTIVE"].forEach(function(c){P.bs[c]={};});
   var infl=M.inflation||0.03, bfrH=M.bfr||{dso:30,dio:45,dpo:30};
   var isTx=(M.is_taux!=null?M.is_taux:0.30);
@@ -350,11 +351,17 @@ function projeterModele(M,scenario){
     if(py===1){ capInj=capital; subvInj=subv; tirageDette=detteBase; cp+=capital+subv; detteSolde+=detteBase; }
     /* --- revenus & coûts directs (uniquement en exploitation) --- */
     var ca=0, coutsD=0;
-    if(isOp){ (M.revenus||[]).forEach(function(L){
+    if(isOp){ (M.revenus||[]).forEach(function(L,li){
       var vol=volInducteurs(L.rows,oi)*fCA, prix=valAnnee(L.prix,oi), caL=vol*prix/SC;
       ca+=caL;
       var cm=(L.cout&&L.cout.m)||"pct", cv=+((L.cout||{}).val)||0;
-      coutsD += ((cm==="unit") ? vol*cv*Math.pow(1+infl,oi)/SC : caL*cv/100)*fCout;
+      var cdL=((cm==="unit") ? vol*cv*Math.pow(1+infl,oi)/SC : caL*cv/100)*fCout;
+      coutsD += cdL;
+      var codeL="REV"+li, libL=(L.name||("Ligne "+(li+1)));
+      if(!P.pl.CA_DETAIL[codeL])P.pl.CA_DETAIL[codeL]={lib:libL,vals:{}};
+      if(!P.pl.CD_DETAIL[codeL])P.pl.CD_DETAIL[codeL]={lib:libL,vals:{}};
+      P.pl.CA_DETAIL[codeL].vals[a]=caL;
+      P.pl.CD_DETAIL[codeL].vals[a]=-cdL;   /* coût en négatif, comme le total COUTS_DIRECTS */
     }); }
     var cd=-coutsD;
     var autresProd=isOp?valAnnee(M.autresProd,oi)/SC:0;
