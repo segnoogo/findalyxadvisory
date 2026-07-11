@@ -1747,13 +1747,19 @@ async function exporterExcelModele(){
       else { H.coutpct[k]=one("   Coûts directs (% du CA)",(((+((L.cout||{}).val)||0))/100)*fCout,PCT2); }
     });
     /* coûts directs pilotés par inducteurs (indépendants des lignes de revenus) */
-    H.coutIndVol=[];H.coutIndTaux=[];H.coutInd=(M.coutsDirects||[]);
-    if(H.coutInd.length){ sec("Coûts directs pilotés par inducteurs (quantité × taux)");
+    H.coutIndVol=[];H.coutIndTaux=[];H.coutIndPct=[];H.coutIndMethod=[];H.coutInd=(M.coutsDirects||[]);
+    if(H.coutInd.length){ sec("Coûts directs additionnels (% du CA ou inducteurs)");
       H.coutInd.forEach((cl,k)=>{
-        const qA=[],txA=[]; for(let j=0;j<N;j++){qA.push(volInducteurs(cl.rows,j)); txA.push((valAnnee(cl.prix,j)||0)*fCout);}   /* précision complète */
-        wsH.getCell(++hr,2).value="Coût "+(k+1)+" — "+(cl.name||"Coût")+" (séries par année d'exploitation)";wsH.getCell(hr,2).font={italic:true,color:{argb:"FF224289"}};
-        H.coutIndVol[k]=ser("   Quantité — an 1..an "+N,qA,"#,##0.##");
-        H.coutIndTaux[k]=ser("   Taux unitaire — an 1..an "+N+" (FCFA)",txA,"#,##0.##");
+        const cm=(cl.m||"ind"); H.coutIndMethod[k]=cm;
+        if(cm==="pct"){
+          wsH.getCell(++hr,2).value="Coût "+(k+1)+" — "+(cl.name||"Coût");wsH.getCell(hr,2).font={italic:true,color:{argb:"FF224289"}};
+          H.coutIndPct[k]=one("   Coûts directs (% du CA)",((+cl.pct||0)/100)*fCout,PCT2);
+        } else {
+          const qA=[],txA=[]; for(let j=0;j<N;j++){qA.push(volInducteurs(cl.rows,j)); txA.push((valAnnee(cl.prix,j)||0)*fCout);}   /* précision complète */
+          wsH.getCell(++hr,2).value="Coût "+(k+1)+" — "+(cl.name||"Coût")+" (séries par année d'exploitation)";wsH.getCell(hr,2).font={italic:true,color:{argb:"FF224289"}};
+          H.coutIndVol[k]=ser("   Quantité — an 1..an "+N,qA,"#,##0.##");
+          H.coutIndTaux[k]=ser("   Taux unitaire — an 1..an "+N+" (FCFA)",txA,"#,##0.##");
+        }
       });
     }
     sec("Charges fixes annuelles");
@@ -1827,9 +1833,13 @@ async function exporterExcelModele(){
         row("CDL"+k,"Coûts directs — "+(L.name||("Ligne "+(k+1))),(i,X)=>`-${X}${rr("CAL"+k)}*${rH}!${H.coutpct[k]}`,NF);
       }
     });
-    /* coûts directs pilotés par inducteurs : quantité × taux (indépendants des revenus) */
+    /* coûts directs additionnels : % du CA total OU quantité × taux (indépendants des revenus) */
     (H.coutInd||[]).forEach((cl,k)=>{
-      row("CDI"+k,"Coûts directs — "+(cl.name||("Coût "+(k+1))),(i,X)=>{const oi=`MAX(1,${X}${rr("IDX")}-${rH}!${H.nc})`;return `-${X}${rr("FO")}*INDEX(${rng(H.coutIndVol[k])},${oi})*INDEX(${rng(H.coutIndTaux[k])},${oi})/1000`;},NF);
+      if(H.coutIndMethod[k]==="pct"){
+        row("CDI"+k,"Coûts directs — "+(cl.name||("Coût "+(k+1))),(i,X)=>`-${X}${rr("FO")}*${X}${rr("CA")}*${rH}!${H.coutIndPct[k]}`,NF);
+      } else {
+        row("CDI"+k,"Coûts directs — "+(cl.name||("Coût "+(k+1))),(i,X)=>{const oi=`MAX(1,${X}${rr("IDX")}-${rH}!${H.nc})`;return `-${X}${rr("FO")}*INDEX(${rng(H.coutIndVol[k])},${oi})*INDEX(${rng(H.coutIndTaux[k])},${oi})/1000`;},NF);
+      }
     });
     row("CD","Coûts directs",(i,X)=>{const t=[...H.lignes.map((_,k)=>`${X}${rr("CDL"+k)}`),...(H.coutInd||[]).map((_,k)=>`${X}${rr("CDI"+k)}`)];return t.length?t.join("+"):"0";},NF);
     row("MB","Marge brute",(i,X)=>`${X}${rr("CA")}+${X}${rr("CD")}`,NF,true);

@@ -149,6 +149,8 @@ function mCoutInd(ci,ri,champ,val){var r=mCoutsArr()[ci].rows[ri];if(champ==='na
 function mCoutIndMode(ci,ri,mode){var r=mCoutsArr()[ci].rows[ri];if(mode==='yearly'&&r.mode!=='yearly'){r.mode='yearly';r.vals=[];var N=assurerModele().nb||5;for(var k=0;k<N;k++)r.vals.push(Math.round((r.val||0)*Math.pow(1+(r.g||0)/100,k)*1000)/1000);}else if(mode!=='yearly'){r.mode='grow';if(r.vals&&r.vals.length)r.val=r.vals[0];}sauverDossier();rendre();}
 function mCoutIndYv(ci,ri,k,val){var r=mCoutsArr()[ci].rows[ri];if(!r.vals)r.vals=[];var x=numFR(val);if(x!==null)r.vals[k]=x;sauverDossier();rendre();}
 function mCoutTaux(ci,champ,val){var pr=mCoutsArr()[ci].prix;if(champ==='unit')pr.unit=val;else{var x=numFR(val);if(x!==null)pr[champ]=x;}sauverDossier();rendre();}
+function mCoutMethode(ci,m){mCoutsArr()[ci].m=m;sauverDossier();rendre();}
+function mCoutPct(ci,val){var x=numFR(val);if(x!==null)mCoutsArr()[ci].pct=x;sauverDossier();rendre();}
 function mAddFixe(){assurerModele().chargesFixes.push({name:"Charge fixe",montant:0,g:0});sauverDossier();rendre();}
 function mDelFixe(i){assurerModele().chargesFixes.splice(i,1);sauverDossier();rendre();}
 function mFixe(i,champ,val){var c=assurerModele().chargesFixes[i];if(champ==='name')c.name=val;else if(champ==='personnel')c.personnel=val;else{var x=numFR(val);if(x!==null)c[champ]=x;}sauverDossier();rendre();}
@@ -213,30 +215,38 @@ function mCarteRevenu(L,li){
     +'</div></div>';
 }
 function mCarteCout(cl,ci){
-  /* même constructeur que les revenus : chaîne d'inducteurs (× ou ÷) × taux unitaire = coût direct */
-  var N=assurerModele().nb||5;
-  var rows=(cl.rows||[]).map(function(r,ri){
-    var vals;
-    if(r.mode==='yearly'){var cells='';for(var k=0;k<N;k++){var yv=(r.vals&&r.vals[k]!=null)?r.vals[k]:0;cells+='<span class="mind-yv"><label>An '+(k+1)+'</label><input class="nin ninm" value="'+mAmt(yv)+'" oninput="mSep(this)" onchange="mCoutIndYv('+ci+','+ri+','+k+',this.value)"></span>';}vals='<div class="mind-vals">'+cells+'</div>';}
-    else vals='<div class="mind-vals"><span class="mind-f"><label>Valeur an 1</label><input class="nin ninm" value="'+mAmt(r.val)+'" oninput="mSep(this)" onchange="mCoutInd('+ci+','+ri+',\'val\',this.value)"></span><span class="mind-f"><label>Croissance %/an</label><input class="nin" value="'+(r.g||0)+'" onchange="mCoutInd('+ci+','+ri+',\'g\',this.value)"></span></div>';
-    return '<div class="mind"><div class="mind-top"><button class="btn sm" title="× ou ÷" onclick="mCoutIndOp('+ci+','+ri+')" style="min-width:34px;font-weight:700">'+(r.op==='d'?'÷':'×')+'</button>'
-      +'<input class="sel" style="flex:1;min-width:130px" placeholder="Nom de l\'inducteur" value="'+esc(r.name||'')+'" onchange="mCoutInd('+ci+','+ri+',\'name\',this.value)">'
-      +'<input class="nin" style="width:78px" placeholder="unité" value="'+esc(r.unit||'')+'" onchange="mCoutInd('+ci+','+ri+',\'unit\',this.value)">'
-      +'<span class="segvue"><button class="'+(r.mode==='yearly'?'':'on')+'" onclick="mCoutIndMode('+ci+','+ri+',\'grow\')">Croissance</button><button class="'+(r.mode==='yearly'?'on':'')+'" onclick="mCoutIndMode('+ci+','+ri+',\'yearly\')">Par année</button></span>'
-      +'<button class="btn sm" title="Retirer" onclick="mDelCoutInd('+ci+','+ri+')">✕</button></div>'+vals+'</div>';
-  }).join('');
-  var q=volInducteurs(cl.rows,0), taux=(cl.prix&&cl.prix.val)||0, cout=q*taux;
-  return '<div class="card" style="padding:0">'
-    +'<div class="bande" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><input class="sel" style="flex:1;min-width:160px;font-weight:700" value="'+esc(cl.name||'')+'" onchange="mCoutNom('+ci+',this.value)">'
-    +'<button class="btn sm" title="Supprimer" onclick="mDelCout('+ci+')">Supprimer</button></div>'
-    +'<div style="padding:12px 14px">'
-    +'<div class="mut" style="text-transform:uppercase;letter-spacing:.5px;font-size:11px;font-weight:700;margin-bottom:8px">Inducteurs de quantité (× ou ÷ · unité % = ratio)</div>'
+  /* coût direct additionnel : soit % du CA, soit chaîne d'inducteurs (× ou ÷) × taux unitaire */
+  var N=assurerModele().nb||5, m=(cl.m||'ind');
+  var methode='<div class="mind-price" style="border-bottom:1px dashed #e3e9f2;padding-bottom:8px;margin-bottom:8px"><span class="mut">Méthode</span> '
+    +'<span class="segvue"><button class="'+(m==='ind'?'on':'')+'" onclick="mCoutMethode('+ci+',\'ind\')">Inducteurs (quantité × taux)</button>'
+    +'<button class="'+(m==='pct'?'on':'')+'" onclick="mCoutMethode('+ci+',\'pct\')">% du chiffre d\'affaires</button></span></div>';
+  var corps;
+  if(m==='pct'){
+    corps='<div class="mind-price"><span class="mut">Coût direct = </span><input class="nin" style="width:70px" value="'+(cl.pct!=null?cl.pct:0)+'" onchange="mCoutPct('+ci+',this.value)"> <span class="mut">% du chiffre d\'affaires total</span></div>';
+  } else {
+    var rows=(cl.rows||[]).map(function(r,ri){
+      var vals;
+      if(r.mode==='yearly'){var cells='';for(var k=0;k<N;k++){var yv=(r.vals&&r.vals[k]!=null)?r.vals[k]:0;cells+='<span class="mind-yv"><label>An '+(k+1)+'</label><input class="nin ninm" value="'+mAmt(yv)+'" oninput="mSep(this)" onchange="mCoutIndYv('+ci+','+ri+','+k+',this.value)"></span>';}vals='<div class="mind-vals">'+cells+'</div>';}
+      else vals='<div class="mind-vals"><span class="mind-f"><label>Valeur an 1</label><input class="nin ninm" value="'+mAmt(r.val)+'" oninput="mSep(this)" onchange="mCoutInd('+ci+','+ri+',\'val\',this.value)"></span><span class="mind-f"><label>Croissance %/an</label><input class="nin" value="'+(r.g||0)+'" onchange="mCoutInd('+ci+','+ri+',\'g\',this.value)"></span></div>';
+      return '<div class="mind"><div class="mind-top"><button class="btn sm" title="× ou ÷" onclick="mCoutIndOp('+ci+','+ri+')" style="min-width:34px;font-weight:700">'+(r.op==='d'?'÷':'×')+'</button>'
+        +'<input class="sel" style="flex:1;min-width:130px" placeholder="Nom de l\'inducteur" value="'+esc(r.name||'')+'" onchange="mCoutInd('+ci+','+ri+',\'name\',this.value)">'
+        +'<input class="nin" style="width:78px" placeholder="unité" value="'+esc(r.unit||'')+'" onchange="mCoutInd('+ci+','+ri+',\'unit\',this.value)">'
+        +'<span class="segvue"><button class="'+(r.mode==='yearly'?'':'on')+'" onclick="mCoutIndMode('+ci+','+ri+',\'grow\')">Croissance</button><button class="'+(r.mode==='yearly'?'on':'')+'" onclick="mCoutIndMode('+ci+','+ri+',\'yearly\')">Par année</button></span>'
+        +'<button class="btn sm" title="Retirer" onclick="mDelCoutInd('+ci+','+ri+')">✕</button></div>'+vals+'</div>';
+    }).join('');
+    var q=volInducteurs(cl.rows,0), taux=(cl.prix&&cl.prix.val)||0, cout=q*taux;
+    corps='<div class="mut" style="text-transform:uppercase;letter-spacing:.5px;font-size:11px;font-weight:700;margin-bottom:8px">Inducteurs de quantité (× ou ÷ · unité % = ratio)</div>'
     +rows
     +'<button class="btn sm" style="margin-top:2px" onclick="mAddCoutInd('+ci+')">+ inducteur</button>'
     +'<div class="mind-price"><span class="x">= Quantité an 1 : <b>'+Math.round(q).toLocaleString("fr-FR").replace(/[  ]/g," ")+'</b></span></div>'
     +'<div class="mind-price"><span class="x">×</span> <span class="mut">Taux unitaire an 1 (FCFA)</span> <input class="nin ninm" value="'+mAmt(taux)+'" oninput="mSep(this)" onchange="mCoutTaux('+ci+',\'val\',this.value)"><input class="nin" style="width:70px" value="'+esc((cl.prix&&cl.prix.unit)||'')+'" onchange="mCoutTaux('+ci+',\'unit\',this.value)">'
     +'<span class="mut">croissance</span> <input class="nin" style="width:60px" value="'+((cl.prix&&cl.prix.g)||0)+'" onchange="mCoutTaux('+ci+',\'g\',this.value)"> %'
-    +'<span style="margin-left:auto;font-weight:700;color:#c0392b">Coût an 1 : '+fmt(cout/1000)+' '+uni().suf+'</span></div>'
+    +'<span style="margin-left:auto;font-weight:700;color:#c0392b">Coût an 1 : '+fmt(cout/1000)+' '+uni().suf+'</span></div>';
+  }
+  return '<div class="card" style="padding:0">'
+    +'<div class="bande" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><input class="sel" style="flex:1;min-width:160px;font-weight:700" value="'+esc(cl.name||'')+'" onchange="mCoutNom('+ci+',this.value)">'
+    +'<button class="btn sm" title="Supprimer" onclick="mDelCout('+ci+')">Supprimer</button></div>'
+    +'<div style="padding:12px 14px">'+methode+corps
     +'</div></div>';
 }
 function vueModele(){

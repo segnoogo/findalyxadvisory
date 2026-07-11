@@ -328,9 +328,9 @@ function projeterModele(M,scenario){
   /* CAPEX : {montant,duree,annee}. annee>=1 (0 hérité → 1). Amortissement à partir de max(annee, mise en service). */
   var capex=(M.capex||[]).map(function(c){var an=Math.round(+c.annee||0); if(an<1)an=1; return {montant:(c.montant!=null?+c.montant:(+c.nombre||0)*(+c.coutUnitaire||0))/SC,duree:+c.duree||5,annee:an,amorti:0,mes:Math.max(an,anneeExploit)};});
   /* coûts de la 1ʳᵉ année d'exploitation → BFR de démarrage (mode auto) */
-  var coutsD1=0, charges1=0;
-  (M.revenus||[]).forEach(function(L){ var vol=volInducteurs(L.rows,0)*fCA, prix=valAnnee(L.prix,0), caL=vol*prix/SC; var cm=(L.cout&&L.cout.m)||"pct", cv=+((L.cout||{}).val)||0; coutsD1+=((cm==="unit")?vol*cv/SC:caL*cv/100)*fCout; });
-  (M.coutsDirects||[]).forEach(function(cl){ coutsD1+=volInducteurs(cl.rows,0)*valAnnee(cl.prix,0)/SC*fCout; });
+  var coutsD1=0, charges1=0, ca1=0;
+  (M.revenus||[]).forEach(function(L){ var vol=volInducteurs(L.rows,0)*fCA, prix=valAnnee(L.prix,0), caL=vol*prix/SC; ca1+=caL; var cm=(L.cout&&L.cout.m)||"pct", cv=+((L.cout||{}).val)||0; coutsD1+=((cm==="unit")?vol*cv/SC:caL*cv/100)*fCout; });
+  (M.coutsDirects||[]).forEach(function(cl){ coutsD1+=(((cl.m||"ind")==="pct")?ca1*(+cl.pct||0)/100:volInducteurs(cl.rows,0)*valAnnee(cl.prix,0)/SC)*fCout; });
   (M.chargesFixes||[]).forEach(function(c){ charges1+=valAnnee({val:(c.montant!=null?c.montant:c.val),g:c.g,mode:c.mode,vals:c.vals},0)/SC; });
   var bfrDem=(moisBFR/12)*(coutsD1+charges1);
   /* montage initial = CAPEX jusqu'à la mise en service (incluse) + BFR de démarrage ; subvention en déduction */
@@ -366,9 +366,9 @@ function projeterModele(M,scenario){
       P.pl.CA_DETAIL[codeL].vals[a]=caL;
       P.pl.CD_DETAIL[codeL].vals[a]=-cdL;   /* coût en négatif, comme le total COUTS_DIRECTS */
     }); }
-    /* --- coûts directs pilotés par inducteurs (chaîne × taux, indépendants des revenus : ex. vacataires) --- */
+    /* --- coûts directs additionnels : % du CA total OU chaîne d'inducteurs × taux (ex. vacataires) --- */
     if(isOp){ (M.coutsDirects||[]).forEach(function(cl,ci){
-      var q=volInducteurs(cl.rows,oi), pr=valAnnee(cl.prix,oi), montant=q*pr/SC*fCout;
+      var montant=(((cl.m||"ind")==="pct") ? ca*(+cl.pct||0)/100 : volInducteurs(cl.rows,oi)*valAnnee(cl.prix,oi)/SC)*fCout;
       coutsD += montant;
       var cc="CDI"+ci, libc=(cl.name||("Coût "+(ci+1)));
       if(!P.pl.CDIND_DETAIL[cc])P.pl.CDIND_DETAIL[cc]={lib:libc,vals:{}};

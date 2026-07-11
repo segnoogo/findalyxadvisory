@@ -2536,9 +2536,9 @@ function projeterModele(M,scenario){
   /* CAPEX : {montant,duree,annee}. annee>=1 (0 hérité → 1). Amortissement à partir de max(annee, mise en service). */
   var capex=(M.capex||[]).map(function(c){var an=Math.round(+c.annee||0); if(an<1)an=1; return {montant:(c.montant!=null?+c.montant:(+c.nombre||0)*(+c.coutUnitaire||0))/SC,duree:+c.duree||5,annee:an,amorti:0,mes:Math.max(an,anneeExploit)};});
   /* coûts de la 1ʳᵉ année d'exploitation → BFR de démarrage (mode auto) */
-  var coutsD1=0, charges1=0;
-  (M.revenus||[]).forEach(function(L){ var vol=volInducteurs(L.rows,0)*fCA, prix=valAnnee(L.prix,0), caL=vol*prix/SC; var cm=(L.cout&&L.cout.m)||"pct", cv=+((L.cout||{}).val)||0; coutsD1+=((cm==="unit")?vol*cv/SC:caL*cv/100)*fCout; });
-  (M.coutsDirects||[]).forEach(function(cl){ coutsD1+=volInducteurs(cl.rows,0)*valAnnee(cl.prix,0)/SC*fCout; });
+  var coutsD1=0, charges1=0, ca1=0;
+  (M.revenus||[]).forEach(function(L){ var vol=volInducteurs(L.rows,0)*fCA, prix=valAnnee(L.prix,0), caL=vol*prix/SC; ca1+=caL; var cm=(L.cout&&L.cout.m)||"pct", cv=+((L.cout||{}).val)||0; coutsD1+=((cm==="unit")?vol*cv/SC:caL*cv/100)*fCout; });
+  (M.coutsDirects||[]).forEach(function(cl){ coutsD1+=(((cl.m||"ind")==="pct")?ca1*(+cl.pct||0)/100:volInducteurs(cl.rows,0)*valAnnee(cl.prix,0)/SC)*fCout; });
   (M.chargesFixes||[]).forEach(function(c){ charges1+=valAnnee({val:(c.montant!=null?c.montant:c.val),g:c.g,mode:c.mode,vals:c.vals},0)/SC; });
   var bfrDem=(moisBFR/12)*(coutsD1+charges1);
   /* montage initial = CAPEX jusqu'à la mise en service (incluse) + BFR de démarrage ; subvention en déduction */
@@ -2574,9 +2574,9 @@ function projeterModele(M,scenario){
       P.pl.CA_DETAIL[codeL].vals[a]=caL;
       P.pl.CD_DETAIL[codeL].vals[a]=-cdL;   /* coût en négatif, comme le total COUTS_DIRECTS */
     }); }
-    /* --- coûts directs pilotés par inducteurs (chaîne × taux, indépendants des revenus : ex. vacataires) --- */
+    /* --- coûts directs additionnels : % du CA total OU chaîne d'inducteurs × taux (ex. vacataires) --- */
     if(isOp){ (M.coutsDirects||[]).forEach(function(cl,ci){
-      var q=volInducteurs(cl.rows,oi), pr=valAnnee(cl.prix,oi), montant=q*pr/SC*fCout;
+      var montant=(((cl.m||"ind")==="pct") ? ca*(+cl.pct||0)/100 : volInducteurs(cl.rows,oi)*valAnnee(cl.prix,oi)/SC)*fCout;
       coutsD += montant;
       var cc="CDI"+ci, libc=(cl.name||("Coût "+(ci+1)));
       if(!P.pl.CDIND_DETAIL[cc])P.pl.CDIND_DETAIL[cc]={lib:libc,vals:{}};
@@ -6444,13 +6444,19 @@ async function exporterExcelModele(){
       else { H.coutpct[k]=one("   Coûts directs (% du CA)",(((+((L.cout||{}).val)||0))/100)*fCout,PCT2); }
     });
     /* coûts directs pilotés par inducteurs (indépendants des lignes de revenus) */
-    H.coutIndVol=[];H.coutIndTaux=[];H.coutInd=(M.coutsDirects||[]);
-    if(H.coutInd.length){ sec("Coûts directs pilotés par inducteurs (quantité × taux)");
+    H.coutIndVol=[];H.coutIndTaux=[];H.coutIndPct=[];H.coutIndMethod=[];H.coutInd=(M.coutsDirects||[]);
+    if(H.coutInd.length){ sec("Coûts directs additionnels (% du CA ou inducteurs)");
       H.coutInd.forEach((cl,k)=>{
-        const qA=[],txA=[]; for(let j=0;j<N;j++){qA.push(volInducteurs(cl.rows,j)); txA.push((valAnnee(cl.prix,j)||0)*fCout);}   /* précision complète */
-        wsH.getCell(++hr,2).value="Coût "+(k+1)+" — "+(cl.name||"Coût")+" (séries par année d'exploitation)";wsH.getCell(hr,2).font={italic:true,color:{argb:"FF224289"}};
-        H.coutIndVol[k]=ser("   Quantité — an 1..an "+N,qA,"#,##0.##");
-        H.coutIndTaux[k]=ser("   Taux unitaire — an 1..an "+N+" (FCFA)",txA,"#,##0.##");
+        const cm=(cl.m||"ind"); H.coutIndMethod[k]=cm;
+        if(cm==="pct"){
+          wsH.getCell(++hr,2).value="Coût "+(k+1)+" — "+(cl.name||"Coût");wsH.getCell(hr,2).font={italic:true,color:{argb:"FF224289"}};
+          H.coutIndPct[k]=one("   Coûts directs (% du CA)",((+cl.pct||0)/100)*fCout,PCT2);
+        } else {
+          const qA=[],txA=[]; for(let j=0;j<N;j++){qA.push(volInducteurs(cl.rows,j)); txA.push((valAnnee(cl.prix,j)||0)*fCout);}   /* précision complète */
+          wsH.getCell(++hr,2).value="Coût "+(k+1)+" — "+(cl.name||"Coût")+" (séries par année d'exploitation)";wsH.getCell(hr,2).font={italic:true,color:{argb:"FF224289"}};
+          H.coutIndVol[k]=ser("   Quantité — an 1..an "+N,qA,"#,##0.##");
+          H.coutIndTaux[k]=ser("   Taux unitaire — an 1..an "+N+" (FCFA)",txA,"#,##0.##");
+        }
       });
     }
     sec("Charges fixes annuelles");
@@ -6524,9 +6530,13 @@ async function exporterExcelModele(){
         row("CDL"+k,"Coûts directs — "+(L.name||("Ligne "+(k+1))),(i,X)=>`-${X}${rr("CAL"+k)}*${rH}!${H.coutpct[k]}`,NF);
       }
     });
-    /* coûts directs pilotés par inducteurs : quantité × taux (indépendants des revenus) */
+    /* coûts directs additionnels : % du CA total OU quantité × taux (indépendants des revenus) */
     (H.coutInd||[]).forEach((cl,k)=>{
-      row("CDI"+k,"Coûts directs — "+(cl.name||("Coût "+(k+1))),(i,X)=>{const oi=`MAX(1,${X}${rr("IDX")}-${rH}!${H.nc})`;return `-${X}${rr("FO")}*INDEX(${rng(H.coutIndVol[k])},${oi})*INDEX(${rng(H.coutIndTaux[k])},${oi})/1000`;},NF);
+      if(H.coutIndMethod[k]==="pct"){
+        row("CDI"+k,"Coûts directs — "+(cl.name||("Coût "+(k+1))),(i,X)=>`-${X}${rr("FO")}*${X}${rr("CA")}*${rH}!${H.coutIndPct[k]}`,NF);
+      } else {
+        row("CDI"+k,"Coûts directs — "+(cl.name||("Coût "+(k+1))),(i,X)=>{const oi=`MAX(1,${X}${rr("IDX")}-${rH}!${H.nc})`;return `-${X}${rr("FO")}*INDEX(${rng(H.coutIndVol[k])},${oi})*INDEX(${rng(H.coutIndTaux[k])},${oi})/1000`;},NF);
+      }
     });
     row("CD","Coûts directs",(i,X)=>{const t=[...H.lignes.map((_,k)=>`${X}${rr("CDL"+k)}`),...(H.coutInd||[]).map((_,k)=>`${X}${rr("CDI"+k)}`)];return t.length?t.join("+"):"0";},NF);
     row("MB","Marge brute",(i,X)=>`${X}${rr("CA")}+${X}${rr("CD")}`,NF,true);
@@ -6930,6 +6940,8 @@ function mCoutInd(ci,ri,champ,val){var r=mCoutsArr()[ci].rows[ri];if(champ==='na
 function mCoutIndMode(ci,ri,mode){var r=mCoutsArr()[ci].rows[ri];if(mode==='yearly'&&r.mode!=='yearly'){r.mode='yearly';r.vals=[];var N=assurerModele().nb||5;for(var k=0;k<N;k++)r.vals.push(Math.round((r.val||0)*Math.pow(1+(r.g||0)/100,k)*1000)/1000);}else if(mode!=='yearly'){r.mode='grow';if(r.vals&&r.vals.length)r.val=r.vals[0];}sauverDossier();rendre();}
 function mCoutIndYv(ci,ri,k,val){var r=mCoutsArr()[ci].rows[ri];if(!r.vals)r.vals=[];var x=numFR(val);if(x!==null)r.vals[k]=x;sauverDossier();rendre();}
 function mCoutTaux(ci,champ,val){var pr=mCoutsArr()[ci].prix;if(champ==='unit')pr.unit=val;else{var x=numFR(val);if(x!==null)pr[champ]=x;}sauverDossier();rendre();}
+function mCoutMethode(ci,m){mCoutsArr()[ci].m=m;sauverDossier();rendre();}
+function mCoutPct(ci,val){var x=numFR(val);if(x!==null)mCoutsArr()[ci].pct=x;sauverDossier();rendre();}
 function mAddFixe(){assurerModele().chargesFixes.push({name:"Charge fixe",montant:0,g:0});sauverDossier();rendre();}
 function mDelFixe(i){assurerModele().chargesFixes.splice(i,1);sauverDossier();rendre();}
 function mFixe(i,champ,val){var c=assurerModele().chargesFixes[i];if(champ==='name')c.name=val;else if(champ==='personnel')c.personnel=val;else{var x=numFR(val);if(x!==null)c[champ]=x;}sauverDossier();rendre();}
@@ -6994,30 +7006,38 @@ function mCarteRevenu(L,li){
     +'</div></div>';
 }
 function mCarteCout(cl,ci){
-  /* même constructeur que les revenus : chaîne d'inducteurs (× ou ÷) × taux unitaire = coût direct */
-  var N=assurerModele().nb||5;
-  var rows=(cl.rows||[]).map(function(r,ri){
-    var vals;
-    if(r.mode==='yearly'){var cells='';for(var k=0;k<N;k++){var yv=(r.vals&&r.vals[k]!=null)?r.vals[k]:0;cells+='<span class="mind-yv"><label>An '+(k+1)+'</label><input class="nin ninm" value="'+mAmt(yv)+'" oninput="mSep(this)" onchange="mCoutIndYv('+ci+','+ri+','+k+',this.value)"></span>';}vals='<div class="mind-vals">'+cells+'</div>';}
-    else vals='<div class="mind-vals"><span class="mind-f"><label>Valeur an 1</label><input class="nin ninm" value="'+mAmt(r.val)+'" oninput="mSep(this)" onchange="mCoutInd('+ci+','+ri+',\'val\',this.value)"></span><span class="mind-f"><label>Croissance %/an</label><input class="nin" value="'+(r.g||0)+'" onchange="mCoutInd('+ci+','+ri+',\'g\',this.value)"></span></div>';
-    return '<div class="mind"><div class="mind-top"><button class="btn sm" title="× ou ÷" onclick="mCoutIndOp('+ci+','+ri+')" style="min-width:34px;font-weight:700">'+(r.op==='d'?'÷':'×')+'</button>'
-      +'<input class="sel" style="flex:1;min-width:130px" placeholder="Nom de l\'inducteur" value="'+esc(r.name||'')+'" onchange="mCoutInd('+ci+','+ri+',\'name\',this.value)">'
-      +'<input class="nin" style="width:78px" placeholder="unité" value="'+esc(r.unit||'')+'" onchange="mCoutInd('+ci+','+ri+',\'unit\',this.value)">'
-      +'<span class="segvue"><button class="'+(r.mode==='yearly'?'':'on')+'" onclick="mCoutIndMode('+ci+','+ri+',\'grow\')">Croissance</button><button class="'+(r.mode==='yearly'?'on':'')+'" onclick="mCoutIndMode('+ci+','+ri+',\'yearly\')">Par année</button></span>'
-      +'<button class="btn sm" title="Retirer" onclick="mDelCoutInd('+ci+','+ri+')">✕</button></div>'+vals+'</div>';
-  }).join('');
-  var q=volInducteurs(cl.rows,0), taux=(cl.prix&&cl.prix.val)||0, cout=q*taux;
-  return '<div class="card" style="padding:0">'
-    +'<div class="bande" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><input class="sel" style="flex:1;min-width:160px;font-weight:700" value="'+esc(cl.name||'')+'" onchange="mCoutNom('+ci+',this.value)">'
-    +'<button class="btn sm" title="Supprimer" onclick="mDelCout('+ci+')">Supprimer</button></div>'
-    +'<div style="padding:12px 14px">'
-    +'<div class="mut" style="text-transform:uppercase;letter-spacing:.5px;font-size:11px;font-weight:700;margin-bottom:8px">Inducteurs de quantité (× ou ÷ · unité % = ratio)</div>'
+  /* coût direct additionnel : soit % du CA, soit chaîne d'inducteurs (× ou ÷) × taux unitaire */
+  var N=assurerModele().nb||5, m=(cl.m||'ind');
+  var methode='<div class="mind-price" style="border-bottom:1px dashed #e3e9f2;padding-bottom:8px;margin-bottom:8px"><span class="mut">Méthode</span> '
+    +'<span class="segvue"><button class="'+(m==='ind'?'on':'')+'" onclick="mCoutMethode('+ci+',\'ind\')">Inducteurs (quantité × taux)</button>'
+    +'<button class="'+(m==='pct'?'on':'')+'" onclick="mCoutMethode('+ci+',\'pct\')">% du chiffre d\'affaires</button></span></div>';
+  var corps;
+  if(m==='pct'){
+    corps='<div class="mind-price"><span class="mut">Coût direct = </span><input class="nin" style="width:70px" value="'+(cl.pct!=null?cl.pct:0)+'" onchange="mCoutPct('+ci+',this.value)"> <span class="mut">% du chiffre d\'affaires total</span></div>';
+  } else {
+    var rows=(cl.rows||[]).map(function(r,ri){
+      var vals;
+      if(r.mode==='yearly'){var cells='';for(var k=0;k<N;k++){var yv=(r.vals&&r.vals[k]!=null)?r.vals[k]:0;cells+='<span class="mind-yv"><label>An '+(k+1)+'</label><input class="nin ninm" value="'+mAmt(yv)+'" oninput="mSep(this)" onchange="mCoutIndYv('+ci+','+ri+','+k+',this.value)"></span>';}vals='<div class="mind-vals">'+cells+'</div>';}
+      else vals='<div class="mind-vals"><span class="mind-f"><label>Valeur an 1</label><input class="nin ninm" value="'+mAmt(r.val)+'" oninput="mSep(this)" onchange="mCoutInd('+ci+','+ri+',\'val\',this.value)"></span><span class="mind-f"><label>Croissance %/an</label><input class="nin" value="'+(r.g||0)+'" onchange="mCoutInd('+ci+','+ri+',\'g\',this.value)"></span></div>';
+      return '<div class="mind"><div class="mind-top"><button class="btn sm" title="× ou ÷" onclick="mCoutIndOp('+ci+','+ri+')" style="min-width:34px;font-weight:700">'+(r.op==='d'?'÷':'×')+'</button>'
+        +'<input class="sel" style="flex:1;min-width:130px" placeholder="Nom de l\'inducteur" value="'+esc(r.name||'')+'" onchange="mCoutInd('+ci+','+ri+',\'name\',this.value)">'
+        +'<input class="nin" style="width:78px" placeholder="unité" value="'+esc(r.unit||'')+'" onchange="mCoutInd('+ci+','+ri+',\'unit\',this.value)">'
+        +'<span class="segvue"><button class="'+(r.mode==='yearly'?'':'on')+'" onclick="mCoutIndMode('+ci+','+ri+',\'grow\')">Croissance</button><button class="'+(r.mode==='yearly'?'on':'')+'" onclick="mCoutIndMode('+ci+','+ri+',\'yearly\')">Par année</button></span>'
+        +'<button class="btn sm" title="Retirer" onclick="mDelCoutInd('+ci+','+ri+')">✕</button></div>'+vals+'</div>';
+    }).join('');
+    var q=volInducteurs(cl.rows,0), taux=(cl.prix&&cl.prix.val)||0, cout=q*taux;
+    corps='<div class="mut" style="text-transform:uppercase;letter-spacing:.5px;font-size:11px;font-weight:700;margin-bottom:8px">Inducteurs de quantité (× ou ÷ · unité % = ratio)</div>'
     +rows
     +'<button class="btn sm" style="margin-top:2px" onclick="mAddCoutInd('+ci+')">+ inducteur</button>'
     +'<div class="mind-price"><span class="x">= Quantité an 1 : <b>'+Math.round(q).toLocaleString("fr-FR").replace(/[  ]/g," ")+'</b></span></div>'
     +'<div class="mind-price"><span class="x">×</span> <span class="mut">Taux unitaire an 1 (FCFA)</span> <input class="nin ninm" value="'+mAmt(taux)+'" oninput="mSep(this)" onchange="mCoutTaux('+ci+',\'val\',this.value)"><input class="nin" style="width:70px" value="'+esc((cl.prix&&cl.prix.unit)||'')+'" onchange="mCoutTaux('+ci+',\'unit\',this.value)">'
     +'<span class="mut">croissance</span> <input class="nin" style="width:60px" value="'+((cl.prix&&cl.prix.g)||0)+'" onchange="mCoutTaux('+ci+',\'g\',this.value)"> %'
-    +'<span style="margin-left:auto;font-weight:700;color:#c0392b">Coût an 1 : '+fmt(cout/1000)+' '+uni().suf+'</span></div>'
+    +'<span style="margin-left:auto;font-weight:700;color:#c0392b">Coût an 1 : '+fmt(cout/1000)+' '+uni().suf+'</span></div>';
+  }
+  return '<div class="card" style="padding:0">'
+    +'<div class="bande" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><input class="sel" style="flex:1;min-width:160px;font-weight:700" value="'+esc(cl.name||'')+'" onchange="mCoutNom('+ci+',this.value)">'
+    +'<button class="btn sm" title="Supprimer" onclick="mDelCout('+ci+')">Supprimer</button></div>'
+    +'<div style="padding:12px 14px">'+methode+corps
     +'</div></div>';
 }
 function vueModele(){
