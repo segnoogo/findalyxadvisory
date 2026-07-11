@@ -734,8 +734,9 @@ function construireBP(pptx,opts){
     items.forEach(([l,x])=>{lignesH.push([l,x]);stylesH.push("detail");});};
   if(mm){
     const Pf=proj.financement, b=hyp.bfr||{};
-    gH("Activité (pilotée par inducteurs)",(hyp.revenus||[]).map(L=>[L.name||"Ligne de revenus",
-      "volume × prix — coûts "+((L.cout&&L.cout.m==="unit")?"unitaires":(((L.cout&&L.cout.val)||0)+" % du CA"))]));
+    gH("Activité (pilotée par inducteurs)",(hyp.revenus||[]).map(L=>[L.name||"Ligne de revenus","volume × prix (inducteurs)"]));
+    const descCout=cl=>{const m=cl.m||"ind";return (m==="pct")?((cl.pct||0)+" % du CA "+((cl.scope&&cl.scope!=="all")?"(d'une ligne)":"(total)")):(m==="unit"?"coût unitaire × volume d'une ligne":"inducteurs (quantité × taux)");};
+    if((hyp.coutsDirects||[]).length) gH("Coûts directs",(hyp.coutsDirects||[]).map(cl=>[cl.name||"Coût direct",descCout(cl)]));
     gH("Coûts, charges & BFR",[
       ["Inflation des coûts unitaires",pcH(hyp.inflation||0.03)],
       ["Délais clients / stocks / fournisseurs",Math.round(b.dso||0)+" / "+Math.round(b.dio||0)+" / "+Math.round(b.dpo||0)+" j"],

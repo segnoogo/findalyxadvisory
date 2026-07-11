@@ -2512,7 +2512,7 @@ function projeterModele(M,scenario){
   var P={annees:AP,scenario:scLab,scenarioKey:scKey,pl:{},bs:{},tft:{},dette:{}};
   ["CA","COUTS_DIRECTS","MARGE_BRUTE","AUTRES_PROD","OPEX_TOTAL","CHARGES_PERSONNEL","EBITDA","DA","EBIT","PRODUITS_FIN","FRAIS_FIN","RESULTAT_FIN","EBT","IS","RN"].forEach(function(c){P.pl[c]={};});
   P.pl.OPEX_DETAIL={};P.pl.PERS_DETAIL={};   /* frais généraux dépliés : hors personnel (OPEX_DETAIL) + personnel (PERS_DETAIL) — le personnel FAIT PARTIE des frais généraux */
-  P.pl.CA_DETAIL={};P.pl.CD_DETAIL={};   /* détail par ligne de revenus : ventes & coûts directs (vue détaillée) */
+  P.pl.CA_DETAIL={};   /* détail du CA par ligne de revenus (vue détaillée) ; les coûts directs sont dans CDIND_DETAIL */
   P.pl.CDIND_DETAIL={};   /* coûts directs pilotés par inducteurs (indépendants des lignes de revenus : ex. vacataires = classes × heures × taux horaire) */
   ["IMMO_BRUT","AMORT_CUM","IMMO_NET","STOCKS","CLIENTS","AUTRES_CREANCES","FOURNISSEURS","DETTES_FISC_SOC","AUTRES_DETTES","BFR","CP","DETTE","PROVISIONS","TRESO","LIGNE_CT","TRESO_ACTIVE"].forEach(function(c){P.bs[c]={};});
   var infl=M.inflation||0.03, bfrH=M.bfr||{dso:30,dio:45,dpo:30};
@@ -2536,9 +2536,17 @@ function projeterModele(M,scenario){
   /* CAPEX : {montant,duree,annee}. annee>=1 (0 hérité → 1). Amortissement à partir de max(annee, mise en service). */
   var capex=(M.capex||[]).map(function(c){var an=Math.round(+c.annee||0); if(an<1)an=1; return {montant:(c.montant!=null?+c.montant:(+c.nombre||0)*(+c.coutUnitaire||0))/SC,duree:+c.duree||5,annee:an,amorti:0,mes:Math.max(an,anneeExploit)};});
   /* coûts de la 1ʳᵉ année d'exploitation → BFR de démarrage (mode auto) */
-  var coutsD1=0, charges1=0, ca1=0;
-  (M.revenus||[]).forEach(function(L){ var vol=volInducteurs(L.rows,0)*fCA, prix=valAnnee(L.prix,0), caL=vol*prix/SC; ca1+=caL; var cm=(L.cout&&L.cout.m)||"pct", cv=+((L.cout||{}).val)||0; coutsD1+=((cm==="unit")?vol*cv/SC:caL*cv/100)*fCout; });
-  (M.coutsDirects||[]).forEach(function(cl){ coutsD1+=(((cl.m||"ind")==="pct")?ca1*(+cl.pct||0)/100:volInducteurs(cl.rows,0)*valAnnee(cl.prix,0)/SC)*fCout; });
+  /* liste de coûts directs normalisée (sans muter M) : coutsDirects + les anciens L.cout convertis
+     en lignes de périmètre = leur ligne de revenus → le moteur gère les deux formats (tests, modèles sauvegardés). */
+  var CDLIST=(M.coutsDirects||[]).slice();
+  (M.revenus||[]).forEach(function(L,li){ if(L.cout){ var cm=(L.cout.m==='unit')?'unit':'pct'; CDLIST.push({name:(L.name||'Ligne')+' — coût direct',m:cm,scope:(L.id||('L'+li)),pct:(cm==='pct'?(+L.cout.val||0):0),val:(cm==='unit'?(+L.cout.val||0):0)}); } });
+  var coutsD1=0, charges1=0, ca1=0, caLine1={}, volLine1={};
+  (M.revenus||[]).forEach(function(L,li){ var vol=volInducteurs(L.rows,0)*fCA, prix=valAnnee(L.prix,0), caL=vol*prix/SC; ca1+=caL; caLine1[L.id||("L"+li)]=caL; volLine1[L.id||("L"+li)]=vol; });
+  CDLIST.forEach(function(cl){ var m=(cl.m||"ind"), sc=(cl.scope||"all"), mt;
+    if(m==="pct")mt=((sc==="all")?ca1:(caLine1[sc]||0))*(+cl.pct||0)/100;
+    else if(m==="unit")mt=(volLine1[sc]||0)*(+cl.val||0)/SC;
+    else mt=volInducteurs(cl.rows,0)*valAnnee(cl.prix,0)/SC;
+    coutsD1+=mt*fCout; });
   (M.chargesFixes||[]).forEach(function(c){ charges1+=valAnnee({val:(c.montant!=null?c.montant:c.val),g:c.g,mode:c.mode,vals:c.vals},0)/SC; });
   var bfrDem=(moisBFR/12)*(coutsD1+charges1);
   /* montage initial = CAPEX jusqu'à la mise en service (incluse) + BFR de démarrage ; subvention en déduction */
@@ -2560,23 +2568,22 @@ function projeterModele(M,scenario){
     /* --- financement tiré en année 1 : capital + subvention en CP, dette de base --- */
     var capInj=0, subvInj=0, tirageDette=0;
     if(py===1){ capInj=capital; subvInj=subv; tirageDette=detteBase; cp+=capital+subv; detteSolde+=detteBase; }
-    /* --- revenus & coûts directs (uniquement en exploitation) --- */
-    var ca=0, coutsD=0;
+    /* --- revenus par ligne (le coût est désormais entièrement géré dans M.coutsDirects) --- */
+    var ca=0, coutsD=0, caLine={}, volLine={};
     if(isOp){ (M.revenus||[]).forEach(function(L,li){
       var vol=volInducteurs(L.rows,oi)*fCA, prix=valAnnee(L.prix,oi), caL=vol*prix/SC;
-      ca+=caL;
-      var cm=(L.cout&&L.cout.m)||"pct", cv=+((L.cout||{}).val)||0;
-      var cdL=((cm==="unit") ? vol*cv*Math.pow(1+infl,oi)/SC : caL*cv/100)*fCout;
-      coutsD += cdL;
+      ca+=caL; caLine[L.id||("L"+li)]=caL; volLine[L.id||("L"+li)]=vol;
       var codeL="REV"+li, libL=(L.name||("Ligne "+(li+1)));
       if(!P.pl.CA_DETAIL[codeL])P.pl.CA_DETAIL[codeL]={lib:libL,vals:{}};
-      if(!P.pl.CD_DETAIL[codeL])P.pl.CD_DETAIL[codeL]={lib:libL,vals:{}};
       P.pl.CA_DETAIL[codeL].vals[a]=caL;
-      P.pl.CD_DETAIL[codeL].vals[a]=-cdL;   /* coût en négatif, comme le total COUTS_DIRECTS */
     }); }
-    /* --- coûts directs additionnels : % du CA total OU chaîne d'inducteurs × taux (ex. vacataires) --- */
-    if(isOp){ (M.coutsDirects||[]).forEach(function(cl,ci){
-      var montant=(((cl.m||"ind")==="pct") ? ca*(+cl.pct||0)/100 : volInducteurs(cl.rows,oi)*valAnnee(cl.prix,oi)/SC)*fCout;
+    /* --- coûts directs : % (d'une ligne ou de l'ensemble), coût unitaire × volume d'une ligne, ou inducteurs --- */
+    if(isOp){ CDLIST.forEach(function(cl,ci){
+      var m=(cl.m||"ind"), sc=(cl.scope||"all"), montant;
+      if(m==="pct"){ var base=(sc==="all")?ca:(caLine[sc]||0); montant=base*(+cl.pct||0)/100; }
+      else if(m==="unit"){ var vl=(volLine[sc]!=null?volLine[sc]:0); montant=vl*(+cl.val||0)*Math.pow(1+infl,oi)/SC; }
+      else { montant=volInducteurs(cl.rows,oi)*valAnnee(cl.prix,oi)/SC; }
+      montant*=fCout;
       coutsD += montant;
       var cc="CDI"+ci, libc=(cl.name||("Coût "+(ci+1)));
       if(!P.pl.CDIND_DETAIL[cc])P.pl.CDIND_DETAIL[cc]={lib:libc,vals:{}};
@@ -4152,8 +4159,9 @@ function construireBP(pptx,opts){
     items.forEach(([l,x])=>{lignesH.push([l,x]);stylesH.push("detail");});};
   if(mm){
     const Pf=proj.financement, b=hyp.bfr||{};
-    gH("Activité (pilotée par inducteurs)",(hyp.revenus||[]).map(L=>[L.name||"Ligne de revenus",
-      "volume × prix — coûts "+((L.cout&&L.cout.m==="unit")?"unitaires":(((L.cout&&L.cout.val)||0)+" % du CA"))]));
+    gH("Activité (pilotée par inducteurs)",(hyp.revenus||[]).map(L=>[L.name||"Ligne de revenus","volume × prix (inducteurs)"]));
+    const descCout=cl=>{const m=cl.m||"ind";return (m==="pct")?((cl.pct||0)+" % du CA "+((cl.scope&&cl.scope!=="all")?"(d'une ligne)":"(total)")):(m==="unit"?"coût unitaire × volume d'une ligne":"inducteurs (quantité × taux)");};
+    if((hyp.coutsDirects||[]).length) gH("Coûts directs",(hyp.coutsDirects||[]).map(cl=>[cl.name||"Coût direct",descCout(cl)]));
     gH("Coûts, charges & BFR",[
       ["Inflation des coûts unitaires",pcH(hyp.inflation||0.03)],
       ["Délais clients / stocks / fournisseurs",Math.round(b.dso||0)+" / "+Math.round(b.dio||0)+" / "+Math.round(b.dpo||0)+" j"],
@@ -6430,33 +6438,29 @@ async function exporterExcelModele(){
     H.infl=one("Inflation des coûts unitaires",M.inflation||0.03,PCT2);
     H.dec=one("Taux du découvert (ligne court terme)",M.decouvert_taux||0.12,PCT2);
     sec("Revenus (volume × prix par ligne)");
-    H.vol=[];H.prix=[];H.coutpct=[];H.coutUnit=[];H.coutMethod=[];H.lignes=(M.revenus||[]);
-    H.lignes.forEach((L,k)=>{
+    H.vol=[];H.prix=[];H.lignes=(M.revenus||[]);
+    const idToK={};
+    H.lignes.forEach((L,k)=>{ idToK[L.id||("L"+k)]=k;
       /* série par année d'EXPLOITATION (an 1 = 1re année d'exploitation) ; les formules la décalent
          selon la durée de construction via INDEX(série, année − Nc) → la durée de construction reste VIVANTE. */
       const volA=[],prixA=[]; for(let j=0;j<N;j++){volA.push(volInducteurs(L.rows,j)*fCA); prixA.push(valAnnee(L.prix,j)||0);}   /* précision complète (affichage arrondi via numFmt) → formules = moteur au centime */
       wsH.getCell(++hr,2).value="Ligne "+(k+1)+" — "+(L.name||"Revenus")+" (séries par année d'exploitation)";wsH.getCell(hr,2).font={italic:true,color:{argb:"FF224289"}};
       H.vol[k]=ser("   Volume — an 1..an "+N,volA,"#,##0.##");
       H.prix[k]=ser("   Prix unitaire — an 1..an "+N+" (FCFA)",prixA,"#,##0.##");
-      const cm=(L.cout&&L.cout.m)||"pct"; H.coutMethod[k]=cm;
-      /* coût unitaire : modélisé FIDÈLEMENT (volume × coût unitaire, indexé inflation) ; sinon % du CA */
-      if(cm==="unit"){ H.coutUnit[k]=one("   Coût direct unitaire (FCFA / unité)",(+((L.cout||{}).val)||0)*fCout,"#,##0.##"); }
-      else { H.coutpct[k]=one("   Coûts directs (% du CA)",(((+((L.cout||{}).val)||0))/100)*fCout,PCT2); }
     });
-    /* coûts directs pilotés par inducteurs (indépendants des lignes de revenus) */
-    H.coutIndVol=[];H.coutIndTaux=[];H.coutIndPct=[];H.coutIndMethod=[];H.coutInd=(M.coutsDirects||[]);
-    if(H.coutInd.length){ sec("Coûts directs additionnels (% du CA ou inducteurs)");
+    /* coûts directs UNIFIÉS : % (d'une ligne ou de l'ensemble), coût unitaire × volume d'une ligne, ou inducteurs */
+    H.cd=[]; H.coutInd=(M.coutsDirects||[]).slice();
+    /* sécurité : normaliser d'éventuels anciens L.cout non migrés */
+    H.lignes.forEach((L,k)=>{ if(L.cout){ H.coutInd.push({name:(L.name||'Ligne')+' — coût direct',m:(L.cout.m==='unit'?'unit':'pct'),scope:(L.id||("L"+k)),pct:(L.cout.m==='unit'?0:(+L.cout.val||0)),val:(L.cout.m==='unit'?(+L.cout.val||0):0)}); } });
+    if(H.coutInd.length){ sec("Coûts directs (% du CA · coût unitaire × volume · inducteurs)");
       H.coutInd.forEach((cl,k)=>{
-        const cm=(cl.m||"ind"); H.coutIndMethod[k]=cm;
-        if(cm==="pct"){
-          wsH.getCell(++hr,2).value="Coût "+(k+1)+" — "+(cl.name||"Coût");wsH.getCell(hr,2).font={italic:true,color:{argb:"FF224289"}};
-          H.coutIndPct[k]=one("   Coûts directs (% du CA)",((+cl.pct||0)/100)*fCout,PCT2);
-        } else {
-          const qA=[],txA=[]; for(let j=0;j<N;j++){qA.push(volInducteurs(cl.rows,j)); txA.push((valAnnee(cl.prix,j)||0)*fCout);}   /* précision complète */
-          wsH.getCell(++hr,2).value="Coût "+(k+1)+" — "+(cl.name||"Coût")+" (séries par année d'exploitation)";wsH.getCell(hr,2).font={italic:true,color:{argb:"FF224289"}};
-          H.coutIndVol[k]=ser("   Quantité — an 1..an "+N,qA,"#,##0.##");
-          H.coutIndTaux[k]=ser("   Taux unitaire — an 1..an "+N+" (FCFA)",txA,"#,##0.##");
-        }
+        const m=(cl.m||"ind"), scope=(cl.scope||"all"), info={m:m,scope:scope,kLine:idToK[scope]};
+        wsH.getCell(++hr,2).value="Coût "+(k+1)+" — "+(cl.name||"Coût")+(m==="ind"?" (séries par année d'exploitation)":(m==="unit"?" (coût unitaire × volume)":(scope==="all"?" (% du CA total)":" (% d'une ligne)")));wsH.getCell(hr,2).font={italic:true,color:{argb:"FF224289"}};
+        if(m==="pct"){ info.pct=one("   Coûts directs (% du CA)",((+cl.pct||0)/100)*fCout,PCT2); }
+        else if(m==="unit"){ info.val=one("   Coût direct unitaire (FCFA / unité)",(+cl.val||0)*fCout,"#,##0.##"); }
+        else { const qA=[],txA=[]; for(let j=0;j<N;j++){qA.push(volInducteurs(cl.rows,j)); txA.push((valAnnee(cl.prix,j)||0)*fCout);}
+          info.vol=ser("   Quantité — an 1..an "+N,qA,"#,##0.##"); info.taux=ser("   Taux unitaire — an 1..an "+N+" (FCFA)",txA,"#,##0.##"); }
+        H.cd[k]=info;
       });
     }
     sec("Charges fixes annuelles");
@@ -6522,23 +6526,20 @@ async function exporterExcelModele(){
       row("CAL"+k,"CA — "+(L.name||("Ligne "+(k+1))),(i,X)=>{const oi=`MAX(1,${X}${rr("IDX")}-${rH}!${H.nc})`;return `${X}${rr("FO")}*INDEX(${rng(H.vol[k])},${oi})*INDEX(${rng(H.prix[k])},${oi})/1000`;},NF);
     });
     row("CA","Chiffre d'affaires",(i,X)=>H.lignes.length?H.lignes.map((_,k)=>`${X}${rr("CAL"+k)}`).join("+"):"0",NF,true);
-    H.lignes.forEach((L,k)=>{
-      if(H.coutMethod[k]==="unit"){
-        /* coût unitaire FIDÈLE : volume × coût unitaire × (1+inflation)^(année d'exploit − 1) */
-        row("CDL"+k,"Coûts directs — "+(L.name||("Ligne "+(k+1))),(i,X)=>{const oi=`MAX(1,${X}${rr("IDX")}-${rH}!${H.nc})`;return `-${X}${rr("FO")}*INDEX(${rng(H.vol[k])},${oi})*${rH}!${H.coutUnit[k]}*(1+${rH}!${H.infl})^(${oi}-1)/1000`;},NF);
-      } else {
-        row("CDL"+k,"Coûts directs — "+(L.name||("Ligne "+(k+1))),(i,X)=>`-${X}${rr("CAL"+k)}*${rH}!${H.coutpct[k]}`,NF);
-      }
-    });
-    /* coûts directs additionnels : % du CA total OU quantité × taux (indépendants des revenus) */
+    /* coûts directs UNIFIÉS : % (d'une ligne CAL_k ou du CA total), coût unitaire × volume d'une ligne, ou inducteurs */
     (H.coutInd||[]).forEach((cl,k)=>{
-      if(H.coutIndMethod[k]==="pct"){
-        row("CDI"+k,"Coûts directs — "+(cl.name||("Coût "+(k+1))),(i,X)=>`-${X}${rr("FO")}*${X}${rr("CA")}*${rH}!${H.coutIndPct[k]}`,NF);
+      const info=H.cd[k], lib="Coûts directs — "+(cl.name||("Coût "+(k+1)));
+      if(info.m==="pct"){
+        if(info.scope==="all"){ row("CDI"+k,lib,(i,X)=>`-${X}${rr("FO")}*${X}${rr("CA")}*${rH}!${info.pct}`,NF); }
+        else { const kk=(info.kLine!=null?info.kLine:0); row("CDI"+k,lib,(i,X)=>`-${X}${rr("FO")}*${X}${rr("CAL"+kk)}*${rH}!${info.pct}`,NF); }
+      } else if(info.m==="unit"){
+        const kk=(info.kLine!=null?info.kLine:0);
+        row("CDI"+k,lib,(i,X)=>{const oi=`MAX(1,${X}${rr("IDX")}-${rH}!${H.nc})`;return `-${X}${rr("FO")}*INDEX(${rng(H.vol[kk])},${oi})*${rH}!${info.val}*(1+${rH}!${H.infl})^(${oi}-1)/1000`;},NF);
       } else {
-        row("CDI"+k,"Coûts directs — "+(cl.name||("Coût "+(k+1))),(i,X)=>{const oi=`MAX(1,${X}${rr("IDX")}-${rH}!${H.nc})`;return `-${X}${rr("FO")}*INDEX(${rng(H.coutIndVol[k])},${oi})*INDEX(${rng(H.coutIndTaux[k])},${oi})/1000`;},NF);
+        row("CDI"+k,lib,(i,X)=>{const oi=`MAX(1,${X}${rr("IDX")}-${rH}!${H.nc})`;return `-${X}${rr("FO")}*INDEX(${rng(info.vol)},${oi})*INDEX(${rng(info.taux)},${oi})/1000`;},NF);
       }
     });
-    row("CD","Coûts directs",(i,X)=>{const t=[...H.lignes.map((_,k)=>`${X}${rr("CDL"+k)}`),...(H.coutInd||[]).map((_,k)=>`${X}${rr("CDI"+k)}`)];return t.length?t.join("+"):"0";},NF);
+    row("CD","Coûts directs",(i,X)=>{const t=(H.coutInd||[]).map((_,k)=>`${X}${rr("CDI"+k)}`);return t.length?t.join("+"):"0";},NF);
     row("MB","Marge brute",(i,X)=>`${X}${rr("CA")}+${X}${rr("CD")}`,NF,true);
     /* frais généraux : postes hors personnel dépliés + UNE ligne « Charges du personnel » (le personnel EST un poste des frais généraux, pas un sous-total séparé) */
     H.opex.forEach((o,k)=>row("OPL"+k,"Frais généraux — "+o.name,(i,X)=>`-${X}${rr("FO")}*INDEX(${rng(o.row)},MAX(1,${X}${rr("IDX")}-${rH}!${H.nc}))`,NF));
@@ -6640,7 +6641,6 @@ async function exporterExcelModele(){
     const plDefs=[["Produits d'exploitation",null]];
     H.lignes.forEach((L,k)=>plDefs.push(["   Ventes — "+(L.name||"Ligne "+(k+1)),"CAL"+k]));
     plDefs.push(["Chiffre d'affaires","CA",1]);
-    H.lignes.forEach((L,k)=>{if((+((L.cout||{}).val)||0)!==0)plDefs.push(["   Coûts directs — "+(L.name||"Ligne "+(k+1)),"CDL"+k]);});
     (H.coutInd||[]).forEach((cl,k)=>plDefs.push(["   Coûts directs — "+(cl.name||"Coût "+(k+1)),"CDI"+k]));
     plDefs.push(["Coûts directs (total)","CD"]);
     plDefs.push(["Marge brute","MB",1]);
@@ -6886,7 +6886,26 @@ function modeleParDefaut(){
       prudent:{lab:"Prudent",dCA:-0.10,dMarge:-0.05,dJours:0.10}}};
 }
 function modeleScenariosDefaut(){return {central:{lab:"Central",dCA:0,dMarge:0,dJours:0},optimiste:{lab:"Optimiste",dCA:0.10,dMarge:0.05,dJours:-0.10},prudent:{lab:"Prudent",dCA:-0.10,dMarge:-0.05,dJours:0.10}};}
-function assurerModele(){ if(!DOSSIER.modele)DOSSIER.modele=modeleParDefaut(); if(!DOSSIER.modele.valo)DOSSIER.modele.valo=modeleValoDefaut(); if(!DOSSIER.modele.scenarios){DOSSIER.modele.scenarios=modeleScenariosDefaut();DOSSIER.modele.scenario="central";} return DOSSIER.modele; }
+function assurerModele(){
+  if(!DOSSIER.modele)DOSSIER.modele=modeleParDefaut();
+  var M=DOSSIER.modele;
+  if(!M.valo)M.valo=modeleValoDefaut();
+  if(!M.scenarios){M.scenarios=modeleScenariosDefaut();M.scenario="central";}
+  if(!M.coutsDirects)M.coutsDirects=[];
+  /* ids stables sur les lignes de revenus (référencés par le périmètre des coûts directs) */
+  (M.revenus||[]).forEach(function(L){ if(!L.id){ M._seq=(M._seq||0)+1; L.id='L'+M._seq; } });
+  /* MIGRATION : le coût qui était au bas de chaque ligne de revenus (L.cout) devient une ligne
+     de coût direct à part entière, de périmètre = cette ligne de produit. Idempotent (supprime L.cout). */
+  (M.revenus||[]).forEach(function(L){
+    if(L.cout){
+      var cm=(L.cout.m==='unit')?'unit':'pct';
+      M.coutsDirects.push({name:(L.name||'Ligne')+' — coût direct',m:cm,scope:L.id,
+        pct:(cm==='pct'?(+L.cout.val||0):0),val:(cm==='unit'?(+L.cout.val||0):0)});
+      delete L.cout;
+    }
+  });
+  return M;
+}
 function mScenario(k){assurerModele().scenario=k;sauverDossier();rendre();}
 function mHNb(n){var M=assurerModele();M.nb=Math.max(3,Math.min(10,Math.round(+n)||5));sauverDossier();rendre();}
 function pillsScenariosModele(M){
@@ -6926,11 +6945,10 @@ function mInd(li,ri,champ,val){var r=assurerModele().revenus[li].rows[ri];if(cha
 function mIndMode(li,ri,mode){var r=assurerModele().revenus[li].rows[ri];if(mode==='yearly'&&r.mode!=='yearly'){r.mode='yearly';r.vals=[];var N=assurerModele().nb||5;for(var k=0;k<N;k++)r.vals.push(Math.round((r.val||0)*Math.pow(1+(r.g||0)/100,k)*1000)/1000);}else if(mode!=='yearly'){r.mode='grow';if(r.vals&&r.vals.length)r.val=r.vals[0];}sauverDossier();rendre();}
 function mIndYv(li,ri,k,val){var r=assurerModele().revenus[li].rows[ri];if(!r.vals)r.vals=[];var x=numFR(val);if(x!==null)r.vals[k]=x;sauverDossier();rendre();}
 function mPrix(li,champ,val){var P=assurerModele().revenus[li].prix;if(champ==='unit')P.unit=val;else{var x=numFR(val);if(x!==null)P[champ]=x;}sauverDossier();rendre();}
-function mCoutM(li,m){assurerModele().revenus[li].cout.m=m;sauverDossier();rendre();}
-function mCoutV(li,val){var x=numFR(val);if(x!==null)assurerModele().revenus[li].cout.val=x;sauverDossier();rendre();}
+/* (le coût direct par ligne de revenus a été déplacé dans l'onglet Coûts directs — voir mCarteCout / mCout*) */
 /* ---- coûts directs pilotés par inducteurs (chaîne × taux, indépendants des revenus) : mêmes gestes que les revenus ---- */
 function mCoutsArr(){var M=assurerModele();if(!M.coutsDirects)M.coutsDirects=[];return M.coutsDirects;}
-function mAddCout(){mCoutsArr().push({name:"Nouveau coût direct",rows:[{op:'x',name:'Quantité',val:1,unit:'',g:0}],prix:{val:1000,unit:'FCFA',g:2}});sauverDossier();rendre();}
+function mAddCout(){mCoutsArr().push({name:"Nouveau coût direct",m:'pct',scope:'all',pct:40,val:0,rows:[{op:'x',name:'Quantité',val:1,unit:'',g:0}],prix:{val:1000,unit:'FCFA',g:2}});sauverDossier();rendre();}
 function mDelCout(ci){mCoutsArr().splice(ci,1);sauverDossier();rendre();}
 function mCoutNom(ci,val){mCoutsArr()[ci].name=val;sauverDossier();rendre();}
 function mAddCoutInd(ci){mCoutsArr()[ci].rows.push({op:'x',name:'',val:1,unit:'',g:0});sauverDossier();rendre();}
@@ -6940,8 +6958,14 @@ function mCoutInd(ci,ri,champ,val){var r=mCoutsArr()[ci].rows[ri];if(champ==='na
 function mCoutIndMode(ci,ri,mode){var r=mCoutsArr()[ci].rows[ri];if(mode==='yearly'&&r.mode!=='yearly'){r.mode='yearly';r.vals=[];var N=assurerModele().nb||5;for(var k=0;k<N;k++)r.vals.push(Math.round((r.val||0)*Math.pow(1+(r.g||0)/100,k)*1000)/1000);}else if(mode!=='yearly'){r.mode='grow';if(r.vals&&r.vals.length)r.val=r.vals[0];}sauverDossier();rendre();}
 function mCoutIndYv(ci,ri,k,val){var r=mCoutsArr()[ci].rows[ri];if(!r.vals)r.vals=[];var x=numFR(val);if(x!==null)r.vals[k]=x;sauverDossier();rendre();}
 function mCoutTaux(ci,champ,val){var pr=mCoutsArr()[ci].prix;if(champ==='unit')pr.unit=val;else{var x=numFR(val);if(x!==null)pr[champ]=x;}sauverDossier();rendre();}
-function mCoutMethode(ci,m){mCoutsArr()[ci].m=m;sauverDossier();rendre();}
+function mCoutMethode(ci,m){var cl=mCoutsArr()[ci];cl.m=m;
+  /* le coût unitaire a BESOIN d'une ligne de produit (son volume) → périmètre par défaut = 1ʳᵉ ligne */
+  if(m==='unit'){var revs=assurerModele().revenus||[];if(cl.scope==='all'||!cl.scope)cl.scope=(revs[0]&&revs[0].id)||'all';}
+  else if(m==='pct'&&!cl.scope)cl.scope='all';
+  sauverDossier();rendre();}
+function mCoutScope(ci,val){mCoutsArr()[ci].scope=val;sauverDossier();rendre();}
 function mCoutPct(ci,val){var x=numFR(val);if(x!==null)mCoutsArr()[ci].pct=x;sauverDossier();rendre();}
+function mCoutVal(ci,val){var x=numFR(val);if(x!==null)mCoutsArr()[ci].val=x;sauverDossier();rendre();}
 function mAddFixe(){assurerModele().chargesFixes.push({name:"Charge fixe",montant:0,g:0});sauverDossier();rendre();}
 function mDelFixe(i){assurerModele().chargesFixes.splice(i,1);sauverDossier();rendre();}
 function mFixe(i,champ,val){var c=assurerModele().chargesFixes[i];if(champ==='name')c.name=val;else if(champ==='personnel')c.personnel=val;else{var x=numFR(val);if(x!==null)c[champ]=x;}sauverDossier();rendre();}
@@ -7000,20 +7024,28 @@ function mCarteRevenu(L,li){
     +'<div class="mind-price"><span class="x">×</span> <span class="mut">Prix an 1 (FCFA)</span> <input class="nin ninm" value="'+mAmt(prix)+'" oninput="mSep(this)" onchange="mPrix('+li+',\'val\',this.value)"><input class="nin" style="width:70px" value="'+esc(L.prix.unit||'')+'" onchange="mPrix('+li+',\'unit\',this.value)">'
     +'<span class="mut">croissance</span> <input class="nin" style="width:60px" value="'+(L.prix.g||0)+'" onchange="mPrix('+li+',\'g\',this.value)"> %'
     +'<span style="margin-left:auto;font-weight:700;color:#16904E">CA an 1 : '+fmt(ca/1000)+' '+uni().suf+'</span></div>'
-    +'<div class="mind-price" style="border-top:1px dashed #e3e9f2;padding-top:10px;margin-top:6px"><span class="mut">Coûts directs</span>'
-    +'<span class="segvue"><button class="'+(L.cout.m==='pct'?'on':'')+'" onclick="mCoutM('+li+',\'pct\')">% du CA</button><button class="'+(L.cout.m==='unit'?'on':'')+'" onclick="mCoutM('+li+',\'unit\')">Coût unitaire</button></span>'
-    +'<input class="nin ninm" value="'+mAmt(L.cout.val)+'" oninput="mSep(this)" onchange="mCoutV('+li+',this.value)"> <span class="mut">'+(L.cout.m==='pct'?'% du CA':'par unité de volume')+'</span></div>'
+    +'<div class="mut" style="border-top:1px dashed #e3e9f2;padding-top:8px;margin-top:6px;font-size:12px">Les coûts directs se paramètrent dans l\'onglet <b>Coûts directs</b> (choix du périmètre : cette ligne, l\'ensemble, ou indépendant).</div>'
     +'</div></div>';
 }
 function mCarteCout(cl,ci){
   /* coût direct additionnel : soit % du CA, soit chaîne d'inducteurs (× ou ÷) × taux unitaire */
-  var N=assurerModele().nb||5, m=(cl.m||'ind');
+  var Mm=assurerModele(), N=Mm.nb||5, m=(cl.m||'ind'), scope=(cl.scope||'all'), revs=(Mm.revenus||[]);
   var methode='<div class="mind-price" style="border-bottom:1px dashed #e3e9f2;padding-bottom:8px;margin-bottom:8px"><span class="mut">Méthode</span> '
-    +'<span class="segvue"><button class="'+(m==='ind'?'on':'')+'" onclick="mCoutMethode('+ci+',\'ind\')">Inducteurs (quantité × taux)</button>'
-    +'<button class="'+(m==='pct'?'on':'')+'" onclick="mCoutMethode('+ci+',\'pct\')">% du chiffre d\'affaires</button></span></div>';
+    +'<span class="segvue">'
+    +'<button class="'+(m==='pct'?'on':'')+'" onclick="mCoutMethode('+ci+',\'pct\')">% du CA</button>'
+    +'<button class="'+(m==='unit'?'on':'')+'" onclick="mCoutMethode('+ci+',\'unit\')">Coût unitaire × volume</button>'
+    +'<button class="'+(m==='ind'?'on':'')+'" onclick="mCoutMethode('+ci+',\'ind\')">Inducteurs (indépendant)</button></span></div>';
+  var scopeSel='';
+  if(m==='pct'||m==='unit'){
+    var opts=(m==='pct'?('<option value="all"'+(scope==='all'?' selected':'')+'>L\'ensemble du CA</option>'):'');
+    revs.forEach(function(L){opts+='<option value="'+L.id+'"'+(scope===L.id?' selected':'')+'>'+esc(L.name||'Ligne')+'</option>';});
+    scopeSel='<div class="mind-price"><span class="mut">S\'applique à</span> <select class="sel" style="width:auto" onchange="mCoutScope('+ci+',this.value)">'+opts+'</select></div>';
+  }
   var corps;
   if(m==='pct'){
-    corps='<div class="mind-price"><span class="mut">Coût direct = </span><input class="nin" style="width:70px" value="'+(cl.pct!=null?cl.pct:0)+'" onchange="mCoutPct('+ci+',this.value)"> <span class="mut">% du chiffre d\'affaires total</span></div>';
+    corps='<div class="mind-price"><span class="mut">Coût = </span><input class="nin" style="width:66px" value="'+(cl.pct!=null?cl.pct:0)+'" onchange="mCoutPct('+ci+',this.value)"> <span class="mut">% du CA '+(scope==='all'?'total':'de la ligne choisie')+'</span></div>';
+  } else if(m==='unit'){
+    corps='<div class="mind-price"><span class="mut">Coût unitaire = </span><input class="nin ninm" value="'+mAmt(cl.val||0)+'" oninput="mSep(this)" onchange="mCoutVal('+ci+',this.value)"> <span class="mut">FCFA par unité de volume de la ligne choisie (inflaté)</span></div>';
   } else {
     var rows=(cl.rows||[]).map(function(r,ri){
       var vals;
@@ -7037,7 +7069,7 @@ function mCarteCout(cl,ci){
   return '<div class="card" style="padding:0">'
     +'<div class="bande" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><input class="sel" style="flex:1;min-width:160px;font-weight:700" value="'+esc(cl.name||'')+'" onchange="mCoutNom('+ci+',this.value)">'
     +'<button class="btn sm" title="Supprimer" onclick="mDelCout('+ci+')">Supprimer</button></div>'
-    +'<div style="padding:12px 14px">'+methode+corps
+    +'<div style="padding:12px 14px">'+methode+scopeSel+corps
     +'</div></div>';
 }
 function vueModele(){
@@ -7067,11 +7099,10 @@ function vueModele(){
       +'<button class="btn" onclick="mAddLigne()">+ Ajouter une ligne de revenus</button>';
   } else if(SOUS_MODELE==="cout"){
     var CDL=(M.coutsDirects||[]);
-    corps='<div class="mut" style="margin-bottom:10px">Deux façons de saisir les coûts directs : <b>(1)</b> attachés à une ligne de revenus (% du CA ou coût unitaire × volume — dans l\'onglet <b>Revenus</b>) ; <b>(2)</b> <b>pilotés par inducteurs</b> ci-dessous — une chaîne d\'inducteurs × taux, indépendante des revenus. Ex. école : <i>Vacataires</i> = Nb classes × Heures/classe/an × 20 000 F/h.</div>'
-      +'<div class="mut" style="text-transform:uppercase;letter-spacing:.5px;font-size:11px;font-weight:700;margin-bottom:8px">Coûts directs pilotés par inducteurs</div>'
-      +(CDL.length?CDL.map(function(cl,ci){return mCarteCout(cl,ci);}).join(""):'<div class="mut" style="margin-bottom:8px">Aucun coût inducteur pour l\'instant.</div>')
-      +'<button class="btn" onclick="mAddCout()">+ Ajouter un coût direct (inducteurs)</button>'
-      +'<div class="card" style="margin-top:14px"><div class="hyp-l"><span>Inflation des coûts unitaires <span class="mut">(méthode « coût unitaire » par ligne)</span></span><input class="sel" style="width:46%" value="'+((M.inflation||0)*100)+'" onchange="mSet(\'inflation\',(numFR(this.value)||0)/100)"> %</div></div>';
+    corps='<div class="mut" style="margin-bottom:10px">Tous les coûts directs se paramètrent ici. Pour chaque coût, choisis sa <b>méthode</b> et son <b>périmètre</b> : <b>% du CA</b> (d\'une ligne de produit ou de l\'ensemble), <b>coût unitaire × volume</b> d\'une ligne, ou <b>inducteurs</b> (indépendant du CA — ex. école : <i>Vacataires</i> = Nb classes × Heures/classe/an × 20 000 F/h).</div>'
+      +(CDL.length?CDL.map(function(cl,ci){return mCarteCout(cl,ci);}).join(""):'<div class="mut" style="margin-bottom:8px">Aucun coût direct pour l\'instant.</div>')
+      +'<button class="btn" onclick="mAddCout()">+ Ajouter un coût direct</button>'
+      +'<div class="card" style="margin-top:14px"><div class="hyp-l"><span>Inflation des coûts unitaires <span class="mut">(méthode « coût unitaire × volume »)</span></span><input class="sel" style="width:46%" value="'+((M.inflation||0)*100)+'" onchange="mSet(\'inflation\',(numFR(this.value)||0)/100)"> %</div></div>';
   } else if(SOUS_MODELE==="fixe"){
     corps='<div class="card" style="padding:0"><div class="bande">Charges fixes (montant annuel)</div><div class="tscroll"><table class="tb etat"><tr><th>Poste</th><th class="num">Montant / an</th><th class="num">Croissance %/an</th><th>Personnel ?</th><th></th></tr>'
       +M.chargesFixes.map(function(c,i){return '<tr><td><input class="sel" value="'+esc(c.name)+'" onchange="mFixe('+i+',\'name\',this.value)"></td>'
@@ -7406,9 +7437,7 @@ function vueBPPl(P){
       Object.keys(CAD).forEach(c=>defs.push({lib:"Ventes — "+CAD[c].lib,st:"det",hist:0,proj:a=>CAD[c].vals[a]||0}));
     }
     if(det&&mm&&d.code==="COUTS_DIRECTS"){
-      /* modèle : déplier les coûts directs — par ligne de revenus, puis pilotés par inducteurs */
-      const CDD=P.pl.CD_DETAIL||{};
-      Object.keys(CDD).forEach(c=>{const nz=CDD[c].vals&&Object.values(CDD[c].vals).some(x=>Math.abs(x)>0.001);if(nz)defs.push({lib:"Coûts directs — "+CDD[c].lib,st:"det",hist:0,proj:a=>CDD[c].vals[a]||0});});
+      /* modèle : tous les coûts directs (unifiés dans coutsDirects) dépliés par ligne de coût */
       const CDI=P.pl.CDIND_DETAIL||{};
       Object.keys(CDI).forEach(c=>defs.push({lib:"Coûts directs — "+CDI[c].lib,st:"det",hist:0,proj:a=>CDI[c].vals[a]||0}));
     }
