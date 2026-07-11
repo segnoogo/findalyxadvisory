@@ -1881,6 +1881,10 @@ async function exporterExcelModele(){
     row("CAPSOC","Capital social",(i,X)=>`${rH}!${H.capital}`,NF);
     row("SUBVR","Subventions d'investissement",(i,X)=>`${rH}!${H.subv}`,NF);
     row("RANR","Report à nouveau & résultats antérieurs",(i,X)=>`${X}${rr("CP")}-${rH}!${H.capital}-${rH}!${H.subv}-${X}${rr("RN")}`,NF);
+    /* présentation actif net : dettes financières soustraites, actif net = capitaux propres (contrôle = 0) */
+    row("DETTEN","Dettes financières (−)",(i,X)=>`-${X}${rr("DETTE")}`,NF);
+    row("AN","Actif net",(i,X)=>`${X}${rr("IMN")}+${X}${rr("BFR")}+${X}${rr("TRES")}-${X}${rr("DETTE")}`,NF,true);
+    row("CTRL","Contrôle : actif net − capitaux propres",(i,X)=>`${X}${rr("AN")}-${X}${rr("CP")}`,NF);
     /* PASSE 1 : réserver tous les n° de ligne (toute réf croisée résout) ; PASSE 2 : écrire libellés + formules */
     CROWS.forEach((d,idx)=>{R[d[0]]=cr+1+idx;});
     CROWS.forEach(d=>{const rn=R[d[0]];wsC.getCell(rn,2).value=d[1];
@@ -1926,17 +1930,19 @@ async function exporterExcelModele(){
     /* ---- BILAN DÉTAILLÉ (présentation actif net) ---- */
     const bsDefs=[
       ["Actif immobilisé",null],
-      ["   Immobilisations brutes","BRUT"],["   Amortissements cumulés","AMCN"],["Immobilisations nettes","IMN",1],
+      ["   Immobilisations brutes","BRUT"],["   Amortissements cumulés","AMCN"],["Actifs immobilisés (nets)","IMN",1],
       ["Besoin en fonds de roulement",null],
-      ["   Stocks","STK"],["   Créances clients","CLI"],["   Dettes fournisseurs","FRNP"],["Besoin en fonds de roulement","BFR",1],
+      ["   Stocks","STK"],["   Créances clients","CLI"],["   Dettes fournisseurs","FRNP"],["Besoin en fonds de roulement global","BFR",1],
       ["Trésorerie",null],
-      ["   Trésorerie active","TRA"],["   Concours bancaires (découvert)","DECN"],["Trésorerie nette","TRES",1],
-      ["Dettes financières","DETTE"],
+      ["   Trésorerie active","TRA"],["   Concours bancaires courants (découvert)","DECN"],["Trésorerie nette","TRES",1],
+      ["Dettes financières","DETTEN"],
+      ["Actif net","AN",1],
       ["Capitaux propres",null],
       ["   Capital social","CAPSOC"],["   Subventions d'investissement","SUBVR"],
-      ["   Report à nouveau & résultats antérieurs","RANR"],["   Résultat net de l'exercice","RN"],["Capitaux propres","CP",1]];
-    feuille(nB,"Bilan prévisionnel détaillé (actif net) — "+u.lib,bsDefs,
-      "Immobilisations nettes + BFR + trésorerie nette − dettes financières = capitaux propres (bilan bouclé par la trésorerie).");
+      ["   Report à nouveau et résultats antérieurs","RANR"],["   Résultat net de l'exercice","RN"],["Capitaux propres","CP",1],
+      ["Contrôle : actif net − capitaux propres (= 0)","CTRL"]];
+    feuille(nB,"Bilan prévisionnel détaillé — présentation actif net — "+u.lib,bsDefs,
+      "Actifs immobilisés (nets) + BFR + trésorerie nette − dettes financières = Actif net = Capitaux propres. La trésorerie boucle le bilan ; la ligne de contrôle doit être nulle.");
     feuille(nT,"Tableau des flux de trésorerie — "+u.lib,[
       ["Trésorerie nette à l'ouverture","ZA"],["Capacité d'autofinancement (CAFG)","FA"],
       ["Variation des créances","VCR"],["Variation des stocks","VST"],["Variation des dettes d'exploitation","VFR"],
