@@ -398,8 +398,9 @@ function pillsScenarios(H){
 function tableBP(P,defs,titre){
   const A0=ETATS.annees,a1=A0[A0.length-1],AP=P.annees,v=ETATS.v;
   const mm=(typeof modeleMode==="function"&&modeleMode());   /* pas de colonne « historique » en mode modèle */
+  const nc=(mm&&P.financement&&P.financement.dureeConstruction)||0;   /* années de construction (badge dans l'en-tête) */
   const th=(mm?"":`<th class="num" style="opacity:.75">FY${String(a1).slice(-2)}</th>`)
-    +AP.map(a=>`<th class="num">FY${String(a).slice(-2)}p</th>`).join("");
+    +AP.map((a,i)=>`<th class="num">FY${String(a).slice(-2)}p${i<nc?'<div style="font-size:9px;font-weight:700;color:#b45608;letter-spacing:.02em">construction</div>':''}</th>`).join("");
   const lignes=defs.map(d=>{
     if(d.sec!==undefined) return `<tr class="sec"><td colspan="${AP.length+(mm?1:2)}">${d.sec}</td></tr>`;
     if(d.type==="pct"){

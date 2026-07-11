@@ -6383,6 +6383,8 @@ async function exporterExcelModele(){
     const u=uni(),UF=u.f,NF=u.dec?'#,##0.0;(#,##0.0);"-"':NUMFMT,PCT2="0.00%",PCT="0.0%";
     const mnt=x=>(x==null)?0:(u.dec?Math.round(x*UF*10)/10:Math.round(x*UF));   /* FCFA→unité, en valeur d'amorçage des cellules jaunes */
     const N=P.annees.length, fyp=P.annees.map(a=>"FY"+String(a).slice(-2)+"p");
+    const ncPh=(P.financement&&P.financement.dureeConstruction)||0;                          /* années de construction (en-têtes) */
+    const fypPh=P.annees.map((a,i)=>"FY"+String(a).slice(-2)+"p"+(i<ncPh?" (constr.)":""));  /* en-tête présentation : phase marquée */
     const CL=i=>String.fromCharCode(67+i);              /* colonne de l'année i (0-based) : C, D, … */
     const scn=(M.scenarios&&M.scenario&&M.scenarios[M.scenario])||{dCA:0,dMarge:0,dJours:0};
     const fCA=1+(+scn.dCA||0), fCout=1-(+scn.dMarge||0), fJours=1+(+scn.dJours||0);
@@ -6486,11 +6488,11 @@ async function exporterExcelModele(){
     row("FO","Flag exploitation",(i,X)=>`IF(${X}${rr("IDX")}>${rH}!${H.nc},1,0)`,"0");
     /* revenus par ligne */
     H.lignes.forEach((L,k)=>{
-      row("CAL"+k,"CA ligne "+(k+1),(i,X)=>{const oi=`MAX(1,${X}${rr("IDX")}-${rH}!${H.nc})`;return `${X}${rr("FO")}*INDEX(${rng(H.vol[k])},${oi})*INDEX(${rng(H.prix[k])},${oi})/1000`;},NF);
+      row("CAL"+k,"CA — "+(L.name||("Ligne "+(k+1))),(i,X)=>{const oi=`MAX(1,${X}${rr("IDX")}-${rH}!${H.nc})`;return `${X}${rr("FO")}*INDEX(${rng(H.vol[k])},${oi})*INDEX(${rng(H.prix[k])},${oi})/1000`;},NF);
     });
     row("CA","Chiffre d'affaires",(i,X)=>H.lignes.length?H.lignes.map((_,k)=>`${X}${rr("CAL"+k)}`).join("+"):"0",NF,true);
     H.lignes.forEach((L,k)=>{
-      row("CDL"+k,"Coûts directs ligne "+(k+1),(i,X)=>`-${X}${rr("CAL"+k)}*${rH}!${H.coutpct[k]}`,NF);
+      row("CDL"+k,"Coûts directs — "+(L.name||("Ligne "+(k+1))),(i,X)=>`-${X}${rr("CAL"+k)}*${rH}!${H.coutpct[k]}`,NF);
     });
     row("CD","Coûts directs",(i,X)=>H.lignes.length?H.lignes.map((_,k)=>`${X}${rr("CDL"+k)}`).join("+"):"0",NF);
     row("MB","Marge brute",(i,X)=>`${X}${rr("CA")}+${X}${rr("CD")}`,NF,true);
@@ -6579,7 +6581,7 @@ async function exporterExcelModele(){
     const feuille=(nom,sousTitre,defs,note)=>{
       const ws=wb.addWorksheet(nom);
       titreLiasse(ws,sousTitre);
-      styliserEntete(ws.addRow([null,u.lib,...fyp]),1);
+      styliserEntete(ws.addRow([null,u.lib,...fypPh]),1);
       defs.forEach(d=>{
         const r=ws.addRow([null,d[0]]);
         if(d[1]==null){r.getCell(2).font={bold:true,italic:true,color:{argb:"FF224289"}};return;}   /* en-tête de section */
@@ -7137,8 +7139,9 @@ function pillsScenarios(H){
 function tableBP(P,defs,titre){
   const A0=ETATS.annees,a1=A0[A0.length-1],AP=P.annees,v=ETATS.v;
   const mm=(typeof modeleMode==="function"&&modeleMode());   /* pas de colonne « historique » en mode modèle */
+  const nc=(mm&&P.financement&&P.financement.dureeConstruction)||0;   /* années de construction (badge dans l'en-tête) */
   const th=(mm?"":`<th class="num" style="opacity:.75">FY${String(a1).slice(-2)}</th>`)
-    +AP.map(a=>`<th class="num">FY${String(a).slice(-2)}p</th>`).join("");
+    +AP.map((a,i)=>`<th class="num">FY${String(a).slice(-2)}p${i<nc?'<div style="font-size:9px;font-weight:700;color:#b45608;letter-spacing:.02em">construction</div>':''}</th>`).join("");
   const lignes=defs.map(d=>{
     if(d.sec!==undefined) return `<tr class="sec"><td colspan="${AP.length+(mm?1:2)}">${d.sec}</td></tr>`;
     if(d.type==="pct"){
