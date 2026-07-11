@@ -1813,11 +1813,10 @@ async function exporterExcelModele(){
     });
     row("CD","Coûts directs",(i,X)=>H.lignes.length?H.lignes.map((_,k)=>`${X}${rr("CDL"+k)}`).join("+"):"0",NF);
     row("MB","Marge brute",(i,X)=>`${X}${rr("CA")}+${X}${rr("CD")}`,NF,true);
-    /* frais généraux & personnel DÉPLIÉS par poste (P&L détaillé) puis sous-totaux */
+    /* frais généraux : postes hors personnel dépliés + UNE ligne « Charges du personnel » (le personnel EST un poste des frais généraux, pas un sous-total séparé) */
     H.opex.forEach((o,k)=>row("OPL"+k,"Frais généraux — "+o.name,(i,X)=>`-${X}${rr("FO")}*INDEX(${rng(o.row)},MAX(1,${X}${rr("IDX")}-${rH}!${H.nc}))`,NF));
-    H.pers.forEach((o,k)=>row("PEL"+k,"Personnel — "+o.name,(i,X)=>`-${X}${rr("FO")}*INDEX(${rng(o.row)},MAX(1,${X}${rr("IDX")}-${rH}!${H.nc}))`,NF));
-    /* le PERSONNEL fait partie des frais généraux → un seul sous-total (pas de séparation) */
-    row("FGT","Frais généraux (dont personnel)",(i,X)=>{const t=[...H.opex.map((_,k)=>`${X}${rr("OPL"+k)}`),...H.pers.map((_,k)=>`${X}${rr("PEL"+k)}`)];return t.length?t.join("+"):"0";},NF);
+    row("PERS","Charges du personnel",(i,X)=>H.pers.length?H.pers.map(o=>`-${X}${rr("FO")}*INDEX(${rng(o.row)},MAX(1,${X}${rr("IDX")}-${rH}!${H.nc}))`).join("+"):"0",NF);
+    row("FGT","Frais généraux (dont personnel)",(i,X)=>{const t=[...H.opex.map((_,k)=>`${X}${rr("OPL"+k)}`),(H.pers.length?`${X}${rr("PERS")}`:null)].filter(Boolean);return t.length?t.join("+"):"0";},NF);
     row("EBITDA","EBITDA",(i,X)=>`${X}${rr("MB")}+${X}${rr("FGT")}`,NF,true);
     /* CAPEX & amortissements par poste */
     row("CAPEX","CAPEX de l'année",(i,X)=>(M.capex||[]).length?(M.capex||[]).map((_,k)=>`IF(${rH}!${H.capAn[k]}=${X}${rr("IDX")},${rH}!${H.capM[k]},0)`).join("+"):"0",NF);
@@ -1916,11 +1915,11 @@ async function exporterExcelModele(){
     H.lignes.forEach((L,k)=>plDefs.push(["   Coûts directs — "+(L.name||"Ligne "+(k+1)),"CDL"+k]));
     plDefs.push(["Coûts directs (total)","CD"]);
     plDefs.push(["Marge brute","MB",1]);
-    /* frais généraux = postes hors personnel + postes de personnel, un seul total (le personnel en fait partie) */
+    /* frais généraux = postes hors personnel dépliés + UNE ligne « Charges du personnel », un seul total */
     if(H.opex.length||H.pers.length){
       plDefs.push(["Frais généraux",null]);
       H.opex.forEach((o,k)=>plDefs.push(["   "+o.name,"OPL"+k]));
-      H.pers.forEach((o,k)=>plDefs.push(["   "+o.name,"PEL"+k]));
+      if(H.pers.length)plDefs.push(["   Charges du personnel","PERS"]);
       plDefs.push(["Total frais généraux","FGT"]);
     }
     plDefs.push(["EBITDA","EBITDA",1]);
