@@ -1729,22 +1729,33 @@ async function exporterExcelModele(){
     H.nc=one("Durée de construction (années)",Nc,"0");
     H.is=one("Taux d'IS",M.is_taux!=null?M.is_taux:0.30,PCT2);
     H.imf=one("Impôt minimum forfaitaire (% du CA)",M.imf_taux||0,PCT2);
+    H.tva=one("TVA (créances & dettes en TTC)",(M.tva!=null?+M.tva:0.18),PCT2);
     H.infl=one("Inflation des coûts unitaires",M.inflation||0.03,PCT2);
     H.dec=one("Taux du découvert (ligne court terme)",M.decouvert_taux||0.12,PCT2);
     sec("Revenus (volume × prix par ligne)");
-    H.vol=[];H.prix=[];H.coutpct=[];H.lignes=(M.revenus||[]);
+    H.vol=[];H.prix=[];H.coutpct=[];H.coutUnit=[];H.coutMethod=[];H.lignes=(M.revenus||[]);
     H.lignes.forEach((L,k)=>{
       /* série par année d'EXPLOITATION (an 1 = 1re année d'exploitation) ; les formules la décalent
          selon la durée de construction via INDEX(série, année − Nc) → la durée de construction reste VIVANTE. */
-      const volA=[],prixA=[]; for(let j=0;j<N;j++){volA.push(Math.round(volInducteurs(L.rows,j)*fCA*100)/100); prixA.push(valAnnee(L.prix,j)||0);}
+      const volA=[],prixA=[]; for(let j=0;j<N;j++){volA.push(volInducteurs(L.rows,j)*fCA); prixA.push(valAnnee(L.prix,j)||0);}   /* précision complète (affichage arrondi via numFmt) → formules = moteur au centime */
       wsH.getCell(++hr,2).value="Ligne "+(k+1)+" — "+(L.name||"Revenus")+" (séries par année d'exploitation)";wsH.getCell(hr,2).font={italic:true,color:{argb:"FF224289"}};
       H.vol[k]=ser("   Volume — an 1..an "+N,volA,"#,##0.##");
       H.prix[k]=ser("   Prix unitaire — an 1..an "+N+" (FCFA)",prixA,"#,##0.##");
-      const cm=(L.cout&&L.cout.m)||"pct";
-      /* coût direct ramené à un % du CA (les lignes en coût unitaire sont converties pour l'An 1) */
-      let cpct=(cm==="unit")?((prixA[0]? (((+((L.cout||{}).val)||0))/prixA[0])*fCout : 0)):((((+((L.cout||{}).val)||0))/100)*fCout);
-      H.coutpct[k]=one("   Coûts directs (% du CA)",cpct,PCT2);
+      const cm=(L.cout&&L.cout.m)||"pct"; H.coutMethod[k]=cm;
+      /* coût unitaire : modélisé FIDÈLEMENT (volume × coût unitaire, indexé inflation) ; sinon % du CA */
+      if(cm==="unit"){ H.coutUnit[k]=one("   Coût direct unitaire (FCFA / unité)",(+((L.cout||{}).val)||0)*fCout,"#,##0.##"); }
+      else { H.coutpct[k]=one("   Coûts directs (% du CA)",(((+((L.cout||{}).val)||0))/100)*fCout,PCT2); }
     });
+    /* coûts directs pilotés par inducteurs (indépendants des lignes de revenus) */
+    H.coutIndVol=[];H.coutIndTaux=[];H.coutInd=(M.coutsDirects||[]);
+    if(H.coutInd.length){ sec("Coûts directs pilotés par inducteurs (quantité × taux)");
+      H.coutInd.forEach((cl,k)=>{
+        const qA=[],txA=[]; for(let j=0;j<N;j++){qA.push(volInducteurs(cl.rows,j)); txA.push((valAnnee(cl.prix,j)||0)*fCout);}   /* précision complète */
+        wsH.getCell(++hr,2).value="Coût "+(k+1)+" — "+(cl.name||"Coût")+" (séries par année d'exploitation)";wsH.getCell(hr,2).font={italic:true,color:{argb:"FF224289"}};
+        H.coutIndVol[k]=ser("   Quantité — an 1..an "+N,qA,"#,##0.##");
+        H.coutIndTaux[k]=ser("   Taux unitaire — an 1..an "+N+" (FCFA)",txA,"#,##0.##");
+      });
+    }
     sec("Charges fixes annuelles");
     H.opex=[];H.pers=[];
     (M.chargesFixes||[]).forEach(c=>{
@@ -1771,7 +1782,7 @@ async function exporterExcelModele(){
     const b=M.bfr||{};
     H.dso=one("Délai clients (DSO)",Math.round((b.dso||0)*fJours),"0");
     H.dio=one("Rotation des stocks (DIO)",Math.round((b.dio||0)*fJours),"0");
-    H.dpo=one("Délai fournisseurs (DPO)",Math.round(b.dpo||0),"0");
+    H.dpo=one("Délai fournisseurs (DPO)",Math.round((b.dpo||0)*fJours),"0");
     sec("Coût du capital & valorisation");
     const V=M.valo||{};
     H.rf=one("Taux sans risque (rf)",V.rf||0.06,PCT2);
@@ -1809,9 +1820,18 @@ async function exporterExcelModele(){
     });
     row("CA","Chiffre d'affaires",(i,X)=>H.lignes.length?H.lignes.map((_,k)=>`${X}${rr("CAL"+k)}`).join("+"):"0",NF,true);
     H.lignes.forEach((L,k)=>{
-      row("CDL"+k,"Coûts directs — "+(L.name||("Ligne "+(k+1))),(i,X)=>`-${X}${rr("CAL"+k)}*${rH}!${H.coutpct[k]}`,NF);
+      if(H.coutMethod[k]==="unit"){
+        /* coût unitaire FIDÈLE : volume × coût unitaire × (1+inflation)^(année d'exploit − 1) */
+        row("CDL"+k,"Coûts directs — "+(L.name||("Ligne "+(k+1))),(i,X)=>{const oi=`MAX(1,${X}${rr("IDX")}-${rH}!${H.nc})`;return `-${X}${rr("FO")}*INDEX(${rng(H.vol[k])},${oi})*${rH}!${H.coutUnit[k]}*(1+${rH}!${H.infl})^(${oi}-1)/1000`;},NF);
+      } else {
+        row("CDL"+k,"Coûts directs — "+(L.name||("Ligne "+(k+1))),(i,X)=>`-${X}${rr("CAL"+k)}*${rH}!${H.coutpct[k]}`,NF);
+      }
     });
-    row("CD","Coûts directs",(i,X)=>H.lignes.length?H.lignes.map((_,k)=>`${X}${rr("CDL"+k)}`).join("+"):"0",NF);
+    /* coûts directs pilotés par inducteurs : quantité × taux (indépendants des revenus) */
+    (H.coutInd||[]).forEach((cl,k)=>{
+      row("CDI"+k,"Coûts directs — "+(cl.name||("Coût "+(k+1))),(i,X)=>{const oi=`MAX(1,${X}${rr("IDX")}-${rH}!${H.nc})`;return `-${X}${rr("FO")}*INDEX(${rng(H.coutIndVol[k])},${oi})*INDEX(${rng(H.coutIndTaux[k])},${oi})/1000`;},NF);
+    });
+    row("CD","Coûts directs",(i,X)=>{const t=[...H.lignes.map((_,k)=>`${X}${rr("CDL"+k)}`),...(H.coutInd||[]).map((_,k)=>`${X}${rr("CDI"+k)}`)];return t.length?t.join("+"):"0";},NF);
     row("MB","Marge brute",(i,X)=>`${X}${rr("CA")}+${X}${rr("CD")}`,NF,true);
     /* frais généraux : postes hors personnel dépliés + UNE ligne « Charges du personnel » (le personnel EST un poste des frais généraux, pas un sous-total séparé) */
     H.opex.forEach((o,k)=>row("OPL"+k,"Frais généraux — "+o.name,(i,X)=>`-${X}${rr("FO")}*INDEX(${rng(o.row)},MAX(1,${X}${rr("IDX")}-${rH}!${H.nc}))`,NF));
@@ -1848,9 +1868,10 @@ async function exporterExcelModele(){
     row("IS","Impôt sur les sociétés",(i,X)=>`-MAX(${rH}!${H.is}*(MAX(0,${X}${rr("EBT")})-${X}${rr("USE")}),${rH}!${H.imf}*${X}${rr("CA")})`,NF);
     row("RN","Résultat net",(i,X)=>`${X}${rr("EBT")}+${X}${rr("IS")}`,NF,true);
     /* BFR */
-    row("CLI","Créances clients",(i,X)=>`${X}${rr("FO")}*${X}${rr("CA")}*1.18*${rH}!${H.dso}/360`,NF);
+    row("CLI","Créances clients",(i,X)=>`${X}${rr("FO")}*${X}${rr("CA")}*(1+${rH}!${H.tva})*${rH}!${H.dso}/360`,NF);
     row("STK","Stocks",(i,X)=>`${X}${rr("FO")}*(-${X}${rr("CD")})*${rH}!${H.dio}/360`,NF);
-    row("FRN","Dettes fournisseurs",(i,X)=>`-${X}${rr("FO")}*(-${X}${rr("CD")}-${X}${rr("FGT")})*1.18*${rH}!${H.dpo}/360`,NF);
+    /* fournisseurs : coûts directs + frais généraux HORS personnel (salaires = dettes sociales, sans TVA) → base = -CD -(FGT-PERS) = -CD -FGT +PERS */
+    row("FRN","Dettes fournisseurs",(i,X)=>`-${X}${rr("FO")}*(-${X}${rr("CD")}-${X}${rr("FGT")}+${X}${rr("PERS")})*(1+${rH}!${H.tva})*${rH}!${H.dpo}/360`,NF);
     row("BFR","Besoin en fonds de roulement",(i,X)=>`${X}${rr("CLI")}+${X}${rr("STK")}+${X}${rr("FRN")}`,NF,true);
     /* capitaux propres, trésorerie de bouclage */
     row("CP","Capitaux propres",(i,X)=>`${pRef("CP",i)}+${X}${rr("RN")}+IF(${X}${rr("IDX")}=1,${rH}!${H.capital}+${rH}!${H.subv},0)`,NF,true);
@@ -1912,7 +1933,8 @@ async function exporterExcelModele(){
     const plDefs=[["Produits d'exploitation",null]];
     H.lignes.forEach((L,k)=>plDefs.push(["   Ventes — "+(L.name||"Ligne "+(k+1)),"CAL"+k]));
     plDefs.push(["Chiffre d'affaires","CA",1]);
-    H.lignes.forEach((L,k)=>plDefs.push(["   Coûts directs — "+(L.name||"Ligne "+(k+1)),"CDL"+k]));
+    H.lignes.forEach((L,k)=>{if((+((L.cout||{}).val)||0)!==0)plDefs.push(["   Coûts directs — "+(L.name||"Ligne "+(k+1)),"CDL"+k]);});
+    (H.coutInd||[]).forEach((cl,k)=>plDefs.push(["   Coûts directs — "+(cl.name||"Coût "+(k+1)),"CDI"+k]));
     plDefs.push(["Coûts directs (total)","CD"]);
     plDefs.push(["Marge brute","MB",1]);
     /* frais généraux = postes hors personnel dépliés + UNE ligne « Charges du personnel », un seul total */

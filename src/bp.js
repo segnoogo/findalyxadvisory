@@ -305,8 +305,10 @@ function projeterModele(M,scenario){
   ["CA","COUTS_DIRECTS","MARGE_BRUTE","AUTRES_PROD","OPEX_TOTAL","CHARGES_PERSONNEL","EBITDA","DA","EBIT","PRODUITS_FIN","FRAIS_FIN","RESULTAT_FIN","EBT","IS","RN"].forEach(function(c){P.pl[c]={};});
   P.pl.OPEX_DETAIL={};P.pl.PERS_DETAIL={};   /* frais généraux dépliés : hors personnel (OPEX_DETAIL) + personnel (PERS_DETAIL) — le personnel FAIT PARTIE des frais généraux */
   P.pl.CA_DETAIL={};P.pl.CD_DETAIL={};   /* détail par ligne de revenus : ventes & coûts directs (vue détaillée) */
+  P.pl.CDIND_DETAIL={};   /* coûts directs pilotés par inducteurs (indépendants des lignes de revenus : ex. vacataires = classes × heures × taux horaire) */
   ["IMMO_BRUT","AMORT_CUM","IMMO_NET","STOCKS","CLIENTS","AUTRES_CREANCES","FOURNISSEURS","DETTES_FISC_SOC","AUTRES_DETTES","BFR","CP","DETTE","PROVISIONS","TRESO","LIGNE_CT","TRESO_ACTIVE"].forEach(function(c){P.bs[c]={};});
   var infl=M.inflation||0.03, bfrH=M.bfr||{dso:30,dio:45,dpo:30};
+  var tva=(M.tva!=null?+M.tva:0.18);   /* TVA paramétrable : créances TTC & dettes fournisseurs TTC (plus de 1,18 en dur) */
   var isTx=(M.is_taux!=null?M.is_taux:0.30);
   /* Les montants du modèle sont SAISIS EN FCFA (prix unitaires, charges, CAPEX, financement).
      La base interne de l'app est le KFCFA (uni().f : F=1000, K=1, M=1/1000, fmt = valeur×f).
@@ -328,6 +330,7 @@ function projeterModele(M,scenario){
   /* coûts de la 1ʳᵉ année d'exploitation → BFR de démarrage (mode auto) */
   var coutsD1=0, charges1=0;
   (M.revenus||[]).forEach(function(L){ var vol=volInducteurs(L.rows,0)*fCA, prix=valAnnee(L.prix,0), caL=vol*prix/SC; var cm=(L.cout&&L.cout.m)||"pct", cv=+((L.cout||{}).val)||0; coutsD1+=((cm==="unit")?vol*cv/SC:caL*cv/100)*fCout; });
+  (M.coutsDirects||[]).forEach(function(cl){ coutsD1+=volInducteurs(cl.rows,0)*valAnnee(cl.prix,0)/SC*fCout; });
   (M.chargesFixes||[]).forEach(function(c){ charges1+=valAnnee({val:(c.montant!=null?c.montant:c.val),g:c.g,mode:c.mode,vals:c.vals},0)/SC; });
   var bfrDem=(moisBFR/12)*(coutsD1+charges1);
   /* montage initial = CAPEX jusqu'à la mise en service (incluse) + BFR de démarrage ; subvention en déduction */
@@ -362,6 +365,14 @@ function projeterModele(M,scenario){
       if(!P.pl.CD_DETAIL[codeL])P.pl.CD_DETAIL[codeL]={lib:libL,vals:{}};
       P.pl.CA_DETAIL[codeL].vals[a]=caL;
       P.pl.CD_DETAIL[codeL].vals[a]=-cdL;   /* coût en négatif, comme le total COUTS_DIRECTS */
+    }); }
+    /* --- coûts directs pilotés par inducteurs (chaîne × taux, indépendants des revenus : ex. vacataires) --- */
+    if(isOp){ (M.coutsDirects||[]).forEach(function(cl,ci){
+      var q=volInducteurs(cl.rows,oi), pr=valAnnee(cl.prix,oi), montant=q*pr/SC*fCout;
+      coutsD += montant;
+      var cc="CDI"+ci, libc=(cl.name||("Coût "+(ci+1)));
+      if(!P.pl.CDIND_DETAIL[cc])P.pl.CDIND_DETAIL[cc]={lib:libc,vals:{}};
+      P.pl.CDIND_DETAIL[cc].vals[a]=-montant;
     }); }
     var cd=-coutsD;
     var autresProd=isOp?valAnnee(M.autresProd,oi)/SC:0;
@@ -404,9 +415,12 @@ function projeterModele(M,scenario){
     deficits.forEach(function(d){d.resteAns--;}); deficits=deficits.filter(function(d){return d.resteAns>0;});
     if(ebt<0)deficits.push({montant:-ebt,resteAns:horizonDef});
     /* --- BFR (uniquement en exploitation) --- */
-    var clients=isOp?ca*1.18*((bfrH.dso||0)*fJours)/360:0;
+    /* clients & fournisseurs en TTC (TVA paramétrable) ; stocks HT ; le PERSONNEL (salaires, sans TVA)
+       relève des dettes sociales, pas des dettes fournisseurs → hors base fournisseurs. fJours (scénario
+       délais) appliqué symétriquement au DSO / DIO / DPO. */
+    var clients=isOp?ca*(1+tva)*((bfrH.dso||0)*fJours)/360:0;
     var stocks=isOp?Math.abs(cd)*((bfrH.dio||0)*fJours)/360:0;
-    var fournisseurs=isOp?-(Math.abs(cd)+Math.abs(opexTot)+Math.abs(persTot))*1.18*(bfrH.dpo||0)/360:0;
+    var fournisseurs=isOp?-(Math.abs(cd)+Math.abs(opexTot))*(1+tva)*((bfrH.dpo||0)*fJours)/360:0;
     var bfr=clients+stocks+fournisseurs;
     /* --- CP & trésorerie de bouclage --- */
     var div=0; cp=cp+rn-div;
