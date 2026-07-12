@@ -374,6 +374,7 @@ function vueModele(){
       +'<div class="hyp-l"><span>Délai fournisseurs (DPO)</span><input class="sel" style="width:46%" value="'+(b.dpo||0)+'" onchange="mSet(\'bfr.dpo\',this.value,1)"> j</div></div>';
   } else if(SOUS_MODELE==="param"){
     corps='<div class="card"><div class="sec-titre" style="margin-top:0">Paramètres du modèle</div>'
+      +'<div class="hyp-l"><span>Nom de la société</span><input class="sel" style="width:46%" value="'+esc(DOSSIER.societe||"")+'" onchange="mRenommer(this.value)"></div>'
       +'<div class="hyp-l"><span>Année de départ</span><input class="sel" style="width:46%" value="'+(M.anneeDepart||2025)+'" onchange="mSet(\'anneeDepart\',this.value,1)"></div>'
       +'<div class="hyp-l"><span>Horizon (années)</span><input class="sel" style="width:46%" value="'+(M.nb||5)+'" onchange="mSet(\'nb\',this.value,1)"></div>'
       +'<div class="hyp-l"><span>Durée de construction (années)</span><input class="sel" style="width:46%" value="'+(M.dureeConstruction||0)+'" onchange="mSet(\'dureeConstruction\',this.value,1)"> <span class="mut">0 = exploitation dès l\'année 1</span></div>'

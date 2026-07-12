@@ -5084,6 +5084,7 @@ function vueAccueil(){
     <div class="card doss">
       <div><b>${esc(d.societe)}</b><div class="mut">${d.sansHistorique?"Business plan — sans balance":(d.balances.length+" balance(s)"+(d.balances.length?" — FY"+Math.min(...d.balances.map(b=>b.annee))+" à FY"+Math.max(...d.balances.map(b=>b.annee)):""))}</div></div>
       <div><button class="btn primary sm" onclick="ouvrirDossier('${d.id}')">Ouvrir</button>
+      <button class="btn sm" onclick="renommerDossier('${d.id}')">Renommer</button>
       <button class="btn sm" onclick="supprimerDossier('${d.id}')">Supprimer</button></div>
     </div>`).join("");
   let synth="";
@@ -5177,6 +5178,19 @@ function supprimerDossier(id){
   if(DOSSIER&&DOSSIER.id===id){DOSSIER=null;ETATS=null;localStorage.removeItem(ACTIF_KEY);}
   shell();
 }
+/* renommer la société : dossier actif → via DOSSIER + sauverDossier ; sinon met à jour la liste persistée */
+function renommerDossier(id){
+  const actif=(DOSSIER&&DOSSIER.id===id);
+  const l=chargerDossiers(), d=l.find(x=>x.id===id);
+  if(!actif && !d)return;
+  const n=prompt("Nouveau nom de la société :",(actif?DOSSIER.societe:d.societe)||"");
+  if(n==null)return;
+  const nom=n.trim(); if(!nom){toast("Nom vide : renommage annulé");return;}
+  if(actif){ DOSSIER.societe=nom; sauverDossier(); }
+  else { d.societe=nom; sauverDossiers(l); }
+  rendre();
+}
+function mRenommer(val){ if(!DOSSIER)return; const n=(val||"").trim(); if(!n){toast("Nom vide ignoré");rendre();return;} DOSSIER.societe=n; sauverDossier(); rendre(); }
 
 /* ---------- assistant nouveau dossier (wizard) ---------- */
 var WIZ=null;
@@ -7165,6 +7179,7 @@ function vueModele(){
       +'<div class="hyp-l"><span>Délai fournisseurs (DPO)</span><input class="sel" style="width:46%" value="'+(b.dpo||0)+'" onchange="mSet(\'bfr.dpo\',this.value,1)"> j</div></div>';
   } else if(SOUS_MODELE==="param"){
     corps='<div class="card"><div class="sec-titre" style="margin-top:0">Paramètres du modèle</div>'
+      +'<div class="hyp-l"><span>Nom de la société</span><input class="sel" style="width:46%" value="'+esc(DOSSIER.societe||"")+'" onchange="mRenommer(this.value)"></div>'
       +'<div class="hyp-l"><span>Année de départ</span><input class="sel" style="width:46%" value="'+(M.anneeDepart||2025)+'" onchange="mSet(\'anneeDepart\',this.value,1)"></div>'
       +'<div class="hyp-l"><span>Horizon (années)</span><input class="sel" style="width:46%" value="'+(M.nb||5)+'" onchange="mSet(\'nb\',this.value,1)"></div>'
       +'<div class="hyp-l"><span>Durée de construction (années)</span><input class="sel" style="width:46%" value="'+(M.dureeConstruction||0)+'" onchange="mSet(\'dureeConstruction\',this.value,1)"> <span class="mut">0 = exploitation dès l\'année 1</span></div>'

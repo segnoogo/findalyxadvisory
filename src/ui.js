@@ -379,6 +379,7 @@ function vueAccueil(){
     <div class="card doss">
       <div><b>${esc(d.societe)}</b><div class="mut">${d.sansHistorique?"Business plan — sans balance":(d.balances.length+" balance(s)"+(d.balances.length?" — FY"+Math.min(...d.balances.map(b=>b.annee))+" à FY"+Math.max(...d.balances.map(b=>b.annee)):""))}</div></div>
       <div><button class="btn primary sm" onclick="ouvrirDossier('${d.id}')">Ouvrir</button>
+      <button class="btn sm" onclick="renommerDossier('${d.id}')">Renommer</button>
       <button class="btn sm" onclick="supprimerDossier('${d.id}')">Supprimer</button></div>
     </div>`).join("");
   let synth="";
@@ -472,6 +473,19 @@ function supprimerDossier(id){
   if(DOSSIER&&DOSSIER.id===id){DOSSIER=null;ETATS=null;localStorage.removeItem(ACTIF_KEY);}
   shell();
 }
+/* renommer la société : dossier actif → via DOSSIER + sauverDossier ; sinon met à jour la liste persistée */
+function renommerDossier(id){
+  const actif=(DOSSIER&&DOSSIER.id===id);
+  const l=chargerDossiers(), d=l.find(x=>x.id===id);
+  if(!actif && !d)return;
+  const n=prompt("Nouveau nom de la société :",(actif?DOSSIER.societe:d.societe)||"");
+  if(n==null)return;
+  const nom=n.trim(); if(!nom){toast("Nom vide : renommage annulé");return;}
+  if(actif){ DOSSIER.societe=nom; sauverDossier(); }
+  else { d.societe=nom; sauverDossiers(l); }
+  rendre();
+}
+function mRenommer(val){ if(!DOSSIER)return; const n=(val||"").trim(); if(!n){toast("Nom vide ignoré");rendre();return;} DOSSIER.societe=n; sauverDossier(); rendre(); }
 
 /* ---------- assistant nouveau dossier (wizard) ---------- */
 var WIZ=null;
