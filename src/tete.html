@@ -315,6 +315,13 @@ display:flex;align-items:center;gap:10px;padding:11px 14px;font-size:11.2px;curs
 .hyp-l{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid #f0f2f5;font-size:11.2px}
 .hyp-l>span:first-child{flex:1}
 .hyp-l:last-child{border-bottom:none}
+/* rangée de saisie ALIGNÉE : libellé | cage (largeur fixe) | suffixe (largeur fixe) → toutes les cages en colonne */
+.hyp-g{display:grid;grid-template-columns:1fr 150px 132px;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid #f0f2f5;font-size:11.2px}
+.hyp-g:last-child{border-bottom:none}
+.hyp-g>label,.hyp-g>span:first-child{align-self:center}
+.hyp-g input{width:100%;margin:0}
+.hyp-g .suf{color:var(--muted)}
+.hyp-g .suf .mut{font-size:10px}
 .ctl-h{display:flex;align-items:center;gap:6px;flex:none}
 .serie{display:flex;gap:6px;align-items:flex-end;flex-wrap:wrap;justify-content:flex-end;row-gap:8px;max-width:75%}
 .serie .an{display:flex;flex-direction:column;align-items:center;gap:2px}
@@ -352,6 +359,7 @@ display:flex;align-items:center;gap:10px;padding:11px 14px;font-size:11.2px;curs
   .nin{width:54px}.nin.large{width:66px}
   .serie{max-width:100%;justify-content:flex-start}
   .hyp-l{flex-wrap:wrap}
+  .hyp-g{grid-template-columns:1fr 96px auto;gap:6px}
   h1{font-size:17.1px}
 }
 @media(max-width:560px){

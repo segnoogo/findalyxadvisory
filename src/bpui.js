@@ -329,7 +329,7 @@ function vueModele(){
     corps='<div class="mut" style="margin-bottom:10px">Tous les coûts directs se paramètrent ici. Pour chaque coût, choisis sa <b>méthode</b> et son <b>périmètre</b> : <b>% du CA</b> (d\'une ligne de produit ou de l\'ensemble), <b>coût unitaire × volume</b> d\'une ligne, ou <b>inducteurs</b> (indépendant du CA — ex. école : <i>Vacataires</i> = Nb classes × Heures/classe/an × 20 000 F/h).</div>'
       +(CDL.length?CDL.map(function(cl,ci){return mCarteCout(cl,ci);}).join(""):'<div class="mut" style="margin-bottom:8px">Aucun coût direct pour l\'instant.</div>')
       +'<button class="btn" onclick="mAddCout()">+ Ajouter un coût direct</button>'
-      +'<div class="card" style="margin-top:14px"><div class="hyp-l"><span>Inflation des coûts unitaires <span class="mut">(méthode « coût unitaire × volume »)</span></span><input class="sel" style="width:46%" value="'+((M.inflation||0)*100)+'" onchange="mSet(\'inflation\',(numFR(this.value)||0)/100)"> %</div></div>';
+      +'<div class="card" style="margin-top:14px"><div class="hyp-g"><span>Inflation des coûts unitaires <span class="mut">(méthode « coût unitaire × volume »)</span></span><input class="sel" value="'+((M.inflation||0)*100)+'" onchange="mSet(\'inflation\',(numFR(this.value)||0)/100)"><span class="suf">%</span></div></div>';
   } else if(SOUS_MODELE==="fixe"){
     var pers=(M.personnel||[]), persTot1=pers.reduce(function(s,p){return s+(+p.effectif||0)*(+p.salaireMensuel||0)*12;},0);
     corps='<div class="card" style="padding:0"><div class="bande">Frais généraux (hors personnel)</div><div class="tscroll"><table class="tb etat"><tr><th>Poste</th><th class="num">Montant / an</th><th class="num">Croissance %/an</th><th></th></tr>'
@@ -362,9 +362,9 @@ function vueModele(){
     var modeSeg='<div class="hyp-l"><span>Mode de financement</span><span class="segvue">'
       +'<button class="'+(auto?"on":"")+'" onclick="mSet(\'financement.mode\',\'auto\')">Automatique</button>'
       +'<button class="'+(auto?"":"on")+'" onclick="mSet(\'financement.mode\',\'manuel\')">Manuel</button></span></div>';
-    var consLigne='<div class="hyp-l"><span>Durée de construction</span><input class="sel" style="width:46%" value="'+(M.dureeConstruction||0)+'" onchange="mSet(\'dureeConstruction\',this.value,1)"> ans <span class="mut">— 0 = exploitation dès l\'année 1</span></div>';
-    var empBloc='<div class="hyp-l"><span>Emprunt — taux d\'intérêt</span><input class="sel" style="width:46%" value="'+((e.taux||0)*100)+'" onchange="mSet(\'financement.emprunt.taux\',(numFR(this.value)||0)/100)"> %</div>'
-      +'<div class="hyp-l"><span>Emprunt — durée de remboursement</span><input class="sel" style="width:46%" value="'+(e.duree||5)+'" onchange="mSet(\'financement.emprunt.duree\',this.value,1)"> ans</div>';
+    var consLigne='<div class="hyp-g"><span>Durée de construction <span class="mut">· 0 = dès l\'an 1</span></span><input class="sel" value="'+(M.dureeConstruction||0)+'" onchange="mSet(\'dureeConstruction\',this.value,1)"><span class="suf">ans</span></div>';
+    var empBloc='<div class="hyp-g"><span>Emprunt — taux d\'intérêt</span><input class="sel" value="'+((e.taux||0)*100)+'" onchange="mSet(\'financement.emprunt.taux\',(numFR(this.value)||0)/100)"><span class="suf">%</span></div>'
+      +'<div class="hyp-g"><span>Emprunt — durée de remboursement</span><input class="sel" value="'+(e.duree||5)+'" onchange="mSet(\'financement.emprunt.duree\',this.value,1)"><span class="suf">ans</span></div>';
     var su='<div class="card" style="background:#f6f8fc;margin-top:12px"><div class="sec-titre" style="margin-top:0">Sources & Emplois du montage</div>'
       +'<div class="mut" style="margin:-4px 0 10px">'+(Pf.dureeConstruction>0?('Construction sur '+Pf.dureeConstruction+' an(s) ; exploitation à partir de l\'année '+Pf.anneeExploit+'. Intérêts de construction (IDC) capitalisés dans la dette.'):'Pas de période de construction : investissement et exploitation dès l\'année 1.')+'</div>'
       +'<div class="row" style="gap:24px;flex-wrap:wrap;align-items:flex-start">'
@@ -381,35 +381,35 @@ function vueModele(){
       +'</div></div>';
     if(auto){
       corps='<div class="card"><div class="sec-titre" style="margin-top:0">Financement — automatique</div>'+modeSeg+consLigne
-        +'<div class="hyp-l"><span>Part de fonds propres (gearing cible)</span><input class="sel" style="width:46%" value="'+(Math.round((f.partFP!=null?f.partFP:0.30)*1000)/10)+'" onchange="mSet(\'financement.partFP\',(numFR(this.value)||0)/100)"> %</div>'
-        +'<div class="hyp-l"><span>BFR de démarrage</span><input class="sel" style="width:46%" value="'+(f.moisBFR!=null?f.moisBFR:3)+'" onchange="mSet(\'financement.moisBFR\',this.value,1)"> mois de charges</div>'
-        +'<div class="hyp-l"><span>Subvention (optionnel)</span><input class="sel ninm" style="width:46%" value="'+mAmt(f.subvention||0)+'" oninput="mSep(this)" onchange="mSet(\'financement.subvention\',this.value,1)"></div>'
+        +'<div class="hyp-g"><span>Part de fonds propres (gearing cible)</span><input class="sel" value="'+(Math.round((f.partFP!=null?f.partFP:0.30)*1000)/10)+'" onchange="mSet(\'financement.partFP\',(numFR(this.value)||0)/100)"><span class="suf">%</span></div>'
+        +'<div class="hyp-g"><span>BFR de démarrage</span><input class="sel" value="'+(f.moisBFR!=null?f.moisBFR:3)+'" onchange="mSet(\'financement.moisBFR\',this.value,1)"><span class="suf">mois de charges</span></div>'
+        +'<div class="hyp-g"><span>Subvention (optionnel)</span><input class="sel ninm" value="'+mAmt(f.subvention||0)+'" oninput="mSep(this)" onchange="mSet(\'financement.subvention\',this.value,1)"><span class="suf"></span></div>'
         +empBloc+su
         +'<div class="mut" style="margin-top:8px">Le besoin (investissements + BFR de démarrage + IDC) est réparti fonds propres / dette selon la part choisie ; amortissement et remboursement démarrent à la mise en service.</div></div>';
     } else {
       corps='<div class="card"><div class="sec-titre" style="margin-top:0">Financement — manuel</div>'+modeSeg+consLigne
-        +'<div class="hyp-l"><span>Capital social</span><input class="sel ninm" style="width:46%" value="'+mAmt(f.capital||0)+'" oninput="mSep(this)" onchange="mSet(\'financement.capital\',this.value,1)"></div>'
-        +'<div class="hyp-l"><span>Apports en compte courant</span><input class="sel ninm" style="width:46%" value="'+mAmt(f.apports||0)+'" oninput="mSep(this)" onchange="mSet(\'financement.apports\',this.value,1)"></div>'
-        +'<div class="hyp-l"><span>Subvention</span><input class="sel ninm" style="width:46%" value="'+mAmt(f.subvention||0)+'" oninput="mSep(this)" onchange="mSet(\'financement.subvention\',this.value,1)"></div>'
-        +'<div class="hyp-l"><span>Emprunt — montant</span><input class="sel ninm" style="width:46%" value="'+mAmt(e.montant||0)+'" oninput="mSep(this)" onchange="mSet(\'financement.emprunt.montant\',this.value,1)"></div>'
+        +'<div class="hyp-g"><span>Capital social</span><input class="sel ninm" value="'+mAmt(f.capital||0)+'" oninput="mSep(this)" onchange="mSet(\'financement.capital\',this.value,1)"><span class="suf"></span></div>'
+        +'<div class="hyp-g"><span>Apports en compte courant</span><input class="sel ninm" value="'+mAmt(f.apports||0)+'" oninput="mSep(this)" onchange="mSet(\'financement.apports\',this.value,1)"><span class="suf"></span></div>'
+        +'<div class="hyp-g"><span>Subvention</span><input class="sel ninm" value="'+mAmt(f.subvention||0)+'" oninput="mSep(this)" onchange="mSet(\'financement.subvention\',this.value,1)"><span class="suf"></span></div>'
+        +'<div class="hyp-g"><span>Emprunt — montant</span><input class="sel ninm" value="'+mAmt(e.montant||0)+'" oninput="mSep(this)" onchange="mSet(\'financement.emprunt.montant\',this.value,1)"><span class="suf"></span></div>'
         +empBloc+su
         +'<div class="mut" style="margin-top:8px">Le financement est tiré en année 1 ; en cas de construction, les intérêts courent et sont capitalisés dans la dette (IDC). Aucun bilan d\'ouverture.</div></div>';
     }
   } else if(SOUS_MODELE==="bfr"){
     var b=M.bfr;
     corps='<div class="card"><div class="sec-titre" style="margin-top:0">Besoin en fonds de roulement (en jours)</div>'
-      +'<div class="hyp-l"><span>Délai clients (DSO)</span><input class="sel" style="width:46%" value="'+(b.dso||0)+'" onchange="mSet(\'bfr.dso\',this.value,1)"> j</div>'
-      +'<div class="hyp-l"><span>Rotation stocks (DIO)</span><input class="sel" style="width:46%" value="'+(b.dio||0)+'" onchange="mSet(\'bfr.dio\',this.value,1)"> j</div>'
-      +'<div class="hyp-l"><span>Délai fournisseurs (DPO)</span><input class="sel" style="width:46%" value="'+(b.dpo||0)+'" onchange="mSet(\'bfr.dpo\',this.value,1)"> j</div></div>';
+      +'<div class="hyp-g"><span>Délai clients (DSO)</span><input class="sel" value="'+(b.dso||0)+'" onchange="mSet(\'bfr.dso\',this.value,1)"><span class="suf">jours</span></div>'
+      +'<div class="hyp-g"><span>Rotation stocks (DIO)</span><input class="sel" value="'+(b.dio||0)+'" onchange="mSet(\'bfr.dio\',this.value,1)"><span class="suf">jours</span></div>'
+      +'<div class="hyp-g"><span>Délai fournisseurs (DPO)</span><input class="sel" value="'+(b.dpo||0)+'" onchange="mSet(\'bfr.dpo\',this.value,1)"><span class="suf">jours</span></div></div>';
   } else if(SOUS_MODELE==="param"){
     corps='<div class="card"><div class="sec-titre" style="margin-top:0">Paramètres du modèle</div>'
-      +'<div class="hyp-l"><span>Nom de la société</span><input class="sel" style="width:46%" value="'+esc(DOSSIER.societe||"")+'" onchange="mRenommer(this.value)"></div>'
-      +'<div class="hyp-l"><span>Année de départ</span><input class="sel" style="width:46%" value="'+(M.anneeDepart||2025)+'" onchange="mSet(\'anneeDepart\',this.value,1)"></div>'
-      +'<div class="hyp-l"><span>Horizon (années)</span><input class="sel" style="width:46%" value="'+(M.nb||5)+'" onchange="mSet(\'nb\',this.value,1)"></div>'
-      +'<div class="hyp-l"><span>Durée de construction (années)</span><input class="sel" style="width:46%" value="'+(M.dureeConstruction||0)+'" onchange="mSet(\'dureeConstruction\',this.value,1)"> <span class="mut">0 = exploitation dès l\'année 1</span></div>'
-      +'<div class="hyp-l"><span>TVA</span><input class="sel" style="width:46%" value="'+((M.tva||0)*100)+'" onchange="mSet(\'tva\',(numFR(this.value)||0)/100)"> %</div>'
-      +'<div class="hyp-l"><span>Impôt sur les sociétés</span><input class="sel" style="width:46%" value="'+((M.is_taux||0)*100)+'" onchange="mSet(\'is_taux\',(numFR(this.value)||0)/100)"> %</div>'
-      +'<div class="hyp-l"><span>Impôt minimum forfaitaire (% du CA)</span><input class="sel" style="width:46%" value="'+((M.imf_taux||0)*100)+'" onchange="mSet(\'imf_taux\',(numFR(this.value)||0)/100)"> %</div></div>';
+      +'<div class="hyp-g"><span>Nom de la société</span><input class="sel" value="'+esc(DOSSIER.societe||"")+'" onchange="mRenommer(this.value)"><span class="suf"></span></div>'
+      +'<div class="hyp-g"><span>Année de départ</span><input class="sel" value="'+(M.anneeDepart||2025)+'" onchange="mSet(\'anneeDepart\',this.value,1)"><span class="suf"></span></div>'
+      +'<div class="hyp-g"><span>Horizon</span><input class="sel" value="'+(M.nb||5)+'" onchange="mSet(\'nb\',this.value,1)"><span class="suf">années</span></div>'
+      +'<div class="hyp-g"><span>Durée de construction <span class="mut">· 0 = dès l\'an 1</span></span><input class="sel" value="'+(M.dureeConstruction||0)+'" onchange="mSet(\'dureeConstruction\',this.value,1)"><span class="suf">années</span></div>'
+      +'<div class="hyp-g"><span>TVA</span><input class="sel" value="'+((M.tva||0)*100)+'" onchange="mSet(\'tva\',(numFR(this.value)||0)/100)"><span class="suf">%</span></div>'
+      +'<div class="hyp-g"><span>Impôt sur les sociétés</span><input class="sel" value="'+((M.is_taux||0)*100)+'" onchange="mSet(\'is_taux\',(numFR(this.value)||0)/100)"><span class="suf">%</span></div>'
+      +'<div class="hyp-g"><span>Impôt minimum forfaitaire (% du CA)</span><input class="sel" value="'+((M.imf_taux||0)*100)+'" onchange="mSet(\'imf_taux\',(numFR(this.value)||0)/100)"><span class="suf">%</span></div></div>';
   } else if(SOUS_MODELE==="pl"){ corps=vueBPPl(P);
   } else if(SOUS_MODELE==="bs"){ corps=vueBPBs(P);
   } else if(SOUS_MODELE==="tft"){ corps=vueBPTft(P);
