@@ -332,6 +332,10 @@ function projeterModele(M,scenario){
      en lignes de périmètre = leur ligne de revenus → le moteur gère les deux formats (tests, modèles sauvegardés). */
   var CDLIST=(M.coutsDirects||[]).slice();
   (M.revenus||[]).forEach(function(L,li){ if(L.cout){ var cm=(L.cout.m==='unit')?'unit':'pct'; CDLIST.push({name:(L.name||'Ligne')+' — coût direct',m:cm,scope:(L.id||('L'+li)),pct:(cm==='pct'?(+L.cout.val||0):0),val:(cm==='unit'?(+L.cout.val||0):0)}); } });
+  /* personnel normalisé (sans muter M) : postes M.personnel + anciennes charges fixes « personnel » converties
+     (effectif 1 × salaire mensuel = montant annuel / 12) → total charges de personnel = Σ effectif × salaire × 12. */
+  var PERSLIST=(M.personnel||[]).slice();
+  (M.chargesFixes||[]).forEach(function(c){ if(c.personnel){ PERSLIST.push({poste:(c.name||'Personnel'),effectif:1,salaireMensuel:(+c.montant|| +c.val||0)/12,g:(+c.g||0)}); } });
   var coutsD1=0, charges1=0, ca1=0, caLine1={}, volLine1={};
   (M.revenus||[]).forEach(function(L,li){ var vol=volInducteurs(L.rows,0)*fCA, prix=valAnnee(L.prix,0), caL=vol*prix/SC; ca1+=caL; caLine1[L.id||("L"+li)]=caL; volLine1[L.id||("L"+li)]=vol; });
   CDLIST.forEach(function(cl){ var m=(cl.m||"ind"), sc=(cl.scope||"all"), mt;
@@ -339,7 +343,8 @@ function projeterModele(M,scenario){
     else if(m==="unit")mt=(volLine1[sc]||0)*(+cl.val||0)/SC;
     else mt=volInducteurs(cl.rows,0)*valAnnee(cl.prix,0)/SC;
     coutsD1+=mt*fCout; });
-  (M.chargesFixes||[]).forEach(function(c){ charges1+=valAnnee({val:(c.montant!=null?c.montant:c.val),g:c.g,mode:c.mode,vals:c.vals},0)/SC; });
+  (M.chargesFixes||[]).forEach(function(c){ if(c.personnel)return; charges1+=valAnnee({val:(c.montant!=null?c.montant:c.val),g:c.g,mode:c.mode,vals:c.vals},0)/SC; });
+  PERSLIST.forEach(function(pp){ charges1+=(+pp.effectif||0)*(+pp.salaireMensuel||0)*12/SC; });
   var bfrDem=(moisBFR/12)*(coutsD1+charges1);
   /* montage initial = CAPEX jusqu'à la mise en service (incluse) + BFR de démarrage ; subvention en déduction */
   var capexFinance=capex.filter(function(c){return c.annee<=anneeExploit;}).reduce(function(s,c){return s+c.montant;},0);
@@ -383,12 +388,18 @@ function projeterModele(M,scenario){
     }); }
     var cd=-coutsD;
     var autresProd=isOp?valAnnee(M.autresProd,oi)/SC:0;
-    /* --- charges fixes (uniquement en exploitation) → OPEX / personnel --- */
+    /* --- frais généraux (charges fixes hors personnel) + personnel granulaire (postes) --- */
     var opexTot=0, persTot=0;
-    if(isOp){ (M.chargesFixes||[]).forEach(function(c,ci){ var m=-valAnnee({val:(c.montant!=null?c.montant:c.val),g:c.g,mode:c.mode,vals:c.vals},oi)/SC;
-      if(c.personnel){ persTot+=m; var pc="PF"+ci; if(!P.pl.PERS_DETAIL[pc])P.pl.PERS_DETAIL[pc]={lib:(c.name||("Personnel "+(ci+1))),vals:{}}; P.pl.PERS_DETAIL[pc].vals[a]=m; }
-      else { opexTot+=m; var code="CF"+ci; if(!P.pl.OPEX_DETAIL[code])P.pl.OPEX_DETAIL[code]={lib:(c.name||("Charge "+(ci+1))),vals:{}}; P.pl.OPEX_DETAIL[code].vals[a]=m; }
-    }); }
+    if(isOp){
+      (M.chargesFixes||[]).forEach(function(c,ci){ if(c.personnel)return;   /* personnel géré via PERSLIST */
+        var m=-valAnnee({val:(c.montant!=null?c.montant:c.val),g:c.g,mode:c.mode,vals:c.vals},oi)/SC;
+        opexTot+=m; var code="CF"+ci; if(!P.pl.OPEX_DETAIL[code])P.pl.OPEX_DETAIL[code]={lib:(c.name||("Charge "+(ci+1))),vals:{}}; P.pl.OPEX_DETAIL[code].vals[a]=m;
+      });
+      /* personnel = Σ postes (effectif × salaire mensuel × 12), croissance g/an */
+      PERSLIST.forEach(function(pp,pi){ var annuel=(+pp.effectif||0)*(+pp.salaireMensuel||0)*12*Math.pow(1+(+pp.g||0)/100,oi)/SC;
+        persTot-=annuel; var pc="PF"+pi; if(!P.pl.PERS_DETAIL[pc])P.pl.PERS_DETAIL[pc]={lib:(pp.poste||("Poste "+(pi+1))),vals:{}}; P.pl.PERS_DETAIL[pc].vals[a]=-annuel;
+      });
+    }
     /* --- CAPEX de l'année --- */
     var capexAn=capex.filter(function(c){return c.annee===py;}).reduce(function(s,c){return s+c.montant;},0);
     brut+=capexAn;

@@ -1772,13 +1772,26 @@ async function exporterExcelModele(){
         H.cd[k]=info;
       });
     }
-    sec("Charges fixes annuelles");
-    H.opex=[];H.pers=[];
-    (M.chargesFixes||[]).forEach(c=>{
+    sec("Frais généraux (charges fixes annuelles, hors personnel)");
+    H.opex=[];
+    (M.chargesFixes||[]).forEach(c=>{ if(c.personnel)return;
       const vals=[];for(let j=0;j<N;j++)vals.push(mnt(valAnnee({val:(c.montant!=null?c.montant:c.val),g:c.g,mode:c.mode,vals:c.vals},j)/1000));
-      const rw=ser((c.personnel?"Personnel — ":"Frais généraux — ")+(c.name||"Charge")+" (an 1..an "+N+")",vals,NF);
-      (c.personnel?H.pers:H.opex).push({row:rw,name:c.name||"Charge"});
+      const rw=ser("Frais généraux — "+(c.name||"Charge")+" (an 1..an "+N+")",vals,NF);
+      H.opex.push({row:rw,name:c.name||"Charge"});
     });
+    /* personnel granulaire : par poste = effectif × salaire mensuel × 12 (cellules jaunes vivantes) */
+    H.persPostes=[];
+    const persList=(M.personnel||[]).slice();
+    (M.chargesFixes||[]).forEach(c=>{ if(c.personnel)persList.push({poste:(c.name||"Personnel"),effectif:1,salaireMensuel:(+c.montant|| +c.val||0)/12,g:(+c.g||0)}); });
+    if(persList.length){ sec("Charges de personnel (par poste : effectif × salaire mensuel × 12)");
+      persList.forEach((pp,k)=>{
+        wsH.getCell(++hr,2).value="Poste "+(k+1)+" — "+(pp.poste||"Personnel");wsH.getCell(hr,2).font={italic:true,color:{argb:"FF224289"}};
+        const eff=one("   Effectif",(+pp.effectif||0),"#,##0.##");
+        const sal=one("   Salaire mensuel (FCFA)",(+pp.salaireMensuel||0),"#,##0.##");
+        const gg=one("   Croissance /an",((+pp.g||0)/100),PCT2);
+        H.persPostes.push({eff:eff,sal:sal,g:gg,name:pp.poste||("Poste "+(k+1))});
+      });
+    }
     sec("Investissements (CAPEX)");
     H.capM=[];H.capDur=[];H.capAn=[];
     (M.capex||[]).forEach((c,k)=>{
@@ -1852,8 +1865,10 @@ async function exporterExcelModele(){
     row("MB","Marge brute",(i,X)=>`${X}${rr("CA")}+${X}${rr("CD")}`,NF,true);
     /* frais généraux : postes hors personnel dépliés + UNE ligne « Charges du personnel » (le personnel EST un poste des frais généraux, pas un sous-total séparé) */
     H.opex.forEach((o,k)=>row("OPL"+k,"Frais généraux — "+o.name,(i,X)=>`-${X}${rr("FO")}*INDEX(${rng(o.row)},MAX(1,${X}${rr("IDX")}-${rH}!${H.nc}))`,NF));
-    row("PERS","Charges du personnel",(i,X)=>H.pers.length?H.pers.map(o=>`-${X}${rr("FO")}*INDEX(${rng(o.row)},MAX(1,${X}${rr("IDX")}-${rH}!${H.nc}))`).join("+"):"0",NF);
-    row("FGT","Frais généraux (dont personnel)",(i,X)=>{const t=[...H.opex.map((_,k)=>`${X}${rr("OPL"+k)}`),(H.pers.length?`${X}${rr("PERS")}`:null)].filter(Boolean);return t.length?t.join("+"):"0";},NF);
+    /* personnel par poste : effectif × salaire mensuel × 12 × (1+croissance)^(année d'exploit − 1) */
+    (H.persPostes||[]).forEach((pp,k)=>row("PEL"+k,"Personnel — "+pp.name,(i,X)=>{const oi=`MAX(1,${X}${rr("IDX")}-${rH}!${H.nc})`;return `-${X}${rr("FO")}*${rH}!${pp.eff}*${rH}!${pp.sal}*12*(1+${rH}!${pp.g})^(${oi}-1)/1000`;},NF));
+    row("PERS","Charges du personnel",(i,X)=>(H.persPostes||[]).length?H.persPostes.map((_,k)=>`${X}${rr("PEL"+k)}`).join("+"):"0",NF);
+    row("FGT","Frais généraux (dont personnel)",(i,X)=>{const t=[...H.opex.map((_,k)=>`${X}${rr("OPL"+k)}`),((H.persPostes||[]).length?`${X}${rr("PERS")}`:null)].filter(Boolean);return t.length?t.join("+"):"0";},NF);
     row("EBITDA","EBITDA",(i,X)=>`${X}${rr("MB")}+${X}${rr("FGT")}`,NF,true);
     /* CAPEX & amortissements par poste */
     row("CAPEX","CAPEX de l'année",(i,X)=>(M.capex||[]).length?(M.capex||[]).map((_,k)=>`IF(${rH}!${H.capAn[k]}=${X}${rr("IDX")},${rH}!${H.capM[k]},0)`).join("+"):"0",NF);
@@ -1954,10 +1969,10 @@ async function exporterExcelModele(){
     plDefs.push(["Coûts directs (total)","CD"]);
     plDefs.push(["Marge brute","MB",1]);
     /* frais généraux = postes hors personnel dépliés + UNE ligne « Charges du personnel », un seul total */
-    if(H.opex.length||H.pers.length){
+    if(H.opex.length||(H.persPostes||[]).length){
       plDefs.push(["Frais généraux",null]);
       H.opex.forEach((o,k)=>plDefs.push(["   "+o.name,"OPL"+k]));
-      if(H.pers.length)plDefs.push(["   Charges du personnel","PERS"]);
+      if((H.persPostes||[]).length)plDefs.push(["   Charges du personnel","PERS"]);
       plDefs.push(["Total frais généraux","FGT"]);
     }
     plDefs.push(["EBITDA","EBITDA",1]);

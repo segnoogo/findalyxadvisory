@@ -85,7 +85,8 @@ function modeleParDefaut(){
   try{y=new Date().getFullYear();}catch(e){}
   return {nb:5,anneeDepart:y,tva:0.18,is_taux:0.30,imf_taux:0.005,inflation:0.03,reportDef_horizon:3,decouvert_taux:0.12,dureeConstruction:0,
     revenus:[{name:"Produit / service 1",tpl:"quantite",rows:JSON.parse(JSON.stringify(M_PRESETS.quantite.rows)),prix:{val:1000,unit:"FCFA",g:2},cout:{m:"pct",val:40}}],
-    chargesFixes:[{name:"Salaires",montant:20000000,personnel:true,g:3},{name:"Loyer & charges",montant:8000000,g:2}],
+    chargesFixes:[{name:"Loyer & charges",montant:8000000,g:2}],
+    personnel:[{poste:"Personnel",effectif:3,salaireMensuel:400000,g:3}],
     capex:[{name:"Investissement initial",montant:50000000,duree:5,annee:1}],
     financement:{mode:"auto",partFP:0.30,moisBFR:3,capital:20000000,apports:0,subvention:0,emprunt:{montant:30000000,taux:0.09,duree:5}},
     bfr:{dso:30,dio:45,dpo:30}, valo:modeleValoDefaut(),
@@ -113,6 +114,15 @@ function assurerModele(){
       delete L.cout;
     }
   });
+  /* MIGRATION personnel : les charges fixes marquées « personnel » deviennent des POSTES
+     (effectif × salaire mensuel). Idempotent (retirées de chargesFixes). */
+  if(!M.personnel)M.personnel=[];
+  var _reste=[];
+  (M.chargesFixes||[]).forEach(function(c){
+    if(c.personnel){ M.personnel.push({poste:(c.name||'Personnel'),effectif:1,salaireMensuel:Math.round((+c.montant||0)/12),g:(+c.g||0)}); }
+    else _reste.push(c);
+  });
+  M.chargesFixes=_reste;
   return M;
 }
 function mScenario(k){assurerModele().scenario=k;sauverDossier();rendre();}
@@ -160,17 +170,20 @@ function mCoutsArr(){var M=assurerModele();if(!M.coutsDirects)M.coutsDirects=[];
 function mAddCout(){mCoutsArr().push({name:"Nouveau coût direct",m:'pct',scope:'all',pct:40,val:0,rows:[{op:'x',name:'Quantité',val:1,unit:'',g:0}],prix:{val:1000,unit:'FCFA',g:2}});sauverDossier();rendre();}
 function mDelCout(ci){mCoutsArr().splice(ci,1);sauverDossier();rendre();}
 function mCoutNom(ci,val){mCoutsArr()[ci].name=val;sauverDossier();rendre();}
-function mAddCoutInd(ci){mCoutsArr()[ci].rows.push({op:'x',name:'',val:1,unit:'',g:0});sauverDossier();rendre();}
-function mDelCoutInd(ci,ri){var cl=mCoutsArr()[ci];if(cl.rows.length>1)cl.rows.splice(ri,1);sauverDossier();rendre();}
-function mCoutIndOp(ci,ri){var r=mCoutsArr()[ci].rows[ri];r.op=r.op==='d'?'x':'d';sauverDossier();rendre();}
-function mCoutInd(ci,ri,champ,val){var r=mCoutsArr()[ci].rows[ri];if(champ==='name'||champ==='unit')r[champ]=val;else{var x=numFR(val);if(x!==null)r[champ]=x;}sauverDossier();rendre();}
-function mCoutIndMode(ci,ri,mode){var r=mCoutsArr()[ci].rows[ri];if(mode==='yearly'&&r.mode!=='yearly'){r.mode='yearly';r.vals=[];var N=assurerModele().nb||5;for(var k=0;k<N;k++)r.vals.push(Math.round((r.val||0)*Math.pow(1+(r.g||0)/100,k)*1000)/1000);}else if(mode!=='yearly'){r.mode='grow';if(r.vals&&r.vals.length)r.val=r.vals[0];}sauverDossier();rendre();}
-function mCoutIndYv(ci,ri,k,val){var r=mCoutsArr()[ci].rows[ri];if(!r.vals)r.vals=[];var x=numFR(val);if(x!==null)r.vals[k]=x;sauverDossier();rendre();}
-function mCoutTaux(ci,champ,val){var pr=mCoutsArr()[ci].prix;if(champ==='unit')pr.unit=val;else{var x=numFR(val);if(x!==null)pr[champ]=x;}sauverDossier();rendre();}
+/* garantit la structure inducteurs (les lignes de coût migrées n'ont ni rows ni prix) */
+function mCoutIndInit(cl){ if(!cl.rows||!cl.rows.length)cl.rows=[{op:'x',name:'Quantité',val:1,unit:'',g:0}]; if(!cl.prix)cl.prix={val:0,unit:'FCFA',g:0}; return cl; }
+function mAddCoutInd(ci){var cl=mCoutIndInit(mCoutsArr()[ci]);cl.rows.push({op:'x',name:'',val:1,unit:'',g:0});sauverDossier();rendre();}
+function mDelCoutInd(ci,ri){var cl=mCoutsArr()[ci];if(cl.rows&&cl.rows.length>1)cl.rows.splice(ri,1);sauverDossier();rendre();}
+function mCoutIndOp(ci,ri){var r=mCoutIndInit(mCoutsArr()[ci]).rows[ri];r.op=r.op==='d'?'x':'d';sauverDossier();rendre();}
+function mCoutInd(ci,ri,champ,val){var r=mCoutIndInit(mCoutsArr()[ci]).rows[ri];if(champ==='name'||champ==='unit')r[champ]=val;else{var x=numFR(val);if(x!==null)r[champ]=x;}sauverDossier();rendre();}
+function mCoutIndMode(ci,ri,mode){var r=mCoutIndInit(mCoutsArr()[ci]).rows[ri];if(mode==='yearly'&&r.mode!=='yearly'){r.mode='yearly';r.vals=[];var N=assurerModele().nb||5;for(var k=0;k<N;k++)r.vals.push(Math.round((r.val||0)*Math.pow(1+(r.g||0)/100,k)*1000)/1000);}else if(mode!=='yearly'){r.mode='grow';if(r.vals&&r.vals.length)r.val=r.vals[0];}sauverDossier();rendre();}
+function mCoutIndYv(ci,ri,k,val){var r=mCoutIndInit(mCoutsArr()[ci]).rows[ri];if(!r.vals)r.vals=[];var x=numFR(val);if(x!==null)r.vals[k]=x;sauverDossier();rendre();}
+function mCoutTaux(ci,champ,val){var pr=mCoutIndInit(mCoutsArr()[ci]).prix;if(champ==='unit')pr.unit=val;else{var x=numFR(val);if(x!==null)pr[champ]=x;}sauverDossier();rendre();}
 function mCoutMethode(ci,m){var cl=mCoutsArr()[ci];cl.m=m;
   /* le coût unitaire a BESOIN d'une ligne de produit (son volume) → périmètre par défaut = 1ʳᵉ ligne */
   if(m==='unit'){var revs=assurerModele().revenus||[];if(cl.scope==='all'||!cl.scope)cl.scope=(revs[0]&&revs[0].id)||'all';}
   else if(m==='pct'&&!cl.scope)cl.scope='all';
+  else if(m==='ind')mCoutIndInit(cl);   /* crée une 1ʳᵉ ligne d'inducteur + le taux → l'utilisateur voit quoi saisir */
   sauverDossier();rendre();}
 function mCoutScope(ci,val){mCoutsArr()[ci].scope=val;sauverDossier();rendre();}
 function mCoutPct(ci,val){var x=numFR(val);if(x!==null)mCoutsArr()[ci].pct=x;sauverDossier();rendre();}
@@ -178,6 +191,11 @@ function mCoutVal(ci,val){var x=numFR(val);if(x!==null)mCoutsArr()[ci].val=x;sau
 function mAddFixe(){assurerModele().chargesFixes.push({name:"Charge fixe",montant:0,g:0});sauverDossier();rendre();}
 function mDelFixe(i){assurerModele().chargesFixes.splice(i,1);sauverDossier();rendre();}
 function mFixe(i,champ,val){var c=assurerModele().chargesFixes[i];if(champ==='name')c.name=val;else if(champ==='personnel')c.personnel=val;else{var x=numFR(val);if(x!==null)c[champ]=x;}sauverDossier();rendre();}
+/* personnel granulaire : postes {poste, effectif, salaireMensuel, g} → total charges de personnel */
+function mPersArr(){var M=assurerModele();if(!M.personnel)M.personnel=[];return M.personnel;}
+function mAddPoste(){mPersArr().push({poste:"Nouveau poste",effectif:1,salaireMensuel:200000,g:3});sauverDossier();rendre();}
+function mDelPoste(i){mPersArr().splice(i,1);sauverDossier();rendre();}
+function mPoste(i,champ,val){var p=mPersArr()[i];if(champ==='poste')p.poste=val;else{var x=numFR(val);if(x!==null)p[champ]=x;}sauverDossier();rendre();}
 function mAddCapex(){assurerModele().capex.push({name:"Investissement",montant:0,duree:5,annee:1});sauverDossier();rendre();}
 function mDelCapex(i){assurerModele().capex.splice(i,1);sauverDossier();rendre();}
 function mCapex(i,champ,val){var c=assurerModele().capex[i];if(champ==='name')c.name=val;else{var x=numFR(val);if(x!==null)c[champ]=x;}sauverDossier();rendre();}
@@ -313,13 +331,24 @@ function vueModele(){
       +'<button class="btn" onclick="mAddCout()">+ Ajouter un coût direct</button>'
       +'<div class="card" style="margin-top:14px"><div class="hyp-l"><span>Inflation des coûts unitaires <span class="mut">(méthode « coût unitaire × volume »)</span></span><input class="sel" style="width:46%" value="'+((M.inflation||0)*100)+'" onchange="mSet(\'inflation\',(numFR(this.value)||0)/100)"> %</div></div>';
   } else if(SOUS_MODELE==="fixe"){
-    corps='<div class="card" style="padding:0"><div class="bande">Charges fixes (montant annuel)</div><div class="tscroll"><table class="tb etat"><tr><th>Poste</th><th class="num">Montant / an</th><th class="num">Croissance %/an</th><th>Personnel ?</th><th></th></tr>'
+    var pers=(M.personnel||[]), persTot1=pers.reduce(function(s,p){return s+(+p.effectif||0)*(+p.salaireMensuel||0)*12;},0);
+    corps='<div class="card" style="padding:0"><div class="bande">Frais généraux (hors personnel)</div><div class="tscroll"><table class="tb etat"><tr><th>Poste</th><th class="num">Montant / an</th><th class="num">Croissance %/an</th><th></th></tr>'
       +M.chargesFixes.map(function(c,i){return '<tr><td><input class="sel" value="'+esc(c.name)+'" onchange="mFixe('+i+',\'name\',this.value)"></td>'
         +'<td class="num"><input class="nin ninm" value="'+mAmt(c.montant||0)+'" oninput="mSep(this)" onchange="mFixe('+i+',\'montant\',this.value)"></td>'
         +'<td class="num"><input class="nin" style="width:60px" value="'+(c.g||0)+'" onchange="mFixe('+i+',\'g\',this.value)"></td>'
-        +'<td><input type="checkbox" '+(c.personnel?'checked':'')+' onchange="mFixe('+i+',\'personnel\',this.checked)"></td>'
         +'<td><button class="btn sm" onclick="mDelFixe('+i+')">✕</button></td></tr>';}).join("")
-      +'</table></div><div style="padding:10px 14px"><button class="btn sm" onclick="mAddFixe()">+ Ajouter une charge</button></div></div>';
+      +'</table></div><div style="padding:10px 14px"><button class="btn sm" onclick="mAddFixe()">+ Ajouter une charge</button></div></div>'
+      +'<div class="card" style="padding:0;margin-top:14px"><div class="bande">Charges de personnel — par poste</div>'
+      +'<div class="mut" style="padding:8px 14px 0">Effectif × salaire mensuel × 12 = charge annuelle du poste. Le total alimente la ligne « Charges du personnel » (comprise dans les frais généraux du P&L).</div>'
+      +'<div class="tscroll"><table class="tb etat"><tr><th>Poste</th><th class="num">Effectif</th><th class="num">Salaire mensuel (FCFA)</th><th class="num">Croissance %/an</th><th class="num">Charge / an</th><th></th></tr>'
+      +pers.map(function(p,i){var ann=(+p.effectif||0)*(+p.salaireMensuel||0)*12;return '<tr><td><input class="sel" value="'+esc(p.poste||"")+'" onchange="mPoste('+i+',\'poste\',this.value)"></td>'
+        +'<td class="num"><input class="nin" style="width:64px" value="'+(p.effectif||0)+'" onchange="mPoste('+i+',\'effectif\',this.value)"></td>'
+        +'<td class="num"><input class="nin ninm" value="'+mAmt(p.salaireMensuel||0)+'" oninput="mSep(this)" onchange="mPoste('+i+',\'salaireMensuel\',this.value)"></td>'
+        +'<td class="num"><input class="nin" style="width:60px" value="'+(p.g||0)+'" onchange="mPoste('+i+',\'g\',this.value)"></td>'
+        +'<td class="num"><b>'+fmt(ann/1000)+' '+uni().suf+'</b></td>'
+        +'<td><button class="btn sm" onclick="mDelPoste('+i+')">✕</button></td></tr>';}).join("")
+      +'<tr class="total"><td><b>Total charges de personnel (an 1)</b></td><td></td><td></td><td></td><td class="num"><b>'+fmt(persTot1/1000)+' '+uni().suf+'</b></td><td></td></tr>'
+      +'</table></div><div style="padding:10px 14px"><button class="btn sm" onclick="mAddPoste()">+ Ajouter un poste</button></div></div>';
   } else if(SOUS_MODELE==="capex"){
     corps='<div class="card" style="padding:0"><div class="bande">Investissements (CAPEX)</div><div class="tscroll"><table class="tb etat"><tr><th>Poste</th><th class="num">Montant</th><th class="num">Durée (ans)</th><th class="num">Année (1 = 1ʳᵉ)</th><th></th></tr>'
       +M.capex.map(function(c,i){return '<tr><td><input class="sel" value="'+esc(c.name||'')+'" onchange="mCapex('+i+',\'name\',this.value)"></td>'
