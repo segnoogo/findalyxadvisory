@@ -329,7 +329,7 @@ function vueModele(){
     corps='<div class="mut" style="margin-bottom:10px">Tous les coûts directs se paramètrent ici. Pour chaque coût, choisis sa <b>méthode</b> et son <b>périmètre</b> : <b>% du CA</b> (d\'une ligne de produit ou de l\'ensemble), <b>coût unitaire × volume</b> d\'une ligne, ou <b>inducteurs</b> (indépendant du CA — ex. école : <i>Vacataires</i> = Nb classes × Heures/classe/an × 20 000 F/h).</div>'
       +(CDL.length?CDL.map(function(cl,ci){return mCarteCout(cl,ci);}).join(""):'<div class="mut" style="margin-bottom:8px">Aucun coût direct pour l\'instant.</div>')
       +'<button class="btn" onclick="mAddCout()">+ Ajouter un coût direct</button>'
-      +'<div class="card" style="margin-top:14px"><div class="hyp-g"><span>Inflation des coûts unitaires <span class="mut">(méthode « coût unitaire × volume »)</span></span><input class="sel" value="'+((M.inflation||0)*100)+'" onchange="mSet(\'inflation\',(numFR(this.value)||0)/100)"><span class="suf">%</span></div></div>';
+      +'<div class="mut" style="margin-top:10px">Le taux d\'inflation (qui fait évoluer les coûts unitaires et les charges) se règle dans l\'onglet <b>Paramètres</b>.</div>';
   } else if(SOUS_MODELE==="fixe"){
     var pers=(M.personnel||[]), persTot1=pers.reduce(function(s,p){return s+(+p.effectif||0)*(+p.salaireMensuel||0)*12;},0);
     corps='<div class="card" style="padding:0"><div class="bande">Frais généraux (hors personnel)</div><div class="tscroll"><table class="tb etat"><tr><th>Poste</th><th class="num">Montant / an</th><th class="num">Croissance %/an</th><th></th></tr>'
@@ -409,7 +409,8 @@ function vueModele(){
       +'<div class="hyp-g"><span>Durée de construction <span class="mut">· 0 = dès l\'an 1</span></span><input class="sel" value="'+(M.dureeConstruction||0)+'" onchange="mSet(\'dureeConstruction\',this.value,1)"><span class="suf">années</span></div>'
       +'<div class="hyp-g"><span>TVA</span><input class="sel" value="'+((M.tva||0)*100)+'" onchange="mSet(\'tva\',(numFR(this.value)||0)/100)"><span class="suf">%</span></div>'
       +'<div class="hyp-g"><span>Impôt sur les sociétés</span><input class="sel" value="'+((M.is_taux||0)*100)+'" onchange="mSet(\'is_taux\',(numFR(this.value)||0)/100)"><span class="suf">%</span></div>'
-      +'<div class="hyp-g"><span>Impôt minimum forfaitaire (% du CA)</span><input class="sel" value="'+((M.imf_taux||0)*100)+'" onchange="mSet(\'imf_taux\',(numFR(this.value)||0)/100)"><span class="suf">%</span></div></div>';
+      +'<div class="hyp-g"><span>Impôt minimum forfaitaire (% du CA)</span><input class="sel" value="'+((M.imf_taux||0)*100)+'" onchange="mSet(\'imf_taux\',(numFR(this.value)||0)/100)"><span class="suf">%</span></div>'
+      +'<div class="hyp-g"><span>Inflation <span class="mut">· fait évoluer charges & coûts unitaires</span></span><input class="sel" value="'+((M.inflation||0)*100)+'" onchange="mSet(\'inflation\',(numFR(this.value)||0)/100)"><span class="suf">%</span></div></div>';
   } else if(SOUS_MODELE==="pl"){ corps=vueBPPl(P);
   } else if(SOUS_MODELE==="bs"){ corps=vueBPBs(P);
   } else if(SOUS_MODELE==="tft"){ corps=vueBPTft(P);

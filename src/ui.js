@@ -1721,7 +1721,7 @@ async function exporterExcelModele(){
     const fCA=1+(+scn.dCA||0), fCout=1-(+scn.dMarge||0), fJours=1+(+scn.dJours||0);
     const JAUNE={type:"pattern",pattern:"solid",fgColor:{argb:"FFFFF2CC"}};
     const wb=new ExcelJS.Workbook();
-    const nA="Accueil",nH=nomOnglet("Hypothèses"),nC=nomOnglet("Calculs"),
+    const nA="Accueil",nH=nomOnglet("Hypothèses"),nC=nomOnglet("Modèle"),
       nP=nomOnglet("P&L prévisionnel"),nB=nomOnglet("Bilan prévisionnel"),nT=nomOnglet("TFT prévisionnel"),
       nD=nomOnglet("Dette"),nSU=nomOnglet("Sources & Emplois"),nV=nomOnglet("Valorisation");
     const q=s=>"'"+s.replace(/'/g,"''")+"'";
@@ -1827,124 +1827,148 @@ async function exporterExcelModele(){
     H.mt=one("Multiple de transactions central (× EBITDA)",(V.multiplesTransactions&&V.multiplesTransactions.central)||6.5,"0.0");
     wsH.columns=[{width:3},{width:44},...fyp.map(()=>({width:13}))];
 
-    /* ================= CALCULS (récurrence annuelle) ================= */
+    /* ================= MODÈLE (feuille financière détaillée, par section) ================= */
     const wsC=wb.addWorksheet(nC);
-    titreLiasse(wsC,"Calculs — récurrence annuelle (construction → exploitation, IDC capitalisés) — "+u.lib);
+    titreLiasse(wsC,"Modèle financier — dérivation par section (construction → exploitation, IDC capitalisés) — "+u.lib);
     styliserEntete(wsC.addRow([null,"Ligne",...fyp]),1);
     let cr=wsC.rowCount;
     const R={};   /* n° de ligne par code */
-    /* collecte les lignes ; on écrira en DEUX PASSES pour que toute réf croisée (avant/arrière) résolve */
+    /* collecte les lignes ; on écrira en DEUX PASSES pour que toute réf croisée (avant/arrière) résolve.
+       6ᵉ élément = en-tête de section (bandeau, sans valeurs). */
     const CROWS=[];
-    const row=(code,lib,ff,fmt,st)=>{CROWS.push([code,lib,ff,fmt||NF,st]);};
+    let secN=0;
+    const row=(code,lib,ff,fmt,st)=>{CROWS.push([code,lib,ff,fmt||NF,st,false]);};
+    const sec2=(titre)=>{CROWS.push(["_S"+(secN++),titre,null,NF,false,true]);};
     const rr=code=>R[code];                 /* n° de ligne */
-    const cRef=(code,X)=>X+rr(code);          /* réf cellule même colonne */
     const pRef=(code,i)=>i>0?(CL(i-1)+rr(code)):"0";
-    /* flags de phase */
+    const OI=(X)=>`MAX(1,${X}${rr("IDX")}-${rH}!${H.nc})`;   /* indice d'année d'exploitation (1-based) */
+
+    sec2("PHASAGE — construction → exploitation");
     row("IDX","Année (indice)",(i)=>String(i+1),"0");
-    row("FC","Flag construction",(i,X)=>`IF(${X}${rr("IDX")}<=${rH}!${H.nc},1,0)`,"0");
-    row("FO","Flag exploitation",(i,X)=>`IF(${X}${rr("IDX")}>${rH}!${H.nc},1,0)`,"0");
-    /* revenus par ligne */
-    H.lignes.forEach((L,k)=>{
-      row("CAL"+k,"CA — "+(L.name||("Ligne "+(k+1))),(i,X)=>{const oi=`MAX(1,${X}${rr("IDX")}-${rH}!${H.nc})`;return `${X}${rr("FO")}*INDEX(${rng(H.vol[k])},${oi})*INDEX(${rng(H.prix[k])},${oi})/1000`;},NF);
+    row("FC","Flag construction (1 = en construction)",(i,X)=>`IF(${X}${rr("IDX")}<=${rH}!${H.nc},1,0)`,"0");
+    row("FO","Flag exploitation (1 = en exploitation)",(i,X)=>`IF(${X}${rr("IDX")}>${rH}!${H.nc},1,0)`,"0");
+
+    /* ---- CHIFFRE D'AFFAIRES : par produit, volume × prix unitaire, puis total ---- */
+    sec2("CHIFFRE D'AFFAIRES — volume × prix unitaire par produit");
+    H.lignes.forEach((L,k)=>{ const nm=(L.name||("Ligne "+(k+1)));
+      row("VOL"+k,"   Volume — "+nm,(i,X)=>`${X}${rr("FO")}*INDEX(${rng(H.vol[k])},${OI(X)})`,"#,##0.##");
+      row("PRIX"+k,"   Prix unitaire — "+nm+" (FCFA)",(i,X)=>`INDEX(${rng(H.prix[k])},${OI(X)})`,"#,##0.##");
+      row("CAL"+k,"   = Chiffre d'affaires — "+nm,(i,X)=>`${X}${rr("VOL"+k)}*${X}${rr("PRIX"+k)}/1000`,NF);
     });
-    row("CA","Chiffre d'affaires",(i,X)=>H.lignes.length?H.lignes.map((_,k)=>`${X}${rr("CAL"+k)}`).join("+"):"0",NF,true);
-    /* coûts directs UNIFIÉS : % (d'une ligne CAL_k ou du CA total), coût unitaire × volume d'une ligne, ou inducteurs */
+    row("CA","Chiffre d'affaires total",(i,X)=>H.lignes.length?H.lignes.map((_,k)=>`${X}${rr("CAL"+k)}`).join("+"):"0",NF,true);
+
+    /* ---- COÛTS DIRECTS : % du CA (ligne/ensemble), coût unitaire × volume, ou inducteurs ---- */
+    sec2("COÛTS DIRECTS");
     (H.coutInd||[]).forEach((cl,k)=>{
-      const info=H.cd[k], lib="Coûts directs — "+(cl.name||("Coût "+(k+1)));
+      const info=H.cd[k], nom=(cl.name||("Coût "+(k+1)));
       if(info.m==="pct"){
+        const lib="   Coûts directs — "+nom+(info.scope==="all"?" (% du CA total)":" (% d'une ligne)");
         if(info.scope==="all"){ row("CDI"+k,lib,(i,X)=>`-${X}${rr("FO")}*${X}${rr("CA")}*${rH}!${info.pct}`,NF); }
         else { const kk=(info.kLine!=null?info.kLine:0); row("CDI"+k,lib,(i,X)=>`-${X}${rr("FO")}*${X}${rr("CAL"+kk)}*${rH}!${info.pct}`,NF); }
       } else if(info.m==="unit"){
         const kk=(info.kLine!=null?info.kLine:0);
-        row("CDI"+k,lib,(i,X)=>{const oi=`MAX(1,${X}${rr("IDX")}-${rH}!${H.nc})`;return `-${X}${rr("FO")}*INDEX(${rng(H.vol[kk])},${oi})*${rH}!${info.val}*(1+${rH}!${H.infl})^(${oi}-1)/1000`;},NF);
+        row("CDI"+k,"   Coûts directs — "+nom+" (coût unitaire × volume)",(i,X)=>`-${X}${rr("FO")}*INDEX(${rng(H.vol[kk])},${OI(X)})*${rH}!${info.val}*(1+${rH}!${H.infl})^(${OI(X)}-1)/1000`,NF);
       } else {
-        row("CDI"+k,lib,(i,X)=>{const oi=`MAX(1,${X}${rr("IDX")}-${rH}!${H.nc})`;return `-${X}${rr("FO")}*INDEX(${rng(info.vol)},${oi})*INDEX(${rng(info.taux)},${oi})/1000`;},NF);
+        row("CDI"+k,"   Coûts directs — "+nom+" (inducteurs)",(i,X)=>`-${X}${rr("FO")}*INDEX(${rng(info.vol)},${OI(X)})*INDEX(${rng(info.taux)},${OI(X)})/1000`,NF);
       }
     });
-    row("CD","Coûts directs",(i,X)=>{const t=(H.coutInd||[]).map((_,k)=>`${X}${rr("CDI"+k)}`);return t.length?t.join("+"):"0";},NF);
+    row("CD","Coûts directs (total)",(i,X)=>{const t=(H.coutInd||[]).map((_,k)=>`${X}${rr("CDI"+k)}`);return t.length?t.join("+"):"0";},NF,true);
     row("MB","Marge brute",(i,X)=>`${X}${rr("CA")}+${X}${rr("CD")}`,NF,true);
-    /* frais généraux : postes hors personnel dépliés + UNE ligne « Charges du personnel » (le personnel EST un poste des frais généraux, pas un sous-total séparé) */
-    H.opex.forEach((o,k)=>row("OPL"+k,"Frais généraux — "+o.name,(i,X)=>`-${X}${rr("FO")}*INDEX(${rng(o.row)},MAX(1,${X}${rr("IDX")}-${rH}!${H.nc}))`,NF));
-    /* personnel par poste : effectif × salaire mensuel × 12 × (1+croissance)^(année d'exploit − 1) */
-    (H.persPostes||[]).forEach((pp,k)=>row("PEL"+k,"Personnel — "+pp.name,(i,X)=>{const oi=`MAX(1,${X}${rr("IDX")}-${rH}!${H.nc})`;return `-${X}${rr("FO")}*${rH}!${pp.eff}*${rH}!${pp.sal}*12*(1+${rH}!${pp.g})^(${oi}-1)/1000`;},NF));
-    row("PERS","Charges du personnel",(i,X)=>(H.persPostes||[]).length?H.persPostes.map((_,k)=>`${X}${rr("PEL"+k)}`).join("+"):"0",NF);
-    row("FGT","Frais généraux (dont personnel)",(i,X)=>{const t=[...H.opex.map((_,k)=>`${X}${rr("OPL"+k)}`),((H.persPostes||[]).length?`${X}${rr("PERS")}`:null)].filter(Boolean);return t.length?t.join("+"):"0";},NF);
+
+    /* ---- FRAIS GÉNÉRAUX & PERSONNEL : chaque charge (base évoluée) + personnel par poste ---- */
+    sec2("FRAIS GÉNÉRAUX & CHARGES DE PERSONNEL");
+    H.opex.forEach((o,k)=>row("OPL"+k,"   Frais généraux — "+o.name,(i,X)=>`-${X}${rr("FO")}*INDEX(${rng(o.row)},${OI(X)})`,NF));
+    (H.persPostes||[]).forEach((pp,k)=>row("PEL"+k,"   Personnel — "+pp.name+" (effectif × salaire × 12)",(i,X)=>`-${X}${rr("FO")}*${rH}!${pp.eff}*${rH}!${pp.sal}*12*(1+${rH}!${pp.g})^(${OI(X)}-1)/1000`,NF));
+    row("PERS","   Charges du personnel (sous-total)",(i,X)=>(H.persPostes||[]).length?H.persPostes.map((_,k)=>`${X}${rr("PEL"+k)}`).join("+"):"0",NF);
+    row("FGT","Frais généraux (dont personnel) — total",(i,X)=>{const t=[...H.opex.map((_,k)=>`${X}${rr("OPL"+k)}`),((H.persPostes||[]).length?`${X}${rr("PERS")}`:null)].filter(Boolean);return t.length?t.join("+"):"0";},NF,true);
     row("EBITDA","EBITDA",(i,X)=>`${X}${rr("MB")}+${X}${rr("FGT")}`,NF,true);
-    /* CAPEX & amortissements par poste */
-    row("CAPEX","CAPEX de l'année",(i,X)=>(M.capex||[]).length?(M.capex||[]).map((_,k)=>`IF(${rH}!${H.capAn[k]}=${X}${rr("IDX")},${rH}!${H.capM[k]},0)`).join("+"):"0",NF);
-    (M.capex||[]).forEach((_,k)=>{
-      row("AM"+k,"Amort. CAPEX "+(k+1),(i,X)=>{const mes=`MAX(${rH}!${H.capAn[k]},${rH}!${H.nc}+1)`;return `IF(AND(${X}${rr("IDX")}>=${mes},${X}${rr("IDX")}<${mes}+${rH}!${H.capDur[k]}),${rH}!${H.capM[k]}/${rH}!${H.capDur[k]},0)`;},NF);
+
+    /* ---- INVESTISSEMENTS, AMORTISSEMENTS & VNC (pour le bilan) ---- */
+    sec2("INVESTISSEMENTS, AMORTISSEMENTS & VALEUR NETTE COMPTABLE");
+    row("CAPEX","Investissements de l'année (CAPEX)",(i,X)=>(M.capex||[]).length?(M.capex||[]).map((_,k)=>`IF(${rH}!${H.capAn[k]}=${X}${rr("IDX")},${rH}!${H.capM[k]},0)`).join("+"):"0",NF);
+    (M.capex||[]).forEach((c,k)=>{
+      row("AM"+k,"   Dotation amort. — "+(c.name||("CAPEX "+(k+1))),(i,X)=>{const mes=`MAX(${rH}!${H.capAn[k]},${rH}!${H.nc}+1)`;return `IF(AND(${X}${rr("IDX")}>=${mes},${X}${rr("IDX")}<${mes}+${rH}!${H.capDur[k]}),${rH}!${H.capM[k]}/${rH}!${H.capDur[k]},0)`;},NF);
     });
-    /* IDC : intérêts pendant la construction, capitalisés dans la dette (et l'immo) */
-    row("IDC","Intérêts de construction (IDC)",(i,X)=>`${X}${rr("FC")}*${rH}!${H.taux}*(${pRef("DETTE",i)}+${X}${rr("TIR")})`,NF);
-    row("IDCTOT","IDC cumulés",(i,X)=>`${pRef("IDCTOT",i)}+${X}${rr("IDC")}`,NF);
-    row("AMIDC","Amort. des IDC",(i,X)=>{const mes=`(${rH}!${H.nc}+1)`;return `IF(AND(${X}${rr("IDX")}>=${mes},${X}${rr("IDX")}<${mes}+${rH}!${H.dur}),${CL(N-1)}${rr("IDCTOT")}/${rH}!${H.dur},0)`;},NF);
-    row("DOT","Dotations aux amortissements",(i,X)=>`${(M.capex||[]).map((_,k)=>`${X}${rr("AM"+k)}`).concat(`${X}${rr("AMIDC")}`).join("+")||"0"}`,NF);
-    row("DA","Dotations (P&L, négatif)",(i,X)=>`-${X}${rr("DOT")}`,NF);
-    row("BRUT","Immobilisations brutes",(i,X)=>`${pRef("BRUT",i)}+${X}${rr("CAPEX")}+${X}${rr("IDC")}`,NF);
+    row("AMIDC","   Dotation amort. — intérêts de construction (IDC)",(i,X)=>{const mes=`(${rH}!${H.nc}+1)`;return `IF(AND(${X}${rr("IDX")}>=${mes},${X}${rr("IDX")}<${mes}+${rH}!${H.dur}),${CL(N-1)}${rr("IDCTOT")}/${rH}!${H.dur},0)`;},NF);
+    row("DOT","Dotations aux amortissements (total)",(i,X)=>`${(M.capex||[]).map((_,k)=>`${X}${rr("AM"+k)}`).concat(`${X}${rr("AMIDC")}`).join("+")||"0"}`,NF,true);
+    row("DA","Dotations (report au P&L, négatif)",(i,X)=>`-${X}${rr("DOT")}`,NF);
+    row("BRUT","Immobilisations brutes (cumul CAPEX + IDC)",(i,X)=>`${pRef("BRUT",i)}+${X}${rr("CAPEX")}+${X}${rr("IDC")}`,NF);
     row("AMC","Amortissements cumulés",(i,X)=>`${pRef("AMC",i)}+${X}${rr("DOT")}`,NF);
-    row("IMN","Immobilisations nettes",(i,X)=>`${X}${rr("BRUT")}-${X}${rr("AMC")}`,NF,true);
-    row("EBIT","EBIT",(i,X)=>`${X}${rr("EBITDA")}+${X}${rr("DA")}`,NF,true);
-    /* dette : tirage an 1, IDC capitalisés en construction, remboursement en exploitation */
-    const amAn=`(${rH}!${H.dette}*(1+${rH}!${H.taux})^${rH}!${H.nc})/${rH}!${H.dur}`;   /* annuité = dette+IDC à la mise en service / durée */
-    row("TIR","Tirage de dette",(i,X)=>`IF(${X}${rr("IDX")}=1,${rH}!${H.dette},0)`,NF);
-    row("REMB","Remboursement",(i,X)=>`IF(${X}${rr("FO")}=1,MIN(${amAn},${pRef("DETTE",i)}+${X}${rr("TIR")}+${X}${rr("IDC")}),0)`,NF);
-    row("DETTE","Dette financière (clôture)",(i,X)=>`${pRef("DETTE",i)}+${X}${rr("TIR")}+${X}${rr("IDC")}-${X}${rr("REMB")}`,NF,true);
-    row("INT","Intérêts payés (exploitation)",(i,X)=>`${X}${rr("FO")}*${rH}!${H.taux}*(${pRef("DETTE",i)}+${X}${rr("DETTE")})/2`,NF);
-    row("INTCT","Intérêts du découvert",(i,X)=>`${rH}!${H.dec}*${pRef("LCT",i)}`,NF);
+    row("IMN","Immobilisations nettes — VNC (brut − amort. cumulés)",(i,X)=>`${X}${rr("BRUT")}-${X}${rr("AMC")}`,NF,true);
+
+    /* ---- FINANCEMENT & DETTE : tirage, IDC (période de grâce), intérêts, remboursements ---- */
+    sec2("FINANCEMENT & DETTE — période de grâce en construction");
+    const amAn=`(${rH}!${H.dette}*(1+${rH}!${H.taux})^${rH}!${H.nc})/${rH}!${H.dur}`;   /* annuité = (dette + IDC à la mise en service) / durée */
+    row("TIR","Tirage de dette (année 1)",(i,X)=>`IF(${X}${rr("IDX")}=1,${rH}!${H.dette},0)`,NF);
+    row("IDC","Intérêts capitalisés (IDC — période de grâce/construction)",(i,X)=>`${X}${rr("FC")}*${rH}!${H.taux}*(${pRef("DETTE",i)}+${X}${rr("TIR")})`,NF);
+    row("IDCTOT","   IDC cumulés (à amortir dès la mise en service)",(i,X)=>`${pRef("IDCTOT",i)}+${X}${rr("IDC")}`,NF);
+    row("REMB","Remboursement du capital (dès l'exploitation)",(i,X)=>`IF(${X}${rr("FO")}=1,MIN(${amAn},${pRef("DETTE",i)}+${X}${rr("TIR")}+${X}${rr("IDC")}),0)`,NF);
+    row("DETTE","Dette financière — solde de clôture",(i,X)=>`${pRef("DETTE",i)}+${X}${rr("TIR")}+${X}${rr("IDC")}-${X}${rr("REMB")}`,NF,true);
+    row("INT","Intérêts sur emprunt (exploitation)",(i,X)=>`${X}${rr("FO")}*${rH}!${H.taux}*(${pRef("DETTE",i)}+${X}${rr("DETTE")})/2`,NF);
+    row("INTCT","Intérêts du découvert (ligne court terme)",(i,X)=>`${rH}!${H.dec}*${pRef("LCT",i)}`,NF);
+
+    /* ---- COMPTE DE RÉSULTAT : cascade EBIT → résultat net ---- */
+    sec2("COMPTE DE RÉSULTAT — cascade");
+    row("EBIT","EBIT (EBITDA − dotations)",(i,X)=>`${X}${rr("EBITDA")}+${X}${rr("DA")}`,NF,true);
     row("RFIN","Résultat financier",(i,X)=>`-${X}${rr("INT")}-${X}${rr("INTCT")}`,NF);
     row("EBT","Résultat avant impôt",(i,X)=>`${X}${rr("EBIT")}+${X}${rr("RFIN")}`,NF,true);
-    /* impôt : report déficitaire simple + IMF */
-    row("USE","Déficit imputé",(i,X)=>`MIN(${pRef("CARRY",i)},MAX(0,${X}${rr("EBT")}))`,NF);
-    row("CARRY","Déficits reportables (stock)",(i,X)=>`${pRef("CARRY",i)}-${X}${rr("USE")}+MAX(0,-${X}${rr("EBT")})`,NF);
-    row("IS","Impôt sur les sociétés",(i,X)=>`-MAX(${rH}!${H.is}*(MAX(0,${X}${rr("EBT")})-${X}${rr("USE")}),${rH}!${H.imf}*${X}${rr("CA")})`,NF);
+    row("USE","   Déficit antérieur imputé",(i,X)=>`MIN(${pRef("CARRY",i)},MAX(0,${X}${rr("EBT")}))`,NF);
+    row("CARRY","   Déficits reportables (stock)",(i,X)=>`${pRef("CARRY",i)}-${X}${rr("USE")}+MAX(0,-${X}${rr("EBT")})`,NF);
+    row("IS","Impôt sur les sociétés (max IS / IMF)",(i,X)=>`-MAX(${rH}!${H.is}*(MAX(0,${X}${rr("EBT")})-${X}${rr("USE")}),${rH}!${H.imf}*${X}${rr("CA")})`,NF);
     row("RN","Résultat net",(i,X)=>`${X}${rr("EBT")}+${X}${rr("IS")}`,NF,true);
-    /* BFR */
-    row("CLI","Créances clients",(i,X)=>`${X}${rr("FO")}*${X}${rr("CA")}*(1+${rH}!${H.tva})*${rH}!${H.dso}/360`,NF);
-    row("STK","Stocks",(i,X)=>`${X}${rr("FO")}*(-${X}${rr("CD")})*${rH}!${H.dio}/360`,NF);
-    /* fournisseurs : coûts directs + frais généraux HORS personnel (salaires = dettes sociales, sans TVA) → base = -CD -(FGT-PERS) = -CD -FGT +PERS */
-    row("FRN","Dettes fournisseurs",(i,X)=>`-${X}${rr("FO")}*(-${X}${rr("CD")}-${X}${rr("FGT")}+${X}${rr("PERS")})*(1+${rH}!${H.tva})*${rH}!${H.dpo}/360`,NF);
+
+    /* ---- BESOIN EN FONDS DE ROULEMENT ---- */
+    sec2("BESOIN EN FONDS DE ROULEMENT");
+    row("CLI","Créances clients (CA TTC × DSO)",(i,X)=>`${X}${rr("FO")}*${X}${rr("CA")}*(1+${rH}!${H.tva})*${rH}!${H.dso}/360`,NF);
+    row("STK","Stocks (coûts directs × DIO)",(i,X)=>`${X}${rr("FO")}*(-${X}${rr("CD")})*${rH}!${H.dio}/360`,NF);
+    row("FRN","Dettes fournisseurs (hors personnel, TTC × DPO)",(i,X)=>`-${X}${rr("FO")}*(-${X}${rr("CD")}-${X}${rr("FGT")}+${X}${rr("PERS")})*(1+${rH}!${H.tva})*${rH}!${H.dpo}/360`,NF);
     row("BFR","Besoin en fonds de roulement",(i,X)=>`${X}${rr("CLI")}+${X}${rr("STK")}+${X}${rr("FRN")}`,NF,true);
-    /* capitaux propres, trésorerie de bouclage */
+
+    /* ---- BILAN — bouclage par la trésorerie (actif net = capitaux propres) ---- */
+    sec2("BILAN — bouclage (actif net = capitaux propres)");
+    row("CAPSOC","   Capital social",(i,X)=>`${rH}!${H.capital}`,NF);
+    row("SUBVR","   Subventions d'investissement",(i,X)=>`${rH}!${H.subv}`,NF);
+    row("RANR","   Report à nouveau & résultats antérieurs",(i,X)=>`${X}${rr("CP")}-${rH}!${H.capital}-${rH}!${H.subv}-${X}${rr("RN")}`,NF);
     row("CP","Capitaux propres",(i,X)=>`${pRef("CP",i)}+${X}${rr("RN")}+IF(${X}${rr("IDX")}=1,${rH}!${H.capital}+${rH}!${H.subv},0)`,NF,true);
-    row("TRES","Trésorerie nette",(i,X)=>`${X}${rr("CP")}+${X}${rr("DETTE")}-${X}${rr("IMN")}-${X}${rr("BFR")}`,NF,true);
-    row("LCT","Découvert (ligne CT)",(i,X)=>`MAX(0,-${X}${rr("TRES")})`,NF);
-    /* TFT */
+    row("TRES","Trésorerie nette (bouclage du bilan)",(i,X)=>`${X}${rr("CP")}+${X}${rr("DETTE")}-${X}${rr("IMN")}-${X}${rr("BFR")}`,NF,true);
+    row("LCT","   Découvert (si trésorerie négative)",(i,X)=>`MAX(0,-${X}${rr("TRES")})`,NF);
+    row("DETTEN","   Dettes financières (−, présentation actif net)",(i,X)=>`-${X}${rr("DETTE")}`,NF);
+    row("AN","Actif net = Immo nettes + BFR + Trésorerie − Dettes",(i,X)=>`${X}${rr("IMN")}+${X}${rr("BFR")}+${X}${rr("TRES")}-${X}${rr("DETTE")}`,NF,true);
+    row("CTRL","Contrôle : actif net − capitaux propres (= 0)",(i,X)=>`${X}${rr("AN")}-${X}${rr("CP")}`,NF);
+
+    /* ---- TABLEAU DE FLUX DE TRÉSORERIE ---- */
+    sec2("TABLEAU DE FLUX DE TRÉSORERIE");
     row("ZA","Trésorerie à l'ouverture",(i,X)=>i>0?`${CL(i-1)}${rr("TRES")}`:"0",NF);
-    row("FA","CAFG",(i,X)=>`${X}${rr("RN")}+${X}${rr("DOT")}`,NF);
-    row("VCR","Variation des créances",(i,X)=>`-(${X}${rr("CLI")}-${pRef("CLI",i)})`,NF);
-    row("VST","Variation des stocks",(i,X)=>`-(${X}${rr("STK")}-${pRef("STK",i)})`,NF);
-    row("VFR","Variation des dettes d'exploitation",(i,X)=>`-(${X}${rr("FRN")}-${pRef("FRN",i)})`,NF);
-    row("ZB","Flux opérationnels",(i,X)=>`${X}${rr("FA")}+${X}${rr("VCR")}+${X}${rr("VST")}+${X}${rr("VFR")}`,NF,true);
+    row("FA","Capacité d'autofinancement (CAFG)",(i,X)=>`${X}${rr("RN")}+${X}${rr("DOT")}`,NF);
+    row("VCR","   Variation des créances",(i,X)=>`-(${X}${rr("CLI")}-${pRef("CLI",i)})`,NF);
+    row("VST","   Variation des stocks",(i,X)=>`-(${X}${rr("STK")}-${pRef("STK",i)})`,NF);
+    row("VFR","   Variation des dettes d'exploitation",(i,X)=>`-(${X}${rr("FRN")}-${pRef("FRN",i)})`,NF);
+    row("ZB","Flux de trésorerie opérationnels",(i,X)=>`${X}${rr("FA")}+${X}${rr("VCR")}+${X}${rr("VST")}+${X}${rr("VFR")}`,NF,true);
     row("ZC","Flux d'investissement",(i,X)=>`-${X}${rr("CAPEX")}`,NF,true);
-    row("FK","Augmentation de capital",(i,X)=>`IF(${X}${rr("IDX")}=1,${rH}!${H.capital},0)`,NF);
-    row("FL","Subvention",(i,X)=>`IF(${X}${rr("IDX")}=1,${rH}!${H.subv},0)`,NF);
+    row("FK","   Augmentation de capital",(i,X)=>`IF(${X}${rr("IDX")}=1,${rH}!${H.capital},0)`,NF);
+    row("FL","   Subvention",(i,X)=>`IF(${X}${rr("IDX")}=1,${rH}!${H.subv},0)`,NF);
     row("ZFIN","Flux de financement",(i,X)=>`${X}${rr("FK")}+${X}${rr("FL")}+${X}${rr("TIR")}-${X}${rr("REMB")}`,NF,true);
-    row("ZF","Variation de trésorerie",(i,X)=>`${X}${rr("ZB")}+${X}${rr("ZC")}+${X}${rr("ZFIN")}`,NF,true);
+    row("ZF","Variation nette de trésorerie",(i,X)=>`${X}${rr("ZB")}+${X}${rr("ZC")}+${X}${rr("ZFIN")}`,NF,true);
     row("ZG","Trésorerie à la clôture",(i,X)=>`${X}${rr("ZA")}+${X}${rr("ZF")}`,NF,true);
-    row("ECART","Contrôle (clôture − trésorerie)",(i,X)=>`${X}${rr("ZG")}-${X}${rr("TRES")}`,NF);
-    /* FCFF pour la valo */
-    row("FCFF","FCFF",(i,X)=>`${X}${rr("EBIT")}*(1-IF(${X}${rr("EBIT")}>0,${rH}!${H.is},0))+${X}${rr("DOT")}-(${X}${rr("BFR")}-${pRef("BFR",i)})-${X}${rr("CAPEX")}`,NF);
-    /* lignes de DÉTAIL pour les états détaillés (P&L & bilan) */
+    row("ECART","Contrôle (clôture TFT − trésorerie bilan = 0)",(i,X)=>`${X}${rr("ZG")}-${X}${rr("TRES")}`,NF);
+
+    /* ---- POSTES DE DÉTAIL (alimentent les états détaillés & la valorisation) ---- */
+    sec2("POSTES DE DÉTAIL (états & valorisation)");
+    row("FCFF","Flux de trésorerie disponible (FCFF)",(i,X)=>`${X}${rr("EBIT")}*(1-IF(${X}${rr("EBIT")}>0,${rH}!${H.is},0))+${X}${rr("DOT")}-(${X}${rr("BFR")}-${pRef("BFR",i)})-${X}${rr("CAPEX")}`,NF);
     row("INTP","Intérêts sur emprunts (charge)",(i,X)=>`-${X}${rr("INT")}`,NF);
     row("DECP","Intérêts sur découvert (charge)",(i,X)=>`-${X}${rr("INTCT")}`,NF);
     row("AMCN","Amortissements cumulés (−)",(i,X)=>`-${X}${rr("AMC")}`,NF);
     row("TRA","Trésorerie active",(i,X)=>`${X}${rr("TRES")}+${X}${rr("LCT")}`,NF);
     row("DECN","Concours bancaires (découvert, −)",(i,X)=>`-${X}${rr("LCT")}`,NF);
     row("FRNP","Dettes fournisseurs (passif)",(i,X)=>`${X}${rr("FRN")}`,NF);
-    row("CAPSOC","Capital social",(i,X)=>`${rH}!${H.capital}`,NF);
-    row("SUBVR","Subventions d'investissement",(i,X)=>`${rH}!${H.subv}`,NF);
-    row("RANR","Report à nouveau & résultats antérieurs",(i,X)=>`${X}${rr("CP")}-${rH}!${H.capital}-${rH}!${H.subv}-${X}${rr("RN")}`,NF);
-    /* présentation actif net : dettes financières soustraites, actif net = capitaux propres (contrôle = 0) */
-    row("DETTEN","Dettes financières (−)",(i,X)=>`-${X}${rr("DETTE")}`,NF);
-    row("AN","Actif net",(i,X)=>`${X}${rr("IMN")}+${X}${rr("BFR")}+${X}${rr("TRES")}-${X}${rr("DETTE")}`,NF,true);
-    row("CTRL","Contrôle : actif net − capitaux propres",(i,X)=>`${X}${rr("AN")}-${X}${rr("CP")}`,NF);
-    /* PASSE 1 : réserver tous les n° de ligne (toute réf croisée résout) ; PASSE 2 : écrire libellés + formules */
+
+    /* PASSE 1 : réserver tous les n° de ligne ; PASSE 2 : écrire libellés, en-têtes de section & formules */
     CROWS.forEach((d,idx)=>{R[d[0]]=cr+1+idx;});
-    CROWS.forEach(d=>{const rn=R[d[0]];wsC.getCell(rn,2).value=d[1];
-      for(let i=0;i<N;i++){const c=wsC.getCell(rn,3+i);c.value={formula:d[2](i,CL(i))};c.numFmt=d[3];}
-      if(d[4]){const r=wsC.getRow(rn);r.font={bold:true,color:{argb:"FF172554"}};}});
-    wsC.columns=[{width:3},{width:34},...fyp.map(()=>({width:13}))];
+    CROWS.forEach(d=>{const rn=R[d[0]];const r=wsC.getRow(rn);r.getCell(2).value=d[1];
+      if(d[5]){ for(let c=2;c<3+N;c++){const cc=r.getCell(c);cc.fill={type:"pattern",pattern:"solid",fgColor:{argb:"FF213768"}};cc.font={bold:true,color:{argb:"FFFFFFFF"},size:10.5};} return; }
+      for(let i=0;i<N;i++){const c=r.getCell(3+i);c.value={formula:d[2](i,CL(i))};c.numFmt=d[3];}
+      if(d[4]){r.font={bold:true,color:{argb:"FF172554"}};for(let c=2;c<3+N;c++)r.getCell(c).fill=FOND_TOTAL;}});
+    wsC.columns=[{width:3},{width:52},...fyp.map(()=>({width:13}))];
 
     /* ================= feuilles de présentation (référencent Calculs) ================= */
     const feuille=(nom,sousTitre,defs,note)=>{
@@ -2082,7 +2106,7 @@ async function exporterExcelModele(){
     wsA.getCell("B4").value="Généré le "+new Date().toLocaleDateString("fr-FR",{day:"numeric",month:"long",year:"numeric"})+" · "+(cabinetExport()||"Findalyx Advisory");wsA.getCell("B4").font={size:9,color:{argb:"FF808080"}};
     wsA.getCell("B6").value="Feuilles du classeur";wsA.getCell("B6").font={bold:true,color:{argb:"FF224289"}};
     const nav=[["Hypothèses",nH,"Cellules jaunes modifiables — tout le classeur se recalcule."],
-      ["Calculs",nC,"Récurrence annuelle (construction → exploitation, IDC)."],
+      ["Modèle",nC,"Modèle financier détaillé par section (CA, coûts, charges, amortissements & VNC, dette, résultat, BFR, bilan, trésorerie)."],
       ["P&L prévisionnel",nP,"Compte de résultat sur l'horizon du plan."],
       ["Bilan prévisionnel",nB,"Grandes masses, bouclé par la trésorerie."],
       ["TFT prévisionnel",nT,"Flux de trésorerie (modèle officiel)."],
