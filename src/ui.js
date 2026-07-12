@@ -1746,16 +1746,25 @@ async function exporterExcelModele(){
     H.tva=one("TVA (créances & dettes en TTC)",(M.tva!=null?+M.tva:0.18),PCT2);
     H.infl=one("Inflation des coûts unitaires",M.inflation||0.03,PCT2);
     H.dec=one("Taux du découvert (ligne court terme)",M.decouvert_taux||0.12,PCT2);
-    sec("Revenus (volume × prix par ligne)");
-    H.vol=[];H.prix=[];H.lignes=(M.revenus||[]);
+    sec("Revenus — inducteurs de volume × prix, par produit");
+    H.vol=[];H.prix=[];H.rev=[];H.lignes=(M.revenus||[]);
     const idToK={};
     H.lignes.forEach((L,k)=>{ idToK[L.id||("L"+k)]=k;
-      /* série par année d'EXPLOITATION (an 1 = 1re année d'exploitation) ; les formules la décalent
-         selon la durée de construction via INDEX(série, année − Nc) → la durée de construction reste VIVANTE. */
-      const volA=[],prixA=[]; for(let j=0;j<N;j++){volA.push(volInducteurs(L.rows,j)*fCA); prixA.push(valAnnee(L.prix,j)||0);}   /* précision complète (affichage arrondi via numFmt) → formules = moteur au centime */
+      /* séries par année d'EXPLOITATION (an 1 = 1re) ; les formules décalent via INDEX(série, année − Nc) → durée de construction VIVANTE.
+         Chaque inducteur du volume est une série jaune ; le Modèle en fait le produit (× ou ÷) = Volume. */
       wsH.getCell(++hr,2).value="Ligne "+(k+1)+" — "+(L.name||"Revenus")+" (séries par année d'exploitation)";wsH.getCell(hr,2).font={italic:true,color:{argb:"FF224289"}};
-      H.vol[k]=ser("   Volume — an 1..an "+N,volA,"#,##0.##");
-      H.prix[k]=ser("   Prix unitaire — an 1..an "+N+" (FCFA)",prixA,"#,##0.##");
+      const inds=[];
+      (L.rows||[]).forEach((r,j)=>{
+        const pct=String(r.unit||"").indexOf("%")>=0;
+        const vals=[]; for(let y=0;y<N;y++){ let v=(r.mode==='yearly')?(+((r.vals||[])[y])||0):((+r.val||0)*Math.pow(1+(+r.g||0)/100,y)); if(pct)v/=100; if(j===0)v*=fCA; vals.push(v); }
+        const nm=(r.name||("Inducteur "+(j+1)))+(pct?" (ratio %)":"");
+        const rw=ser("   "+((r.op==='d')?"÷ ":"× ")+nm,vals,"#,##0.####");
+        inds.push({row:rw,op:(r.op==='d'?'d':'x'),name:nm});
+      });
+      if(!inds.length){ const rw=ser("   Quantité (volume)",Array.from({length:N},(_,y)=>volInducteurs(L.rows,y)*fCA),"#,##0.##"); inds.push({row:rw,op:'x',name:"Quantité (volume)"}); }
+      const prixA=[]; for(let y=0;y<N;y++)prixA.push(valAnnee(L.prix,y)||0);
+      const prixRw=ser("   Prix unitaire (FCFA)",prixA,"#,##0.##");
+      H.rev[k]={inds:inds,prix:prixRw}; H.prix[k]=prixRw;
     });
     /* coûts directs UNIFIÉS : % (d'une ligne ou de l'ensemble), coût unitaire × volume d'une ligne, ou inducteurs */
     H.cd=[]; H.coutInd=(M.coutsDirects||[]).slice();
@@ -1850,9 +1859,10 @@ async function exporterExcelModele(){
 
     /* ---- CHIFFRE D'AFFAIRES : par produit, volume × prix unitaire, puis total ---- */
     sec2("CHIFFRE D'AFFAIRES — volume × prix unitaire par produit");
-    H.lignes.forEach((L,k)=>{ const nm=(L.name||("Ligne "+(k+1)));
-      row("VOL"+k,"   Volume — "+nm,(i,X)=>`${X}${rr("FO")}*INDEX(${rng(H.vol[k])},${OI(X)})`,"#,##0.##");
-      row("PRIX"+k,"   Prix unitaire — "+nm+" (FCFA)",(i,X)=>`INDEX(${rng(H.prix[k])},${OI(X)})`,"#,##0.##");
+    H.lignes.forEach((L,k)=>{ const nm=(L.name||("Ligne "+(k+1))), inds=H.rev[k].inds;
+      inds.forEach((ind,j)=>row("IND"+k+"_"+j,"   "+((ind.op==='d')?"÷ ":"× ")+ind.name,(i,X)=>`INDEX(${rng(ind.row)},${OI(X)})`,"#,##0.####"));
+      row("VOL"+k,"   = Volume — "+nm,(i,X)=>{ let e=""; inds.forEach((ind,j)=>{const ref=`${X}${rr("IND"+k+"_"+j)}`; if(j===0)e=(ind.op==='d')?`1/${ref}`:ref; else e+=(ind.op==='d')?`/${ref}`:`*${ref}`;}); return `IFERROR(${X}${rr("FO")}*(${e||"0"}),0)`; },"#,##0.##");
+      row("PRIX"+k,"   × Prix unitaire — "+nm+" (FCFA)",(i,X)=>`INDEX(${rng(H.prix[k])},${OI(X)})`,"#,##0.##");
       row("CAL"+k,"   = Chiffre d'affaires — "+nm,(i,X)=>`${X}${rr("VOL"+k)}*${X}${rr("PRIX"+k)}/1000`,NF);
     });
     row("CA","Chiffre d'affaires total",(i,X)=>H.lignes.length?H.lignes.map((_,k)=>`${X}${rr("CAL"+k)}`).join("+"):"0",NF,true);
@@ -1867,7 +1877,7 @@ async function exporterExcelModele(){
         else { const kk=(info.kLine!=null?info.kLine:0); row("CDI"+k,lib,(i,X)=>`-${X}${rr("FO")}*${X}${rr("CAL"+kk)}*${rH}!${info.pct}`,NF); }
       } else if(info.m==="unit"){
         const kk=(info.kLine!=null?info.kLine:0);
-        row("CDI"+k,"   Coûts directs — "+nom+" (coût unitaire × volume)",(i,X)=>`-${X}${rr("FO")}*INDEX(${rng(H.vol[kk])},${OI(X)})*${rH}!${info.val}*(1+${rH}!${H.infl})^(${OI(X)}-1)/1000`,NF);
+        row("CDI"+k,"   Coûts directs — "+nom+" (coût unitaire × volume)",(i,X)=>`-${X}${rr("VOL"+kk)}*${rH}!${info.val}*(1+${rH}!${H.infl})^(${OI(X)}-1)/1000`,NF);
       } else {
         row("CDI"+k,"   Coûts directs — "+nom+" (inducteurs)",(i,X)=>`-${X}${rr("FO")}*INDEX(${rng(info.vol)},${OI(X)})*INDEX(${rng(info.taux)},${OI(X)})/1000`,NF);
       }
