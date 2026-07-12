@@ -673,7 +673,7 @@ function construireBP(pptx,opts){
   const S=opts.secBase||0; let page=opts.page||1;
   if(!opts.combine){
     rpGarde(pptx,B.societe,"Rapport provisoire de Business Plan "+ap[0]+" – "+ap[ap.length-1],
-      (mm?"Business plan sans historique  |  Montants en "+rpLib():"Historique "+fy[0]+" – "+fy[fy.length-1]+"  |  Montants en "+rpLib()),B.dateTxt,B.cabinet);
+      (mm?"Business plan — projet  |  Montants en "+rpLib():"Historique "+fy[0]+" – "+fy[fy.length-1]+"  |  Montants en "+rpLib()),B.dateTxt,B.cabinet);
     rpPreambule(pptx,B,mention,++page,
       "Le présent rapport présente le business plan de "+B.societe+" sur la période "+ap[0]+" à "+ap[ap.length-1]+", "+(mm?"construit à partir d'un modèle piloté par inducteurs (sans historique comptable)":"construit à partir de l'historique "+fy[0]+"–"+fy[fy.length-1])+". Il constitue un support de discussion préalable aux échanges avec le management.",
       (mm?"Les projections sont établies à partir d'inducteurs d'activité (volumes × prix), de coûts, de charges, d'investissements et d'un montage de financement paramétrés dans l'application. Le bilan prévisionnel est bouclé par la trésorerie ; toutes les hypothèses sont modifiables.":"Les projections sont établies à partir des balances historiques et d'hypothèses paramétrées dans l'application (croissance du CA, marges, BFR, investissements, financement). Le bilan prévisionnel est bouclé par la trésorerie ; toutes les hypothèses sont modifiables."));
@@ -926,7 +926,7 @@ function construireValo(pptx,opts){
   const pct1=x=>isFinite(x)?(x*100).toFixed(1).replace(".",",")+" %":"-";   /* taux à une décimale (build-up, axes de sensibilité) */
   if(!opts.combine){
     rpGarde(pptx,B.societe,mm?"Rapport provisoire d'évaluation financière":"Rapport provisoire d'évaluation financière au 31/12/"+a1,
-      (mm?"Business plan sans historique  |  Montants en "+rpLib():"Historique "+fy[0]+" – "+fy[fy.length-1]+"  |  Montants en "+rpLib()),B.dateTxt,B.cabinet);
+      (mm?"Business plan — projet  |  Montants en "+rpLib():"Historique "+fy[0]+" – "+fy[fy.length-1]+"  |  Montants en "+rpLib()),B.dateTxt,B.cabinet);
     rpPreambule(pptx,B,mention,++page,
       "Le présent rapport présente l'évaluation financière des fonds propres de "+B.societe+(mm?"":" au 31/12/"+a1)+", à partir des projections issues du business plan. Il constitue un support de discussion préalable aux échanges avec le management.",
       "L'évaluation combine l'actualisation des flux de trésorerie disponibles (DCF, valeur terminale de "+tvTxt+"), les multiples de marché (comparables et transactions) et l'actif net. Les flux et le coût du capital sont paramétrés dans l'application et modifiables.");
@@ -1048,7 +1048,7 @@ function construireBPValo(pptx){
   const ap=proj.annees;
   const mention=B.societe+" - Business plan & évaluation financière - "+B.dateTxt+" - Confidentiel";
   rpGarde(pptx,B.societe,"Business Plan & Évaluation financière",
-    (mm?"Business plan "+ap[0]+" – "+ap[ap.length-1]+" (sans historique)  |  Montants en "+rpLib():"Business plan "+ap[0]+" – "+ap[ap.length-1]+" · évaluation au 31/12/"+a1+"  |  Montants en "+rpLib()),B.dateTxt,B.cabinet);
+    (mm?"Business plan — projet "+ap[0]+" – "+ap[ap.length-1]+"  |  Montants en "+rpLib():"Business plan "+ap[0]+" – "+ap[ap.length-1]+" · évaluation au 31/12/"+a1+"  |  Montants en "+rpLib()),B.dateTxt,B.cabinet);
   let page=1;
   rpPreambule(pptx,B,mention,++page,
     "Le présent document réunit le business plan de "+B.societe+" ("+ap[0]+" – "+ap[ap.length-1]+") et l'évaluation financière des fonds propres qui en découle. Il constitue un support de discussion préalable aux échanges avec le management, les investisseurs ou les partenaires financiers.",

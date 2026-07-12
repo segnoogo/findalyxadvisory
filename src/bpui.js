@@ -391,7 +391,7 @@ function vueModele(){
       corps='<div class="mut" style="margin-bottom:8px">Référence : dernière année projetée (EBITDA, dette nette de clôture). Cliquez sur <b>« Modifier les hypothèses »</b> pour le build-up MEDAF (risque pays Damodaran), les multiples et la valeur terminale.</div>'+vueValoCorps(M,P,Vv);
     }catch(e){ corps='<div class="mut">Valorisation indisponible ('+esc(e.message)+').</div>'; }
   }
-  return '<h1>Business plan — modèle <span class="chip" style="background:#fff4e8;color:#b45608">sans balance</span></h1>'
+  return '<h1>Business plan <span class="chip" style="background:#fff4e8;color:#b45608">Projet</span></h1>'
     +pillsScenariosModele(M)
     +kpis
     +'<div class="row" style="margin:14px 0 12px;align-items:center;flex-wrap:wrap">'+barre+vueBtn+'</div>'

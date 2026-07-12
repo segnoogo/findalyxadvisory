@@ -122,7 +122,7 @@ function shell(){
   <div class="main">
     <div class="top">
       <div><div class="name">${DOSSIER?esc(DOSSIER.societe):"Aucun dossier ouvert"}</div>
-      <div class="sub">${DOSSIER&&DOSSIER.sansHistorique?"Business plan sans historique — saisie en FCFA · affichage en "+uni().lib:(DOSSIER&&DOSSIER.balances.length?DOSSIER.balances.map(b=>"FY"+b.annee).join(" · ")+" — montants en "+uni().lib:"créez ou ouvrez un dossier")}</div></div>
+      <div class="sub">${DOSSIER&&DOSSIER.sansHistorique?"Business plan — projet · saisie en FCFA · affichage en "+uni().lib:(DOSSIER&&DOSSIER.balances.length?DOSSIER.balances.map(b=>"FY"+b.annee).join(" · ")+" — montants en "+uni().lib:"créez ou ouvrez un dossier")}</div></div>
       <div class="right">${barreDroite()}</div>
     </div>
     <div class="view" id="vue"></div>
@@ -377,7 +377,7 @@ function vueAccueil(){
   const l=chargerDossiers();
   const cartes=l.map(d=>`
     <div class="card doss">
-      <div><b>${esc(d.societe)}</b><div class="mut">${d.sansHistorique?"Business plan — sans balance":(d.balances.length+" balance(s)"+(d.balances.length?" — FY"+Math.min(...d.balances.map(b=>b.annee))+" à FY"+Math.max(...d.balances.map(b=>b.annee)):""))}</div></div>
+      <div><b>${esc(d.societe)}</b><div class="mut">${d.sansHistorique?"Business plan — projet":(d.balances.length+" balance(s)"+(d.balances.length?" — FY"+Math.min(...d.balances.map(b=>b.annee))+" à FY"+Math.max(...d.balances.map(b=>b.annee)):""))}</div></div>
       <div><button class="btn primary sm" onclick="ouvrirDossier('${d.id}')">Ouvrir</button>
       <button class="btn sm" onclick="renommerDossier('${d.id}')">Renommer</button>
       <button class="btn sm" onclick="supprimerDossier('${d.id}')">Supprimer</button></div>
@@ -410,7 +410,7 @@ function vueAccueil(){
   const barre=`<div class="card" style="display:flex;align-items:center;gap:10px">
     <b>Mes sociétés</b><span class="chip">${nb}</span>
     <button class="btn sm" onclick="ACC_LISTE=!ACC_LISTE;rendre()">${ouverte?"Replier la liste":"Afficher la liste"}</button>
-    <button class="btn sm" style="margin-left:auto" onclick="creerModelePrompt()">+ BP sans balance</button>
+    <button class="btn sm" style="margin-left:auto" onclick="creerModelePrompt()">+ Projet</button>
     <button class="btn sm primary" onclick="ouvrirWizard()">+ Nouvelle société</button>
   </div>`;
   const creation=`<div class="card">
@@ -419,10 +419,10 @@ function vueAccueil(){
     <button class="btn primary" onclick="ouvrirWizard()">Créer avec des balances (assistant)</button>
   </div>`;
   const creationModele=`<div class="card">
-    <b>Business plan sans historique</b>
+    <b>Business plan — projet</b>
     <div class="mut" style="margin:6px 0 12px">Pas de comptabilité à importer ? Construisez le plan à partir d'inducteurs (volumes, prix, coûts) — idéal pour une startup ou un projet nouveau.</div>
     <div class="row" style="gap:8px"><input id="nouvNomModele" class="sel" placeholder="Nom de la société" style="flex:1">
-    <button class="btn primary" onclick="creerModele()">Créer (sans balance)</button></div>
+    <button class="btn primary" onclick="creerModele()">Créer le projet</button></div>
   </div>`;
   return `<h1>Accueil</h1>
   ${synth}
@@ -430,7 +430,7 @@ function vueAccueil(){
   ${ouverte?`<div class="deux">${creation}${creationModele}</div>`+(cartes||'<div class="mut" style="padding:14px 4px">Aucun dossier. Créez le premier ci-dessus.</div>'):""}`;
 }
 function creerModelePrompt(){
-  const nom=prompt("Nom de la société (business plan sans balance) :");
+  const nom=prompt("Nom de la société (business plan — projet) :");
   if(nom&&nom.trim())creerModele(nom.trim());
 }
 async function creerModele(nom){
@@ -1486,7 +1486,7 @@ function vueExports(){
     <button class="btn primary" onclick="${action}">${bouton}</button></div>`;
   if(DOSSIER&&DOSSIER.sansHistorique){
     return `<h1>Exports</h1>
-    <div class="mut" style="margin-bottom:12px">Business plan sans historique — les exports reprennent vos inducteurs, le montage de financement (Sources &amp; Emplois) et la valorisation. Les analyses historiques (due diligence, databook, balance mappée) ne s'appliquent pas ici.</div>
+    <div class="mut" style="margin-bottom:12px">Business plan — projet : les exports reprennent vos inducteurs, le montage de financement (Sources &amp; Emplois) et la valorisation. Les analyses historiques (due diligence, databook, balance mappée) ne s'appliquent pas ici.</div>
     <div class="sec-titre">Classeur Excel</div>
     <div class="grille-exp">
     ${carte("Business plan + Valorisation (Excel)","P&amp;L, bilan, TFT et dette prévisionnels, Sources &amp; Emplois du montage et valorisation multi-méthodes — en valeurs, prêt à retravailler.","exporterExcelModele()","Télécharger")}
@@ -1704,7 +1704,7 @@ async function exporterExcel(seulementTbagr){
    phase construction/exploitation + IDC) + P&L / Bilan / TFT / Dette / Sources & Emplois /
    Valorisation qui référencent Calculs. Reproduit les équations de projeterModele. */
 async function exporterExcelModele(){
-  if(!DOSSIER||!DOSSIER.sansHistorique){toast("Réservé au business plan sans balance");return;}
+  if(!DOSSIER||!DOSSIER.sansHistorique){toast("Réservé au business plan — projet");return;}
   if(typeof ExcelJS==="undefined"){toast("Bibliothèque Excel non chargée (connexion requise)");return;}
   try{
     const M=assurerModele();
@@ -2063,7 +2063,7 @@ async function exporterExcelModele(){
 
     /* ================= ACCUEIL (navigation) — rempli maintenant, feuille déjà en 1er ================= */
     wsA.getCell("B2").value=DOSSIER.societe;wsA.getCell("B2").font={bold:true,size:18,color:{argb:"FF172554"}};
-    wsA.getCell("B3").value="Business plan sans historique — modèle financier — "+u.lib;wsA.getCell("B3").font={size:11,color:{argb:"FF6B7280"}};
+    wsA.getCell("B3").value="Business plan — projet — modèle financier — "+u.lib;wsA.getCell("B3").font={size:11,color:{argb:"FF6B7280"}};
     wsA.getCell("B4").value="Généré le "+new Date().toLocaleDateString("fr-FR",{day:"numeric",month:"long",year:"numeric"})+" · "+(cabinetExport()||"Findalyx Advisory");wsA.getCell("B4").font={size:9,color:{argb:"FF808080"}};
     wsA.getCell("B6").value="Feuilles du classeur";wsA.getCell("B6").font={bold:true,color:{argb:"FF224289"}};
     const nav=[["Hypothèses",nH,"Cellules jaunes modifiables — tout le classeur se recalcule."],
