@@ -1712,7 +1712,7 @@ async function exporterExcelModele(){
     ETATS=etatsFromModele(P);
     let val=null; try{val=valoriserBP(ETATS,{is_taux:M.is_taux,valo:M.valo},P);}catch(e){}
     const u=uni(),UF=u.f,NF=u.dec?'#,##0.0;(#,##0.0);"-"':NUMFMT,PCT2="0.00%",PCT="0.0%";
-    const QF="#,##0",RF="0.0%";   /* QF = quantités/prix (entiers, séparateur de milliers, PAS de virgule finale) ; RF = ratio en % */
+    const QF='#,##0;(#,##0);"-"',RF="0.0%";   /* QF = montants/quantités/prix : format comptable (milliers espacés, négatifs entre parenthèses, zéro = tiret) ; RF = ratio en % */
     const mnt=x=>(x==null)?0:(u.dec?Math.round(x*UF*10)/10:Math.round(x*UF));   /* FCFA→unité, en valeur d'amorçage des cellules jaunes */
     const N=P.annees.length, fyp=P.annees.map(a=>"FY"+String(a).slice(-2)+"p");
     const ncPh=(P.financement&&P.financement.dureeConstruction)||0;                          /* années de construction (en-têtes) */
@@ -1768,8 +1768,8 @@ async function exporterExcelModele(){
       });
       if(!inds.length){ const gg=grow2("   Quantité (volume)",0,0); inds.push({mode:'grow',b:gg.b,g:gg.g,op:'x',name:"Quantité (volume)"}); }
       let prixInfo;
-      if((L.prix&&L.prix.mode)==='yearly'){ const pv=[]; for(let y=0;y<N;y++)pv.push(+((L.prix.vals||[])[y])||0); prixInfo={mode:'yearly',row:ser("   Prix unitaire (FCFA)",pv,"#,##0")}; }
-      else { const gg=grow2("   Prix unitaire (FCFA)",(+((L.prix||{}).val)||0),(+((L.prix||{}).g||0))/100,"#,##0"); prixInfo={mode:'grow',b:gg.b,g:gg.g}; }
+      if((L.prix&&L.prix.mode)==='yearly'){ const pv=[]; for(let y=0;y<N;y++)pv.push(+((L.prix.vals||[])[y])||0); prixInfo={mode:'yearly',row:ser("   Prix unitaire (FCFA)",pv,QF)}; }
+      else { const gg=grow2("   Prix unitaire (FCFA)",(+((L.prix||{}).val)||0),(+((L.prix||{}).g||0))/100,QF); prixInfo={mode:'grow',b:gg.b,g:gg.g}; }
       H.rev[k]={inds:inds,prix:prixInfo};
     });
     /* coûts directs UNIFIÉS : % (d'une ligne ou de l'ensemble), coût unitaire × volume d'une ligne, ou inducteurs */
@@ -1787,8 +1787,8 @@ async function exporterExcelModele(){
             if(r.mode==='yearly'){ const vals=[];for(let y=0;y<N;y++){let v=(+((r.vals||[])[y])||0);if(pct)v/=100;vals.push(v);} inds.push({mode:'yearly',row:ser(lib,vals,pct?RF:QF),op:(r.op==='d'?'d':'x'),name:nm}); }
             else { let base=(+r.val||0); if(pct)base/=100; const gg=grow2(lib,base,(+r.g||0)/100,pct?RF:QF); inds.push({mode:'grow',b:gg.b,g:gg.g,op:(r.op==='d'?'d':'x'),name:nm}); } });
           if(!inds.length){ const gg=grow2("   Quantité",0,0); inds.push({mode:'grow',b:gg.b,g:gg.g,op:'x',name:"Quantité"}); }
-          let taux; if((cl.prix&&cl.prix.mode)==='yearly'){ const tv=[];for(let y=0;y<N;y++)tv.push((+((cl.prix.vals||[])[y])||0)*fCout); taux={mode:'yearly',row:ser("   Taux unitaire (FCFA)",tv,"#,##0")}; }
-            else { const gg=grow2("   Taux unitaire (FCFA)",(+((cl.prix||{}).val)||0)*fCout,(+((cl.prix||{}).g||0))/100,"#,##0"); taux={mode:'grow',b:gg.b,g:gg.g}; }
+          let taux; if((cl.prix&&cl.prix.mode)==='yearly'){ const tv=[];for(let y=0;y<N;y++)tv.push((+((cl.prix.vals||[])[y])||0)*fCout); taux={mode:'yearly',row:ser("   Taux unitaire (FCFA)",tv,QF)}; }
+            else { const gg=grow2("   Taux unitaire (FCFA)",(+((cl.prix||{}).val)||0)*fCout,(+((cl.prix||{}).g||0))/100,QF); taux={mode:'grow',b:gg.b,g:gg.g}; }
           info.inds=inds; info.taux=taux; }
         H.cd[k]=info;
       });
@@ -1877,8 +1877,8 @@ async function exporterExcelModele(){
         if(ind.mode==='grow') row("IND"+k+"_"+j,lbl,(i,X)=>`${rH}!${ind.b}*(1+${rH}!${ind.g})^(${OI(X)}-1)`,ind.pct?RF:QF);
         else row("IND"+k+"_"+j,lbl,(i,X)=>`INDEX(${rng(ind.row)},${OI(X)})`,ind.pct?RF:QF); });
       row("VOL"+k,"   = Volume — "+nm,(i,X)=>{ let e=""; inds.forEach((ind,j)=>{const ref=`${X}${rr("IND"+k+"_"+j)}`; if(j===0)e=(ind.op==='d')?`1/${ref}`:ref; else e+=(ind.op==='d')?`/${ref}`:`*${ref}`;}); return `IFERROR(${X}${rr("FO")}*(${e||"0"}),0)`; },QF);
-      if(pr.mode==='grow') row("PRIX"+k,"   × Prix unitaire — "+nm+" (FCFA)",(i,X)=>`${rH}!${pr.b}*(1+${rH}!${pr.g})^(${OI(X)}-1)`,"#,##0");
-      else row("PRIX"+k,"   × Prix unitaire — "+nm+" (FCFA)",(i,X)=>`INDEX(${rng(pr.row)},${OI(X)})`,"#,##0");
+      if(pr.mode==='grow') row("PRIX"+k,"   × Prix unitaire — "+nm+" (FCFA)",(i,X)=>`${rH}!${pr.b}*(1+${rH}!${pr.g})^(${OI(X)}-1)`,QF);
+      else row("PRIX"+k,"   × Prix unitaire — "+nm+" (FCFA)",(i,X)=>`INDEX(${rng(pr.row)},${OI(X)})`,QF);
       row("CAL"+k,"   = Chiffre d'affaires — "+nm,(i,X)=>`${X}${rr("VOL"+k)}*${X}${rr("PRIX"+k)}/1000`,NF);
     });
     row("CA","Chiffre d'affaires total",(i,X)=>H.lignes.length?H.lignes.map((_,k)=>`${X}${rr("CAL"+k)}`).join("+"):"0",NF,true);
