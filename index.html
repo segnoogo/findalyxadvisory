@@ -6437,7 +6437,9 @@ async function exporterExcelModele(){
     const P=projeterModele(M);
     ETATS=etatsFromModele(P);
     let val=null; try{val=valoriserBP(ETATS,{is_taux:M.is_taux,valo:M.valo},P);}catch(e){}
-    const u=uni(),UF=u.f,NF=u.dec?'#,##0.0;(#,##0.0);"-"':NUMFMT,PCT2="0.00%",PCT="0.0%";
+    /* Le classeur « Modèle » est une feuille de travail EN KFCFA : toutes les formules divisent déjà par 1000 (CA = volume × prix / 1000, etc.).
+       On fige donc l'unité à KFCFA quel que soit le sélecteur d'affichage → format entier (pas de virgule décimale), amorçage cohérent (pas de facteur d'unité qui décalerait CAPEX/charges d'un facteur 1000 vs le CA), libellés honnêtes. uni() est appelé pour son effet de bord (CONF_UNITE). */
+    const u=(uni(),{f:1,dec:0,lib:"KFCFA",suf:"K"}),UF=u.f,NF=NUMFMT,PCT2="0.00%",PCT="0.0%";
     const QF='#,##0;(#,##0);"-"',RF="0.0%";   /* QF = montants/quantités/prix : format comptable (milliers espacés, négatifs entre parenthèses, zéro = tiret) ; RF = ratio en % */
     const mnt=x=>(x==null)?0:(u.dec?Math.round(x*UF*10)/10:Math.round(x*UF));   /* FCFA→unité, en valeur d'amorçage des cellules jaunes */
     const N=P.annees.length, fyp=P.annees.map(a=>"FY"+String(a).slice(-2)+"p");
