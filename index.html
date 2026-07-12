@@ -311,6 +311,8 @@ display:flex;align-items:center;gap:10px;padding:11px 14px;font-size:11.2px;curs
 .item.bascule:hover{opacity:1}
 .nin{width:74px;padding:6px 8px;border:1px solid var(--border);border-radius:7px;font:inherit;text-align:right;background:#fffbea}
 .nin.large{width:110px}
+.nin.ninm{width:132px}   /* cages de MONTANTS (séparateurs de milliers) : assez larges pour les grands nombres (10 000 000+) */
+.mind-yv .nin.ninm,.serie .nin.ninm{width:92px}   /* dans les séries annuelles, on garde des cages plus compactes */
 .nin:focus{outline:2px solid #FA670655;border-color:var(--orange)}
 .hyp-l{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid #f0f2f5;font-size:11.2px}
 .hyp-l>span:first-child{flex:1}
@@ -356,7 +358,7 @@ display:flex;align-items:center;gap:10px;padding:11px 14px;font-size:11.2px;curs
   .tscroll .tb{min-width:640px}
   .tb{font-size:10.2px}
   .tb th,.tb td{padding:6px 7px}
-  .nin{width:54px}.nin.large{width:66px}
+  .nin{width:54px}.nin.large{width:66px}.nin.ninm{width:104px}
   .serie{max-width:100%;justify-content:flex-start}
   .hyp-l{flex-wrap:wrap}
   .hyp-g{grid-template-columns:1fr 96px auto;gap:6px}
