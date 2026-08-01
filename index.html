@@ -6616,8 +6616,22 @@ async function exporterExcelModele(){
     H.kd=one("Coût de la dette (brut)",V.coutDette||0.09,PCT2);
     H.wd=one("Poids de la dette (structure cible)",V.poidsDette||0.35,PCT);
     H.g=one("Croissance à l'infini (g)",V.g||0.03,PCT2);
-    H.mc=one("Multiple boursier central (× EBITDA)",(V.multiplesComparables&&V.multiplesComparables.central)||5.5,"0.0");
-    H.mt=one("Multiple de transactions central (× EBITDA)",(V.multiplesTransactions&&V.multiplesTransactions.central)||6.5,"0.0");
+    const mcB=(V.multiplesComparables||{}), mtB=(V.multiplesTransactions||{});
+    H.mcMin=one("Multiple boursier bas (× EBITDA)",mcB.min!=null?mcB.min:4,"0.0");
+    H.mc=one("Multiple boursier central (× EBITDA)",mcB.central!=null?mcB.central:5.5,"0.0");
+    H.mcMax=one("Multiple boursier haut (× EBITDA)",mcB.max!=null?mcB.max:7,"0.0");
+    H.mtMin=one("Multiple de transactions bas (× EBITDA)",mtB.min!=null?mtB.min:5,"0.0");
+    H.mt=one("Multiple de transactions central (× EBITDA)",mtB.central!=null?mtB.central:6.5,"0.0");
+    H.mtMax=one("Multiple de transactions haut (× EBITDA)",mtB.max!=null?mtB.max:8,"0.0");
+    H.bridge=one("Ajustements du pont EV → fonds propres (FCFA)",Math.round(((V.bridge||[]).reduce((s,x)=>s+(+x.montant||0),0))*1000),NF);
+    H.anrAdj=one("Ajustements de l'actif net — ANR (FCFA)",Math.round(((V.anrAjustements||[]).reduce((s,x)=>s+(+x.montant||0),0))*1000),NF);
+    H.sensAmp=one("Amplitude de sensibilité DCF (± points de WACC et de g)",0.01,PCT2);
+    sec("PONDÉRATION DES MÉTHODES DE VALORISATION (%)");
+    const pd=(V.poids||{dcf:45,comp:20,trans:20,anr:15});
+    H.wDcf=one("Poids — DCF",(+pd.dcf||0),"0");
+    H.wComp=one("Poids — multiples boursiers",(+pd.comp||0),"0");
+    H.wTrans=one("Poids — multiples de transactions",(+pd.trans||0),"0");
+    H.wAnr=one("Poids — actif net (ANR)",(+pd.anr||0),"0");
     wsH.columns=[{width:3},{width:44},...fyp.map(()=>({width:13})),{width:12}];
 
     /* ================= MODÈLE (feuille financière détaillée, par section) ================= */
@@ -6920,21 +6934,26 @@ async function exporterExcelModele(){
     const rSum=wsV.rowCount+1; vF("Somme des FCFF actualisés",`SUM(C${rPV}:${CL(N-1)}${rPV})`,NF);
     const rVT=wsV.rowCount+1; vF("Valeur terminale actualisée (Gordon g)",`(${CL(N-1)}${rFCFF}*(1+${rH}!${H.g})/(C${rWacc}-${rH}!${H.g}))/(1+C${rWacc})^${N}`,NF);
     const rEV=wsV.rowCount+1; vF("= Valeur d'entreprise (EV)",`C${rSum}+C${rVT}`,NF,true);
-    const dnF=Math.round((val?val.detteNette:0)*1000), dnX=`${dnF}/${DIV}`;   /* dette nette FCFA ÷ diviseur (rescale live) */
-    const rDN=wsV.rowCount+1; vF("(−) Dette nette",`-${dnX}`,NF);
-    const rEq=wsV.rowCount+1; vF("Valeur des fonds propres (DCF)",`C${rEV}+C${rDN}`,NF,true);
+    /* dette nette & pont : formules vivantes (Modèle + Hypothèses), plus aucune valeur figée */
+    const rDN=wsV.rowCount+1; vF("(−) Dette nette fin de plan (dette − trésorerie, Modèle)",`-(${rC}!${CL(N-1)}${rr("DETTE")}-${rC}!${CL(N-1)}${rr("TRES")})`,NF);
+    const rBR=wsV.rowCount+1; vF("(+) Ajustements du pont EV → fonds propres (Hypothèses)",`${rH}!${H.bridge}/${DIV}`,NF);
+    const rEq=wsV.rowCount+1; vF("Valeur des fonds propres (DCF)",`C${rEV}+C${rDN}+C${rBR}`,NF,true);
     wsV.addRow([]);
     vLab("Synthèse par méthode");
+    const rEbRef=wsV.rowCount+1; vF("EBITDA de référence (dernière année du plan, Modèle)",`${rC}!${CL(N-1)}${rr("EBITDA")}`,NF);
     styliserEntete(wsV.addRow([null,"Méthode","Bas","Central","Haut"]),1);
-    const ebRefX=`(${Math.round((val?val.ebitdaRef:P.pl.EBITDA[P.annees[P.annees.length-1]])*1000)}/${DIV})`;   /* EBITDA de réf. FCFA ÷ diviseur */
-    const dcfLoX=`${Math.round((val?Math.min.apply(null,val.sensi.flat()):0)*1000)}/${DIV}`, dcfHiX=`${Math.round((val?Math.max.apply(null,val.sensi.flat()):0)*1000)}/${DIV}`;
-    const dcfRow=wsV.rowCount+1;{const r=wsV.getRow(dcfRow);r.getCell(2).value="DCF (flux actualisés)";r.getCell(3).value={formula:dcfLoX};r.getCell(4).value={formula:`C${rEq}`};r.getCell(5).value={formula:dcfHiX};[3,4,5].forEach(c=>r.getCell(c).numFmt=NF);}
-    const compRow=wsV.rowCount+1;{const r=wsV.getRow(compRow);r.getCell(2).value="Multiples boursiers (× EBITDA)";r.getCell(3).value={formula:`(${rH}!${H.mc}*0.85)*${ebRefX}-${dnX}`};r.getCell(4).value={formula:`${rH}!${H.mc}*${ebRefX}-${dnX}`};r.getCell(5).value={formula:`(${rH}!${H.mc}*1.15)*${ebRefX}-${dnX}`};[3,4,5].forEach(c=>r.getCell(c).numFmt=NF);}
-    const transRow=wsV.rowCount+1;{const r=wsV.getRow(transRow);r.getCell(2).value="Multiples de transactions (× EBITDA)";r.getCell(3).value={formula:`(${rH}!${H.mt}*0.85)*${ebRefX}-${dnX}`};r.getCell(4).value={formula:`${rH}!${H.mt}*${ebRefX}-${dnX}`};r.getCell(5).value={formula:`(${rH}!${H.mt}*1.15)*${ebRefX}-${dnX}`};[3,4,5].forEach(c=>r.getCell(c).numFmt=NF);}
-    const anrRow=wsV.rowCount+1;{const anrX=`${Math.round((val&&val.methodes?(val.methodes.find(m=>m.id==="anr")||{}).central:P.bs.CP[P.annees[P.annees.length-1]])*1000)}/${DIV}`;const r=wsV.getRow(anrRow);r.getCell(2).value="Actif net";r.getCell(3).value={formula:anrX};r.getCell(4).value={formula:anrX};r.getCell(5).value={formula:anrX};[3,4,5].forEach(c=>r.getCell(c).numFmt=NF);}
-    const rRet=wsV.rowCount+1;{const p=(M.valo&&M.valo.poids)||{dcf:45,comp:20,trans:20,anr:15};const w=(p.dcf||0)+(p.comp||0)+(p.trans||0)+(p.anr||0)||1;
-      const r=wsV.getRow(rRet);r.getCell(2).value="Valeur retenue (moyenne pondérée)";
-      r.getCell(4).value={formula:`(D${dcfRow}*${p.dcf||0}+D${compRow}*${p.comp||0}+D${transRow}*${p.trans||0}+D${anrRow}*${p.anr||0})/${w}`};
+    /* fourchette DCF = coins de la grille de sensibilité (WACC ± amplitude, g ∓ amplitude), en formules vivantes */
+    const AMP=`${rH}!${H.sensAmp}`, GG=`${rH}!${H.g}`, fRng=`C${rFCFF}:${CL(N-1)}${rFCFF}`;
+    const dcfCoin=(sW,sG)=>{const W=`(C${rWacc}${sW}${AMP})`,G=`(${GG}${sG}${AMP})`;
+      return `SUMPRODUCT(${fRng}/(1+${W})^(COLUMN(${fRng})-2))+IF(${W}>${G},(${CL(N-1)}${rFCFF}*(1+${G})/(${W}-${G}))/(1+${W})^${N},0)+C${rDN}+C${rBR}`;};
+    const dcfRow=wsV.rowCount+1;{const r=wsV.getRow(dcfRow);r.getCell(2).value="DCF (flux actualisés)";r.getCell(3).value={formula:dcfCoin("+","-")};r.getCell(4).value={formula:`C${rEq}`};r.getCell(5).value={formula:dcfCoin("-","+")};[3,4,5].forEach(c=>r.getCell(c).numFmt=NF);}
+    const compRow=wsV.rowCount+1;{const r=wsV.getRow(compRow);r.getCell(2).value="Multiples boursiers (× EBITDA)";[[3,H.mcMin],[4,H.mc],[5,H.mcMax]].forEach(([c,hh])=>{r.getCell(c).value={formula:`${rH}!${hh}*C${rEbRef}+C${rDN}+C${rBR}`};r.getCell(c).numFmt=NF;});}
+    const transRow=wsV.rowCount+1;{const r=wsV.getRow(transRow);r.getCell(2).value="Multiples de transactions (× EBITDA)";[[3,H.mtMin],[4,H.mt],[5,H.mtMax]].forEach(([c,hh])=>{r.getCell(c).value={formula:`${rH}!${hh}*C${rEbRef}+C${rDN}+C${rBR}`};r.getCell(c).numFmt=NF;});}
+    const anrRow=wsV.rowCount+1;{const anrF=`${rC}!${CL(N-1)}${rr("CP")}+${rH}!${H.anrAdj}/${DIV}`;const r=wsV.getRow(anrRow);r.getCell(2).value="Actif net (capitaux propres fin de plan + ajustements)";[3,4,5].forEach(c=>{r.getCell(c).value={formula:anrF};r.getCell(c).numFmt=NF;});}
+    const rRet=wsV.rowCount+1;{
+      const wsumF=`(${rH}!${H.wDcf}+${rH}!${H.wComp}+${rH}!${H.wTrans}+${rH}!${H.wAnr})`;
+      const r=wsV.getRow(rRet);r.getCell(2).value="Valeur retenue (moyenne pondérée — poids en Hypothèses)";
+      r.getCell(4).value={formula:`IFERROR((D${dcfRow}*${rH}!${H.wDcf}+D${compRow}*${rH}!${H.wComp}+D${transRow}*${rH}!${H.wTrans}+D${anrRow}*${rH}!${H.wAnr})/${wsumF},0)`};
       r.getCell(4).numFmt=NF;r.font={bold:true,color:{argb:"FF172554"}};for(let c=2;c<=5;c++)r.getCell(c).fill=FOND_TOTAL;}
     wsV.columns=[{width:3},{width:44},{width:15},{width:15},{width:15}];
 
