@@ -275,12 +275,20 @@ function projeterBP(etats,H,scenario){
    l'aval (valorisation, covenants, seuil, exports) est réutilisé tel quel.
    Réutilise les formules de bouclage/TFT prouvées de projeterBP (mirroring).
    =========================================================================== */
+/* série « par année » : au-delà (ou en l'absence) d'une valeur saisie, la dernière
+   valeur renseignée est reconduite — un plan rallongé prolonge donc la dernière année
+   au lieu de retomber à zéro ; l'utilisateur peut ensuite modifier chaque case. */
+function valSerie(vals,i){
+  var vv=vals||[];
+  for(var j=Math.min(i,vv.length-1);j>=0;j--) if(vv[j]!=null) return +vv[j];
+  return 0;
+}
 /* volume d'une ligne = enchaînement d'inducteurs (× ou ÷) ; unité contenant « % » = ratio */
 function volInducteurs(rows,i){
   var v=1;
   (rows||[]).forEach(function(r){
     var pct=String(r.unit||"").indexOf("%")>=0, base;
-    if(r.mode==="yearly"){ var x=(r.vals&&r.vals[i]!=null)?+r.vals[i]:0; base=pct?x/100:x; }
+    if(r.mode==="yearly"){ var x=valSerie(r.vals,i); base=pct?x/100:x; }
     else { var b=pct?(+r.val||0)/100:(+r.val||0); base=b*Math.pow(1+(+r.g||0)/100,i); }
     v=(r.op==="d")?(base?v/base:0):v*base;
   });
@@ -289,7 +297,7 @@ function volInducteurs(rows,i){
 /* valeur d'un poste (prix, charge…) : saisie par année ou valeur an 1 + croissance */
 function valAnnee(o,i){
   if(!o) return 0;
-  if(o.mode==="yearly") return (o.vals&&o.vals[i]!=null)?+o.vals[i]:0;
+  if(o.mode==="yearly") return valSerie(o.vals,i);
   return (+o.val||0)*Math.pow(1+(+o.g||0)/100,i);
 }
 function projeterModele(M,scenario){

@@ -126,7 +126,12 @@ function assurerModele(){
   return M;
 }
 function mScenario(k){assurerModele().scenario=k;sauverDossier();rendre();}
-function mHNb(n){var M=assurerModele();M.nb=Math.max(3,Math.min(10,Math.round(+n)||5));sauverDossier();rendre();}
+function mHNb(n){var M=assurerModele();M.nb=Math.max(3,Math.min(10,Math.round(+n)||5));
+  /* les séries « par année » suivent la nouvelle durée : la dernière valeur saisie est reconduite (modifiable) */
+  var comp=function(r){if(r&&r.mode==='yearly'){r.vals=r.vals||[];var d=r.vals.length?valSerie(r.vals,r.vals.length):(+r.val||0);while(r.vals.length<M.nb)r.vals.push(d);}};
+  (M.revenus||[]).forEach(function(L){(L.rows||[]).forEach(comp);});
+  (M.coutsDirects||[]).forEach(function(c){(c.rows||[]).forEach(comp);});
+  sauverDossier();rendre();}
 function pillsScenariosModele(M){
   return '<div class="row" style="margin-bottom:12px"><span class="mut">Scénario :</span>'
     +Object.keys(M.scenarios).map(function(k){return '<button class="btn sm '+(M.scenario===k?"primary":"")+'" onclick="mScenario(\''+k+'\')">'+esc(M.scenarios[k].lab)+'</button>';}).join("")
@@ -228,7 +233,7 @@ function mCarteRevenu(L,li){
   var opts=M_GROUPS.map(function(g){return '<optgroup label="'+g[0]+'">'+g[1].map(function(k){return '<option value="'+k+'"'+(k===L.tpl?' selected':'')+'>'+M_PRESETS[k].lab+'</option>';}).join('')+'</optgroup>';}).join('');
   var rows=(L.rows||[]).map(function(r,ri){
     var vals;
-    if(r.mode==='yearly'){var cells='';for(var k=0;k<N;k++){var yv=(r.vals&&r.vals[k]!=null)?r.vals[k]:0;cells+='<span class="mind-yv"><label>An '+(k+1)+'</label><input class="nin ninm" value="'+mAmt(yv)+'" oninput="mSep(this)" onchange="mIndYv('+li+','+ri+','+k+',this.value)"></span>';}vals='<div class="mind-vals">'+cells+'</div>';}
+    if(r.mode==='yearly'){var cells='';for(var k=0;k<N;k++){var yv=valSerie(r.vals,k);cells+='<span class="mind-yv"><label>An '+(k+1)+'</label><input class="nin ninm" value="'+mAmt(yv)+'" oninput="mSep(this)" onchange="mIndYv('+li+','+ri+','+k+',this.value)"></span>';}vals='<div class="mind-vals">'+cells+'</div>';}
     else vals='<div class="mind-vals"><span class="mind-f"><label>Valeur an 1</label><input class="nin ninm" value="'+mAmt(r.val)+'" oninput="mSep(this)" onchange="mInd('+li+','+ri+',\'val\',this.value)"></span><span class="mind-f"><label>Croissance %/an</label><input class="nin" value="'+r.g+'" onchange="mInd('+li+','+ri+',\'g\',this.value)"></span></div>';
     return '<div class="mind">'
       +'<div class="mind-top"><button class="btn sm" title="× ou ÷" onclick="mIndOp('+li+','+ri+')" style="min-width:34px;font-weight:700">'+(r.op==='d'?'÷':'×')+'</button>'
@@ -276,7 +281,7 @@ function mCarteCout(cl,ci){
   } else {
     var rows=(cl.rows||[]).map(function(r,ri){
       var vals;
-      if(r.mode==='yearly'){var cells='';for(var k=0;k<N;k++){var yv=(r.vals&&r.vals[k]!=null)?r.vals[k]:0;cells+='<span class="mind-yv"><label>An '+(k+1)+'</label><input class="nin ninm" value="'+mAmt(yv)+'" oninput="mSep(this)" onchange="mCoutIndYv('+ci+','+ri+','+k+',this.value)"></span>';}vals='<div class="mind-vals">'+cells+'</div>';}
+      if(r.mode==='yearly'){var cells='';for(var k=0;k<N;k++){var yv=valSerie(r.vals,k);cells+='<span class="mind-yv"><label>An '+(k+1)+'</label><input class="nin ninm" value="'+mAmt(yv)+'" oninput="mSep(this)" onchange="mCoutIndYv('+ci+','+ri+','+k+',this.value)"></span>';}vals='<div class="mind-vals">'+cells+'</div>';}
       else vals='<div class="mind-vals"><span class="mind-f"><label>Valeur an 1</label><input class="nin ninm" value="'+mAmt(r.val)+'" oninput="mSep(this)" onchange="mCoutInd('+ci+','+ri+',\'val\',this.value)"></span><span class="mind-f"><label>Croissance %/an</label><input class="nin" value="'+(r.g||0)+'" onchange="mCoutInd('+ci+','+ri+',\'g\',this.value)"></span></div>';
       return '<div class="mind"><div class="mind-top"><button class="btn sm" title="× ou ÷" onclick="mCoutIndOp('+ci+','+ri+')" style="min-width:34px;font-weight:700">'+(r.op==='d'?'÷':'×')+'</button>'
         +'<input class="sel" style="flex:1;min-width:130px" placeholder="Nom de l\'inducteur" value="'+esc(r.name||'')+'" onchange="mCoutInd('+ci+','+ri+',\'name\',this.value)">'

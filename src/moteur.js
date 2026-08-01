@@ -208,7 +208,7 @@ const KW_MVT=["mouv","mvt","periode","exercice","cumul"];
  * Lit une balance : détecte les colonnes par leur contenu, exclut les sous-totaux
  * hiérarchiques, et renvoie les comptes + un contrôle d'équilibre.
  * @param {any[][]} matrice  Lignes × colonnes (cellules brutes du tableur).
- * @returns {{comptes: CompteBalance[], controle: {nb:number, sfDebit:number, sfCredit:number, ecart:number, sousTotauxExclus:number}}}
+ * @returns {{comptes: CompteBalance[], controle: {nb:number, sfDebit:number, sfCredit:number, ecart:number, sousTotauxExclus:number, lignesIgnorees:number, echIgnorees:string[]}}}
  */
 function lireBalance(matrice){
   const nl=matrice.length;
