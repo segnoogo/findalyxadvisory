@@ -6654,12 +6654,33 @@ async function exporterExcelModele(){
     const sst=t=>CROWS.push(["_T"+(vN++),t,null,NF,false,"sub",false]);
     const rr=code=>R[code];                 /* n° de ligne */
     const pRef=(code,i)=>i>0?(CL(i-1)+rr(code)):"0";
-    const OI=(X)=>`MAX(1,${X}${rr("IDX")}-${rH}!${H.nc})`;   /* indice d'année d'exploitation (1-based) */
+    const OI=(X)=>`MAX(1,${X}${rr("IDX")}-${X}${rr("P_NC")})`;   /* indice d'année d'exploitation (1-based) */
 
-    sec2("PHASAGE — construction → exploitation");
+    /* Tous les paramètres utilisés par les calculs sont d'abord RAPPELÉS ici — une ligne par
+       paramètre, seule référence vers les Hypothèses. Les formules du modèle ne pointent ensuite
+       que des lignes de CETTE feuille : lecture verticale, traçable par un tiers. */
+    sec2("PARAMÈTRES — rappel des Hypothèses");
     row("IDX","Année (indice)",(i)=>String(i+1),"0");
-    row("FC","Flag construction (1 = en construction)",(i,X)=>`IF(${X}${rr("IDX")}<=${rH}!${H.nc},1,0)`,"0");
-    row("FO","Flag exploitation (1 = en exploitation)",(i,X)=>`IF(${X}${rr("IDX")}>${rH}!${H.nc},1,0)`,"0");
+    row("P_NC","Durée de construction (années)",()=>`${rH}!${H.nc}`,"0");
+    row("FC","Flag construction (1 = en construction)",(i,X)=>`IF(${X}${rr("IDX")}<=${X}${rr("P_NC")},1,0)`,"0");
+    row("FO","Flag exploitation (1 = en exploitation)",(i,X)=>`IF(${X}${rr("IDX")}>${X}${rr("P_NC")},1,0)`,"0");
+    row("P_DIV","Diviseur d'unité (FCFA ÷)",()=>`${rH}!${H.div}`,QF);
+    row("P_FCA","Facteur scénario — volume (× CA)",()=>FCA,"0.000");
+    row("P_FCOUT","Facteur scénario — coûts directs",()=>FCOUT,"0.000");
+    row("P_FJOURS","Facteur scénario — délais BFR",()=>FJOURS,"0.000");
+    row("P_IS","Taux d'IS",()=>`${rH}!${H.is}`,PCT2);
+    row("P_IMF","Impôt minimum forfaitaire (% du CA)",()=>`${rH}!${H.imf}`,PCT2);
+    row("P_TVA","TVA (créances & dettes en TTC)",()=>`${rH}!${H.tva}`,PCT2);
+    row("P_INFL","Inflation des coûts unitaires",()=>`${rH}!${H.infl}`,PCT2);
+    row("P_DEC","Taux du découvert (ligne court terme)",()=>`${rH}!${H.dec}`,PCT2);
+    row("P_DSO","Délai clients — DSO (jours)",()=>`${rH}!${H.dso}`,"0");
+    row("P_DIO","Rotation des stocks — DIO (jours)",()=>`${rH}!${H.dio}`,"0");
+    row("P_DPO","Délai fournisseurs — DPO (jours)",()=>`${rH}!${H.dpo}`,"0");
+    row("P_TXD","Taux d'intérêt de la dette",()=>`${rH}!${H.taux}`,PCT2);
+    row("P_DURD","Durée de remboursement de la dette (ans)",()=>`${rH}!${H.dur}`,"0");
+    row("P_CAP","Fonds propres du montage (en unité)",(i,X)=>`${rH}!${H.capital}/${X}${rr("P_DIV")}`,NF);
+    row("P_SUBV","Subvention du montage (en unité)",(i,X)=>`${rH}!${H.subv}/${X}${rr("P_DIV")}`,NF);
+    row("P_DET0","Dette de base du montage (en unité)",(i,X)=>`${rH}!${H.dette}/${X}${rr("P_DIV")}`,NF);
 
     /* ---- CHIFFRE D'AFFAIRES : par produit, volume × prix unitaire, puis total ---- */
     sec2("CHIFFRE D'AFFAIRES — volume × prix unitaire par produit");
@@ -6669,10 +6690,10 @@ async function exporterExcelModele(){
       inds.forEach((ind,j)=>{ const lbl="   "+((ind.op==='d')?"÷ ":"× ")+ind.name;
         if(ind.mode==='grow') row("IND"+k+"_"+j,lbl,(i,X)=>`${rH}!${ind.b}*(1+${rH}!${ind.g})^(${OI(X)}-1)`,ind.pct?RF:QF);
         else row("IND"+k+"_"+j,lbl,(i,X)=>`INDEX(${rng(ind.row)},${OI(X)})`,ind.pct?RF:QF); });
-      row("VOL"+k,"   = Volume",(i,X)=>{ let e=""; inds.forEach((ind,j)=>{const ref=`${X}${rr("IND"+k+"_"+j)}`; if(j===0)e=(ind.op==='d')?`1/${ref}`:ref; else e+=(ind.op==='d')?`/${ref}`:`*${ref}`;}); return `IFERROR(${X}${rr("FO")}*(${e||"0"})*${FCA},0)`; },QF);
+      row("VOL"+k,"   = Volume",(i,X)=>{ let e=""; inds.forEach((ind,j)=>{const ref=`${X}${rr("IND"+k+"_"+j)}`; if(j===0)e=(ind.op==='d')?`1/${ref}`:ref; else e+=(ind.op==='d')?`/${ref}`:`*${ref}`;}); return `IFERROR(${X}${rr("FO")}*(${e||"0"})*${X}${rr("P_FCA")},0)`; },QF);
       if(pr.mode==='grow') row("PRIX"+k,"   × Prix unitaire (FCFA)",(i,X)=>`${rH}!${pr.b}*(1+${rH}!${pr.g})^(${OI(X)}-1)`,QF);
       else row("PRIX"+k,"   × Prix unitaire (FCFA)",(i,X)=>`INDEX(${rng(pr.row)},${OI(X)})`,QF);
-      row("CAL"+k,"   = Chiffre d'affaires",(i,X)=>`${X}${rr("VOL"+k)}*${X}${rr("PRIX"+k)}/${DIV}`,NF);
+      row("CAL"+k,"   = Chiffre d'affaires",(i,X)=>`${X}${rr("VOL"+k)}*${X}${rr("PRIX"+k)}/${X}${rr("P_DIV")}`,NF);
     });
     blank();
     row("CA","Chiffre d'affaires total",(i,X)=>H.lignes.length?H.lignes.map((_,k)=>`${X}${rr("CAL"+k)}`).join("+"):"0",NF,true);
@@ -6684,12 +6705,12 @@ async function exporterExcelModele(){
       if(k>0)blank();
       if(info.m==="pct"){
         sst(nom+(info.scope==="all"?" — % du CA total":" — % d'une ligne de produit"));
-        if(info.scope==="all"){ row("CDI"+k,"   = Coût de l'année",(i,X)=>`-${X}${rr("FO")}*${X}${rr("CA")}*${rH}!${info.pct}*${FCOUT}`,NF); }
-        else { const kk=(info.kLine!=null?info.kLine:0); row("CDI"+k,"   = Coût de l'année",(i,X)=>`-${X}${rr("FO")}*${X}${rr("CAL"+kk)}*${rH}!${info.pct}*${FCOUT}`,NF); }
+        if(info.scope==="all"){ row("CDI"+k,"   = Coût de l'année",(i,X)=>`-${X}${rr("FO")}*${X}${rr("CA")}*${rH}!${info.pct}*${X}${rr("P_FCOUT")}`,NF); }
+        else { const kk=(info.kLine!=null?info.kLine:0); row("CDI"+k,"   = Coût de l'année",(i,X)=>`-${X}${rr("FO")}*${X}${rr("CAL"+kk)}*${rH}!${info.pct}*${X}${rr("P_FCOUT")}`,NF); }
       } else if(info.m==="unit"){
         const kk=(info.kLine!=null?info.kLine:0);
         sst(nom+" — coût unitaire × volume");
-        row("CDI"+k,"   = Coût de l'année",(i,X)=>`-${X}${rr("VOL"+kk)}*${rH}!${info.val}*(1+${rH}!${H.infl})^(${OI(X)}-1)*${FCOUT}/${DIV}`,NF);
+        row("CDI"+k,"   = Coût de l'année",(i,X)=>`-${X}${rr("VOL"+kk)}*${rH}!${info.val}*(1+${X}${rr("P_INFL")})^(${OI(X)}-1)*${X}${rr("P_FCOUT")}/${X}${rr("P_DIV")}`,NF);
       } else {
         sst(nom);
         (info.inds||[]).forEach((ind,j)=>{ const lbl="   "+((ind.op==='d')?"÷ ":"× ")+ind.name;
@@ -6699,7 +6720,7 @@ async function exporterExcelModele(){
         else row("CTX"+k,"   × Taux unitaire (FCFA)",(i,X)=>`INDEX(${rng(info.taux.row)},${OI(X)})`,QF);
         row("CDI"+k,"   = Coût de l'année",(i,X)=>{
           let e=""; (info.inds||[]).forEach((ind,j)=>{const ref=`${X}${rr("CIN"+k+"_"+j)}`; if(j===0)e=(ind.op==='d')?`1/${ref}`:ref; else e+=(ind.op==='d')?`/${ref}`:`*${ref}`;});
-          return `-IFERROR(${X}${rr("FO")}*(${e||"0"})*${X}${rr("CTX"+k)}*${FCOUT},0)/${DIV}`;
+          return `-IFERROR(${X}${rr("FO")}*(${e||"0"})*${X}${rr("CTX"+k)}*${X}${rr("P_FCOUT")},0)/${X}${rr("P_DIV")}`;
         },NF);
       }
     });
@@ -6711,11 +6732,11 @@ async function exporterExcelModele(){
     sec2("FRAIS GÉNÉRAUX & CHARGES DE PERSONNEL");
     if(H.opex.length)sst("Frais généraux");
     H.opex.forEach((o,k)=>{
-      if(o.mode==='grow') row("OPL"+k,"   "+o.name,(i,X)=>`-${X}${rr("FO")}*${rH}!${o.b}/${DIV}*(1+${rH}!${o.g})^(${OI(X)}-1)`,NF);
-      else row("OPL"+k,"   "+o.name,(i,X)=>`-${X}${rr("FO")}*INDEX(${rng(o.row)},${OI(X)})/${DIV}`,NF);
+      if(o.mode==='grow') row("OPL"+k,"   "+o.name,(i,X)=>`-${X}${rr("FO")}*${rH}!${o.b}/${X}${rr("P_DIV")}*(1+${rH}!${o.g})^(${OI(X)}-1)`,NF);
+      else row("OPL"+k,"   "+o.name,(i,X)=>`-${X}${rr("FO")}*INDEX(${rng(o.row)},${OI(X)})/${X}${rr("P_DIV")}`,NF);
     });
     if((H.persPostes||[]).length){ blank(); sst("Charges de personnel (effectif × salaire mensuel × 12)"); }
-    (H.persPostes||[]).forEach((pp,k)=>row("PEL"+k,"   "+pp.name,(i,X)=>`-${X}${rr("FO")}*${rH}!${pp.eff}*${rH}!${pp.sal}*12*(1+${rH}!${pp.g})^(${OI(X)}-1)/${DIV}`,NF));
+    (H.persPostes||[]).forEach((pp,k)=>row("PEL"+k,"   "+pp.name,(i,X)=>`-${X}${rr("FO")}*${rH}!${pp.eff}*${rH}!${pp.sal}*12*(1+${rH}!${pp.g})^(${OI(X)}-1)/${X}${rr("P_DIV")}`,NF));
     row("PERS","   Charges du personnel (sous-total)",(i,X)=>(H.persPostes||[]).length?H.persPostes.map((_,k)=>`${X}${rr("PEL"+k)}`).join("+"):"0",NF);
     blank();
     row("FGT","Frais généraux (dont personnel) — total",(i,X)=>{const t=[...H.opex.map((_,k)=>`${X}${rr("OPL"+k)}`),((H.persPostes||[]).length?`${X}${rr("PERS")}`:null)].filter(Boolean);return t.length?t.join("+"):"0";},NF,true);
@@ -6723,11 +6744,11 @@ async function exporterExcelModele(){
 
     /* ---- INVESTISSEMENTS, AMORTISSEMENTS & VNC (pour le bilan) ---- */
     sec2("INVESTISSEMENTS, AMORTISSEMENTS & VALEUR NETTE COMPTABLE");
-    row("CAPEX","Investissements de l'année (CAPEX)",(i,X)=>(M.capex||[]).length?(M.capex||[]).map((_,k)=>`IF(${rH}!${H.capAn[k]}=${X}${rr("IDX")},${rH}!${H.capM[k]}/${DIV},0)`).join("+"):"0",NF);
+    row("CAPEX","Investissements de l'année (CAPEX)",(i,X)=>(M.capex||[]).length?(M.capex||[]).map((_,k)=>`IF(${rH}!${H.capAn[k]}=${X}${rr("IDX")},${rH}!${H.capM[k]}/${X}${rr("P_DIV")},0)`).join("+"):"0",NF);
     (M.capex||[]).forEach((c,k)=>{
-      row("AM"+k,"   Dotation amort. — "+(c.name||("CAPEX "+(k+1))),(i,X)=>{const mes=`MAX(${rH}!${H.capAn[k]},${rH}!${H.nc}+1)`;return `IF(AND(${X}${rr("IDX")}>=${mes},${X}${rr("IDX")}<${mes}+${rH}!${H.capDur[k]}),${rH}!${H.capM[k]}/${DIV}/${rH}!${H.capDur[k]},0)`;},NF);
+      row("AM"+k,"   Dotation amort. — "+(c.name||("CAPEX "+(k+1))),(i,X)=>{const mes=`MAX(${rH}!${H.capAn[k]},${X}${rr("P_NC")}+1)`;return `IF(AND(${X}${rr("IDX")}>=${mes},${X}${rr("IDX")}<${mes}+${rH}!${H.capDur[k]}),${rH}!${H.capM[k]}/${X}${rr("P_DIV")}/${rH}!${H.capDur[k]},0)`;},NF);
     });
-    row("AMIDC","   Dotation amort. — intérêts de construction (IDC)",(i,X)=>{const mes=`(${rH}!${H.nc}+1)`;return `IF(AND(${X}${rr("IDX")}>=${mes},${X}${rr("IDX")}<${mes}+${rH}!${H.dur}),${CL(N-1)}${rr("IDCTOT")}/${rH}!${H.dur},0)`;},NF);
+    row("AMIDC","   Dotation amort. — intérêts de construction (IDC)",(i,X)=>{const mes=`(${X}${rr("P_NC")}+1)`;return `IF(AND(${X}${rr("IDX")}>=${mes},${X}${rr("IDX")}<${mes}+${X}${rr("P_DURD")}),${CL(N-1)}${rr("IDCTOT")}/${X}${rr("P_DURD")},0)`;},NF);
     row("DOT","Dotations aux amortissements (total)",(i,X)=>`${(M.capex||[]).map((_,k)=>`${X}${rr("AM"+k)}`).concat(`${X}${rr("AMIDC")}`).join("+")||"0"}`,NF,true);
     row("DA","Dotations (report au P&L, négatif)",(i,X)=>`-${X}${rr("DOT")}`,NF);
     row("BRUT","Immobilisations brutes (cumul CAPEX + IDC)",(i,X)=>`${pRef("BRUT",i)}+${X}${rr("CAPEX")}+${X}${rr("IDC")}`,NF);
@@ -6736,14 +6757,14 @@ async function exporterExcelModele(){
 
     /* ---- FINANCEMENT & DETTE : tirage, IDC (période de grâce), intérêts, remboursements ---- */
     sec2("FINANCEMENT & DETTE — période de grâce en construction");
-    const amAn=`(${rH}!${H.dette}/${DIV}*(1+${rH}!${H.taux})^${rH}!${H.nc})/${rH}!${H.dur}`;   /* annuité = (dette + IDC à la mise en service) / durée */
-    row("TIR","Tirage de dette (année 1)",(i,X)=>`IF(${X}${rr("IDX")}=1,${rH}!${H.dette}/${DIV},0)`,NF);
-    row("IDC","Intérêts capitalisés (IDC — période de grâce/construction)",(i,X)=>`${X}${rr("FC")}*${rH}!${H.taux}*(${pRef("DETTE",i)}+${X}${rr("TIR")})`,NF);
+    const amAn=X=>`(${X}${rr("P_DET0")}*(1+${X}${rr("P_TXD")})^${X}${rr("P_NC")})/${X}${rr("P_DURD")}`;   /* annuité = (dette + IDC à la mise en service) / durée */
+    row("TIR","Tirage de dette (année 1)",(i,X)=>`IF(${X}${rr("IDX")}=1,${X}${rr("P_DET0")},0)`,NF);
+    row("IDC","Intérêts capitalisés (IDC — période de grâce/construction)",(i,X)=>`${X}${rr("FC")}*${X}${rr("P_TXD")}*(${pRef("DETTE",i)}+${X}${rr("TIR")})`,NF);
     row("IDCTOT","   IDC cumulés (à amortir dès la mise en service)",(i,X)=>`${pRef("IDCTOT",i)}+${X}${rr("IDC")}`,NF);
-    row("REMB","Remboursement du capital (dès l'exploitation)",(i,X)=>`IF(${X}${rr("FO")}=1,MIN(${amAn},${pRef("DETTE",i)}+${X}${rr("TIR")}+${X}${rr("IDC")}),0)`,NF);
+    row("REMB","Remboursement du capital (dès l'exploitation)",(i,X)=>`IF(${X}${rr("FO")}=1,MIN(${amAn(X)},${pRef("DETTE",i)}+${X}${rr("TIR")}+${X}${rr("IDC")}),0)`,NF);
     row("DETTE","Dette financière — solde de clôture",(i,X)=>`${pRef("DETTE",i)}+${X}${rr("TIR")}+${X}${rr("IDC")}-${X}${rr("REMB")}`,NF,true);
-    row("INT","Intérêts sur emprunt (exploitation)",(i,X)=>`${X}${rr("FO")}*${rH}!${H.taux}*(${pRef("DETTE",i)}+${X}${rr("DETTE")})/2`,NF);
-    row("INTCT","Intérêts du découvert (ligne court terme)",(i,X)=>`${rH}!${H.dec}*${pRef("LCT",i)}`,NF);
+    row("INT","Intérêts sur emprunt (exploitation)",(i,X)=>`${X}${rr("FO")}*${X}${rr("P_TXD")}*(${pRef("DETTE",i)}+${X}${rr("DETTE")})/2`,NF);
+    row("INTCT","Intérêts du découvert (ligne court terme)",(i,X)=>`${X}${rr("P_DEC")}*${pRef("LCT",i)}`,NF);
 
     /* ---- COMPTE DE RÉSULTAT : cascade EBIT → résultat net ---- */
     sec2("COMPTE DE RÉSULTAT — cascade");
@@ -6752,22 +6773,22 @@ async function exporterExcelModele(){
     row("EBT","Résultat avant impôt",(i,X)=>`${X}${rr("EBIT")}+${X}${rr("RFIN")}`,NF,true);
     row("USE","   Déficit antérieur imputé",(i,X)=>`MIN(${pRef("CARRY",i)},MAX(0,${X}${rr("EBT")}))`,NF);
     row("CARRY","   Déficits reportables (stock)",(i,X)=>`${pRef("CARRY",i)}-${X}${rr("USE")}+MAX(0,-${X}${rr("EBT")})`,NF);
-    row("IS","Impôt sur les sociétés (max IS / IMF)",(i,X)=>`-MAX(${rH}!${H.is}*(MAX(0,${X}${rr("EBT")})-${X}${rr("USE")}),${rH}!${H.imf}*${X}${rr("CA")})`,NF);
+    row("IS","Impôt sur les sociétés (max IS / IMF)",(i,X)=>`-MAX(${X}${rr("P_IS")}*(MAX(0,${X}${rr("EBT")})-${X}${rr("USE")}),${X}${rr("P_IMF")}*${X}${rr("CA")})`,NF);
     row("RN","Résultat net",(i,X)=>`${X}${rr("EBT")}+${X}${rr("IS")}`,NF,true);
 
     /* ---- BESOIN EN FONDS DE ROULEMENT ---- */
     sec2("BESOIN EN FONDS DE ROULEMENT");
-    row("CLI","Créances clients (CA TTC × DSO)",(i,X)=>`${X}${rr("FO")}*${X}${rr("CA")}*(1+${rH}!${H.tva})*(${rH}!${H.dso}*${FJOURS})/360`,NF);
-    row("STK","Stocks (coûts directs × DIO)",(i,X)=>`${X}${rr("FO")}*(-${X}${rr("CD")})*(${rH}!${H.dio}*${FJOURS})/360`,NF);
-    row("FRN","Dettes fournisseurs (hors personnel, TTC × DPO)",(i,X)=>`-${X}${rr("FO")}*(-${X}${rr("CD")}-${X}${rr("FGT")}+${X}${rr("PERS")})*(1+${rH}!${H.tva})*(${rH}!${H.dpo}*${FJOURS})/360`,NF);
+    row("CLI","Créances clients (CA TTC × DSO)",(i,X)=>`${X}${rr("FO")}*${X}${rr("CA")}*(1+${X}${rr("P_TVA")})*(${X}${rr("P_DSO")}*${X}${rr("P_FJOURS")})/360`,NF);
+    row("STK","Stocks (coûts directs × DIO)",(i,X)=>`${X}${rr("FO")}*(-${X}${rr("CD")})*(${X}${rr("P_DIO")}*${X}${rr("P_FJOURS")})/360`,NF);
+    row("FRN","Dettes fournisseurs (hors personnel, TTC × DPO)",(i,X)=>`-${X}${rr("FO")}*(-${X}${rr("CD")}-${X}${rr("FGT")}+${X}${rr("PERS")})*(1+${X}${rr("P_TVA")})*(${X}${rr("P_DPO")}*${X}${rr("P_FJOURS")})/360`,NF);
     row("BFR","Besoin en fonds de roulement",(i,X)=>`${X}${rr("CLI")}+${X}${rr("STK")}+${X}${rr("FRN")}`,NF,true);
 
     /* ---- BILAN — bouclage par la trésorerie (actif net = capitaux propres) ---- */
     sec2("BILAN — bouclage (actif net = capitaux propres)");
-    row("CAPSOC","   Capital social",(i,X)=>`${rH}!${H.capital}/${DIV}`,NF);
-    row("SUBVR","   Subventions d'investissement",(i,X)=>`${rH}!${H.subv}/${DIV}`,NF);
-    row("RANR","   Report à nouveau & résultats antérieurs",(i,X)=>`${X}${rr("CP")}-${rH}!${H.capital}/${DIV}-${rH}!${H.subv}/${DIV}-${X}${rr("RN")}`,NF);
-    row("CP","Capitaux propres",(i,X)=>`${pRef("CP",i)}+${X}${rr("RN")}+IF(${X}${rr("IDX")}=1,(${rH}!${H.capital}+${rH}!${H.subv})/${DIV},0)`,NF,true);
+    row("CAPSOC","   Capital social",(i,X)=>`${X}${rr("P_CAP")}`,NF);
+    row("SUBVR","   Subventions d'investissement",(i,X)=>`${X}${rr("P_SUBV")}`,NF);
+    row("RANR","   Report à nouveau & résultats antérieurs",(i,X)=>`${X}${rr("CP")}-${X}${rr("P_CAP")}-${X}${rr("P_SUBV")}-${X}${rr("RN")}`,NF);
+    row("CP","Capitaux propres",(i,X)=>`${pRef("CP",i)}+${X}${rr("RN")}+IF(${X}${rr("IDX")}=1,${X}${rr("P_CAP")}+${X}${rr("P_SUBV")},0)`,NF,true);
     row("TRES","Trésorerie nette (bouclage du bilan)",(i,X)=>`${X}${rr("CP")}+${X}${rr("DETTE")}-${X}${rr("IMN")}-${X}${rr("BFR")}`,NF,true);
     row("LCT","   Découvert (si trésorerie négative)",(i,X)=>`MAX(0,-${X}${rr("TRES")})`,NF);
     row("DETTEN","   Dettes financières (−, présentation actif net)",(i,X)=>`-${X}${rr("DETTE")}`,NF);
@@ -6783,8 +6804,8 @@ async function exporterExcelModele(){
     row("VFR","   Variation des dettes d'exploitation",(i,X)=>`-(${X}${rr("FRN")}-${pRef("FRN",i)})`,NF);
     row("ZB","Flux de trésorerie opérationnels",(i,X)=>`${X}${rr("FA")}+${X}${rr("VCR")}+${X}${rr("VST")}+${X}${rr("VFR")}`,NF,true);
     row("ZC","Flux d'investissement",(i,X)=>`-${X}${rr("CAPEX")}`,NF,true);
-    row("FK","   Augmentation de capital",(i,X)=>`IF(${X}${rr("IDX")}=1,${rH}!${H.capital}/${DIV},0)`,NF);
-    row("FL","   Subvention",(i,X)=>`IF(${X}${rr("IDX")}=1,${rH}!${H.subv}/${DIV},0)`,NF);
+    row("FK","   Augmentation de capital",(i,X)=>`IF(${X}${rr("IDX")}=1,${X}${rr("P_CAP")},0)`,NF);
+    row("FL","   Subvention",(i,X)=>`IF(${X}${rr("IDX")}=1,${X}${rr("P_SUBV")},0)`,NF);
     row("ZFIN","Flux de financement",(i,X)=>`${X}${rr("FK")}+${X}${rr("FL")}+${X}${rr("TIR")}-${X}${rr("REMB")}`,NF,true);
     row("ZF","Variation nette de trésorerie",(i,X)=>`${X}${rr("ZB")}+${X}${rr("ZC")}+${X}${rr("ZFIN")}`,NF,true);
     row("ZG","Trésorerie à la clôture",(i,X)=>`${X}${rr("ZA")}+${X}${rr("ZF")}`,NF,true);
@@ -6792,7 +6813,7 @@ async function exporterExcelModele(){
 
     /* ---- POSTES DE DÉTAIL (alimentent les états détaillés & la valorisation) ---- */
     sec2("POSTES DE DÉTAIL (états & valorisation)");
-    row("FCFF","Flux de trésorerie disponible (FCFF)",(i,X)=>`${X}${rr("EBIT")}*(1-IF(${X}${rr("EBIT")}>0,${rH}!${H.is},0))+${X}${rr("DOT")}-(${X}${rr("BFR")}-${pRef("BFR",i)})-${X}${rr("CAPEX")}`,NF);
+    row("FCFF","Flux de trésorerie disponible (FCFF)",(i,X)=>`${X}${rr("EBIT")}*(1-IF(${X}${rr("EBIT")}>0,${X}${rr("P_IS")},0))+${X}${rr("DOT")}-(${X}${rr("BFR")}-${pRef("BFR",i)})-${X}${rr("CAPEX")}`,NF);
     row("INTP","Intérêts sur emprunts (charge)",(i,X)=>`-${X}${rr("INT")}`,NF);
     row("DECP","Intérêts sur découvert (charge)",(i,X)=>`-${X}${rr("INTCT")}`,NF);
     row("AMCN","Amortissements cumulés (−)",(i,X)=>`-${X}${rr("AMC")}`,NF);
