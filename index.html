@@ -6528,6 +6528,7 @@ async function exporterExcelModele(){
     H.lignes.forEach((L,k)=>{ idToK[L.id||("L"+k)]=k;
       /* AUCUN calcul ici : soit valeur an 1 (base) + croissance %/an, soit valeurs saisies par année.
          L'évolution (base × croissance) est faite dans la feuille Modèle. */
+      if(k>0)hr++;   /* ligne vide entre les blocs produits */
       hr++;wsH.getCell(hr,2).value="Ligne "+(k+1)+" — "+(L.name||"Revenus");wsH.getCell(hr,2).font={italic:true,color:{argb:"FF224289"}};
       const inds=[];
       (L.rows||[]).forEach((r,j)=>{
@@ -6549,6 +6550,7 @@ async function exporterExcelModele(){
     if(H.coutInd.length){ sec("COÛTS DIRECTS — % du CA · coût unitaire × volume · inducteurs");
       H.coutInd.forEach((cl,k)=>{
         const m=(cl.m||"ind"), scope=(cl.scope||"all"), info={m:m,scope:scope,kLine:idToK[scope]};
+        if(k>0)hr++;   /* ligne vide entre les blocs de coûts */
         wsH.getCell(++hr,2).value="Coût "+(k+1)+" — "+(cl.name||"Coût")+(m==="ind"?"":(m==="unit"?" (coût unitaire × volume)":(scope==="all"?" (% du CA total)":" (% d'une ligne)")));wsH.getCell(hr,2).font={italic:true,color:{argb:"FF224289"}};
         if(m==="pct"){ info.pct=one("   Coûts directs (% du CA)",((+cl.pct||0)/100),PCT2); }
         else if(m==="unit"){ info.val=one("   Coût direct unitaire (FCFA / unité)",(+cl.val||0),QF); }
@@ -6575,6 +6577,7 @@ async function exporterExcelModele(){
     (M.chargesFixes||[]).forEach(c=>{ if(c.personnel)persList.push({poste:(c.name||"Personnel"),effectif:1,salaireMensuel:(+c.montant|| +c.val||0)/12,g:(+c.g||0)}); });
     if(persList.length){ sec("CHARGES DE PERSONNEL — par poste (effectif × salaire mensuel × 12)");
       persList.forEach((pp,k)=>{
+        if(k>0)hr++;   /* ligne vide entre les postes */
         wsH.getCell(++hr,2).value="Poste "+(k+1)+" — "+(pp.poste||"Personnel");wsH.getCell(hr,2).font={italic:true,color:{argb:"FF224289"}};
         const eff=one("   Effectif",(+pp.effectif||0),QF);
         const sal=one("   Salaire mensuel (FCFA)",(+pp.salaireMensuel||0),QF);
@@ -6631,6 +6634,10 @@ async function exporterExcelModele(){
     const row=(code,lib,ff,fmt,st)=>{CROWS.push([code,lib,ff,fmt||NF,st,false,false]);};
     /* en-tête de section = bandeau ; 2 lignes vides avant chaque bloc (sauf le 1er) pour bien séparer */
     const sec2=(titre)=>{ if(!mSecFirst){CROWS.push(["_B"+secN+"a","",null,NF,false,false,true]);CROWS.push(["_B"+secN+"b","",null,NF,false,false,true]);} mSecFirst=false; CROWS.push(["_S"+(secN++),titre,null,NF,false,true,false]);};
+    /* séparation à l'intérieur d'une section : ligne vide entre blocs / sous-titre de bloc (produit, groupe de charges) */
+    let vN=0;
+    const blank=()=>CROWS.push(["_V"+(vN++),"",null,NF,false,false,true]);
+    const sst=t=>CROWS.push(["_T"+(vN++),t,null,NF,false,"sub",false]);
     const rr=code=>R[code];                 /* n° de ligne */
     const pRef=(code,i)=>i>0?(CL(i-1)+rr(code)):"0";
     const OI=(X)=>`MAX(1,${X}${rr("IDX")}-${rH}!${H.nc})`;   /* indice d'année d'exploitation (1-based) */
@@ -6643,14 +6650,17 @@ async function exporterExcelModele(){
     /* ---- CHIFFRE D'AFFAIRES : par produit, volume × prix unitaire, puis total ---- */
     sec2("CHIFFRE D'AFFAIRES — volume × prix unitaire par produit");
     H.lignes.forEach((L,k)=>{ const nm=(L.name||("Ligne "+(k+1))), inds=H.rev[k].inds, pr=H.rev[k].prix;
+      if(k>0)blank();
+      sst(nm);
       inds.forEach((ind,j)=>{ const lbl="   "+((ind.op==='d')?"÷ ":"× ")+ind.name;
         if(ind.mode==='grow') row("IND"+k+"_"+j,lbl,(i,X)=>`${rH}!${ind.b}*(1+${rH}!${ind.g})^(${OI(X)}-1)`,ind.pct?RF:QF);
         else row("IND"+k+"_"+j,lbl,(i,X)=>`INDEX(${rng(ind.row)},${OI(X)})`,ind.pct?RF:QF); });
-      row("VOL"+k,"   = Volume — "+nm,(i,X)=>{ let e=""; inds.forEach((ind,j)=>{const ref=`${X}${rr("IND"+k+"_"+j)}`; if(j===0)e=(ind.op==='d')?`1/${ref}`:ref; else e+=(ind.op==='d')?`/${ref}`:`*${ref}`;}); return `IFERROR(${X}${rr("FO")}*(${e||"0"})*${FCA},0)`; },QF);
-      if(pr.mode==='grow') row("PRIX"+k,"   × Prix unitaire — "+nm+" (FCFA)",(i,X)=>`${rH}!${pr.b}*(1+${rH}!${pr.g})^(${OI(X)}-1)`,QF);
-      else row("PRIX"+k,"   × Prix unitaire — "+nm+" (FCFA)",(i,X)=>`INDEX(${rng(pr.row)},${OI(X)})`,QF);
-      row("CAL"+k,"   = Chiffre d'affaires — "+nm,(i,X)=>`${X}${rr("VOL"+k)}*${X}${rr("PRIX"+k)}/${DIV}`,NF);
+      row("VOL"+k,"   = Volume",(i,X)=>{ let e=""; inds.forEach((ind,j)=>{const ref=`${X}${rr("IND"+k+"_"+j)}`; if(j===0)e=(ind.op==='d')?`1/${ref}`:ref; else e+=(ind.op==='d')?`/${ref}`:`*${ref}`;}); return `IFERROR(${X}${rr("FO")}*(${e||"0"})*${FCA},0)`; },QF);
+      if(pr.mode==='grow') row("PRIX"+k,"   × Prix unitaire (FCFA)",(i,X)=>`${rH}!${pr.b}*(1+${rH}!${pr.g})^(${OI(X)}-1)`,QF);
+      else row("PRIX"+k,"   × Prix unitaire (FCFA)",(i,X)=>`INDEX(${rng(pr.row)},${OI(X)})`,QF);
+      row("CAL"+k,"   = Chiffre d'affaires",(i,X)=>`${X}${rr("VOL"+k)}*${X}${rr("PRIX"+k)}/${DIV}`,NF);
     });
+    blank();
     row("CA","Chiffre d'affaires total",(i,X)=>H.lignes.length?H.lignes.map((_,k)=>`${X}${rr("CAL"+k)}`).join("+"):"0",NF,true);
 
     /* ---- COÛTS DIRECTS : % du CA (ligne/ensemble), coût unitaire × volume, ou inducteurs ---- */
@@ -6658,31 +6668,35 @@ async function exporterExcelModele(){
     (H.coutInd||[]).forEach((cl,k)=>{
       const info=H.cd[k], nom=(cl.name||("Coût "+(k+1)));
       if(info.m==="pct"){
-        const lib="   Coûts directs — "+nom+(info.scope==="all"?" (% du CA total)":" (% d'une ligne)");
+        const lib="   "+nom+(info.scope==="all"?" (% du CA total)":" (% d'une ligne)");
         if(info.scope==="all"){ row("CDI"+k,lib,(i,X)=>`-${X}${rr("FO")}*${X}${rr("CA")}*${rH}!${info.pct}*${FCOUT}`,NF); }
         else { const kk=(info.kLine!=null?info.kLine:0); row("CDI"+k,lib,(i,X)=>`-${X}${rr("FO")}*${X}${rr("CAL"+kk)}*${rH}!${info.pct}*${FCOUT}`,NF); }
       } else if(info.m==="unit"){
         const kk=(info.kLine!=null?info.kLine:0);
-        row("CDI"+k,"   Coûts directs — "+nom+" (coût unitaire × volume)",(i,X)=>`-${X}${rr("VOL"+kk)}*${rH}!${info.val}*(1+${rH}!${H.infl})^(${OI(X)}-1)*${FCOUT}/${DIV}`,NF);
+        row("CDI"+k,"   "+nom+" (coût unitaire × volume)",(i,X)=>`-${X}${rr("VOL"+kk)}*${rH}!${info.val}*(1+${rH}!${H.infl})^(${OI(X)}-1)*${FCOUT}/${DIV}`,NF);
       } else {
-        row("CDI"+k,"   Coûts directs — "+nom+" (inducteurs)",(i,X)=>{
+        row("CDI"+k,"   "+nom+" (inducteurs)",(i,X)=>{
           let e=""; (info.inds||[]).forEach((ind,j)=>{ const t=(ind.mode==='grow')?`${rH}!${ind.b}*(1+${rH}!${ind.g})^(${OI(X)}-1)`:`INDEX(${rng(ind.row)},${OI(X)})`; if(j===0)e=(ind.op==='d')?`1/(${t})`:`(${t})`; else e+=(ind.op==='d')?`/(${t})`:`*(${t})`; });
           const tx=(info.taux.mode==='grow')?`${rH}!${info.taux.b}*(1+${rH}!${info.taux.g})^(${OI(X)}-1)`:`INDEX(${rng(info.taux.row)},${OI(X)})`;
           return `-IFERROR(${X}${rr("FO")}*(${e||"0"})*(${tx})*${FCOUT},0)/${DIV}`;
         },NF);
       }
     });
+    blank();
     row("CD","Coûts directs (total)",(i,X)=>{const t=(H.coutInd||[]).map((_,k)=>`${X}${rr("CDI"+k)}`);return t.length?t.join("+"):"0";},NF,true);
     row("MB","Marge brute",(i,X)=>`${X}${rr("CA")}+${X}${rr("CD")}`,NF,true);
 
     /* ---- FRAIS GÉNÉRAUX & PERSONNEL : chaque charge (base évoluée) + personnel par poste ---- */
     sec2("FRAIS GÉNÉRAUX & CHARGES DE PERSONNEL");
+    if(H.opex.length)sst("Frais généraux");
     H.opex.forEach((o,k)=>{
-      if(o.mode==='grow') row("OPL"+k,"   Frais généraux — "+o.name,(i,X)=>`-${X}${rr("FO")}*${rH}!${o.b}/${DIV}*(1+${rH}!${o.g})^(${OI(X)}-1)`,NF);
-      else row("OPL"+k,"   Frais généraux — "+o.name,(i,X)=>`-${X}${rr("FO")}*INDEX(${rng(o.row)},${OI(X)})/${DIV}`,NF);
+      if(o.mode==='grow') row("OPL"+k,"   "+o.name,(i,X)=>`-${X}${rr("FO")}*${rH}!${o.b}/${DIV}*(1+${rH}!${o.g})^(${OI(X)}-1)`,NF);
+      else row("OPL"+k,"   "+o.name,(i,X)=>`-${X}${rr("FO")}*INDEX(${rng(o.row)},${OI(X)})/${DIV}`,NF);
     });
-    (H.persPostes||[]).forEach((pp,k)=>row("PEL"+k,"   Personnel — "+pp.name+" (effectif × salaire × 12)",(i,X)=>`-${X}${rr("FO")}*${rH}!${pp.eff}*${rH}!${pp.sal}*12*(1+${rH}!${pp.g})^(${OI(X)}-1)/${DIV}`,NF));
+    if((H.persPostes||[]).length){ blank(); sst("Charges de personnel (effectif × salaire mensuel × 12)"); }
+    (H.persPostes||[]).forEach((pp,k)=>row("PEL"+k,"   "+pp.name,(i,X)=>`-${X}${rr("FO")}*${rH}!${pp.eff}*${rH}!${pp.sal}*12*(1+${rH}!${pp.g})^(${OI(X)}-1)/${DIV}`,NF));
     row("PERS","   Charges du personnel (sous-total)",(i,X)=>(H.persPostes||[]).length?H.persPostes.map((_,k)=>`${X}${rr("PEL"+k)}`).join("+"):"0",NF);
+    blank();
     row("FGT","Frais généraux (dont personnel) — total",(i,X)=>{const t=[...H.opex.map((_,k)=>`${X}${rr("OPL"+k)}`),((H.persPostes||[]).length?`${X}${rr("PERS")}`:null)].filter(Boolean);return t.length?t.join("+"):"0";},NF,true);
     row("EBITDA","EBITDA",(i,X)=>`${X}${rr("MB")}+${X}${rr("FGT")}`,NF,true);
 
@@ -6769,6 +6783,7 @@ async function exporterExcelModele(){
     CROWS.forEach((d,idx)=>{R[d[0]]=cr+1+idx;});
     CROWS.forEach(d=>{if(d[6])return;   /* ligne vide de séparation */
       const rn=R[d[0]];const r=wsC.getRow(rn);r.getCell(2).value=d[1];
+      if(d[5]==="sub"){ r.getCell(2).font={bold:true,italic:true,color:{argb:"FF224289"}}; return; }   /* sous-titre de bloc */
       if(d[5]){ for(let c=2;c<3+N;c++){const cc=r.getCell(c);cc.fill={type:"pattern",pattern:"solid",fgColor:{argb:"FF213768"}};cc.font={bold:true,color:{argb:"FFFFFFFF"},size:10.5};} return; }
       for(let i=0;i<N;i++){const c=r.getCell(3+i);c.value={formula:d[2](i,CL(i))};c.numFmt=d[3];}
       if(d[4]){r.font={bold:true,color:{argb:"FF172554"}};for(let c=2;c<3+N;c++)r.getCell(c).fill=FOND_TOTAL;}});
@@ -6780,6 +6795,7 @@ async function exporterExcelModele(){
       titreLiasse(ws,sousTitre);
       { const hdr=ws.addRow([null,"",...fypPh]); styliserEntete(hdr,1); hdr.getCell(2).value={formula:`${rH}!${H.unite}`}; }
       defs.forEach(d=>{
+        if(!d.length){ws.addRow([]);return;}   /* ligne vide de séparation entre sections */
         const r=ws.addRow([null,d[0]]);
         if(d[1]==null){r.getCell(2).font={bold:true,italic:true,color:{argb:"FF224289"}};return;}   /* en-tête de section */
         for(let i=0;i<N;i++){const c=r.getCell(3+i);c.value={formula:`${rC}!${CL(i)}${rr(d[1])}`};c.numFmt=d[3]||NF;}
@@ -6791,18 +6807,24 @@ async function exporterExcelModele(){
     };
     /* ---- P&L DÉTAILLÉ : chaque ligne de revenus / coûts, chaque charge dépliée, résultat financier décomposé ---- */
     const plDefs=[["Produits d'exploitation",null]];
-    H.lignes.forEach((L,k)=>plDefs.push(["   Ventes — "+(L.name||"Ligne "+(k+1)),"CAL"+k]));
+    H.lignes.forEach((L,k)=>plDefs.push(["   "+(L.name||"Ligne "+(k+1)),"CAL"+k]));
     plDefs.push(["Chiffre d'affaires","CA",1]);
-    (H.coutInd||[]).forEach((cl,k)=>plDefs.push(["   Coûts directs — "+(cl.name||"Coût "+(k+1)),"CDI"+k]));
+    if((H.coutInd||[]).length){
+      plDefs.push([]);
+      plDefs.push(["Coûts directs",null]);
+      H.coutInd.forEach((cl,k)=>plDefs.push(["   "+(cl.name||"Coût "+(k+1)),"CDI"+k]));
+    }
     plDefs.push(["Coûts directs (total)","CD"]);
     plDefs.push(["Marge brute","MB",1]);
     /* frais généraux = postes hors personnel dépliés + UNE ligne « Charges du personnel », un seul total */
     if(H.opex.length||(H.persPostes||[]).length){
+      plDefs.push([]);
       plDefs.push(["Frais généraux",null]);
       H.opex.forEach((o,k)=>plDefs.push(["   "+o.name,"OPL"+k]));
       if((H.persPostes||[]).length)plDefs.push(["   Charges du personnel","PERS"]);
       plDefs.push(["Total frais généraux","FGT"]);
     }
+    plDefs.push([]);
     plDefs.push(["EBITDA","EBITDA",1]);
     plDefs.push(["Dotations aux amortissements","DA"]);
     plDefs.push(["EBIT","EBIT",1]);
@@ -6818,15 +6840,19 @@ async function exporterExcelModele(){
     const bsDefs=[
       ["Actif immobilisé",null],
       ["   Immobilisations brutes","BRUT"],["   Amortissements cumulés","AMCN"],["Actifs immobilisés (nets)","IMN",1],
+      [],
       ["Besoin en fonds de roulement",null],
       ["   Stocks","STK"],["   Créances clients","CLI"],["   Dettes fournisseurs","FRNP"],["Besoin en fonds de roulement global","BFR",1],
+      [],
       ["Trésorerie",null],
       ["   Trésorerie active","TRA"],["   Concours bancaires courants (découvert)","DECN"],["Trésorerie nette","TRES",1],
       ["Dettes financières","DETTEN"],
       ["Actif net","AN",1],
+      [],
       ["Capitaux propres",null],
       ["   Capital social","CAPSOC"],["   Subventions d'investissement","SUBVR"],
       ["   Report à nouveau et résultats antérieurs","RANR"],["   Résultat net de l'exercice","RN"],["Capitaux propres","CP",1],
+      [],
       ["Contrôle : actif net − capitaux propres (= 0)","CTRL"]];
     feuille(nB,"Bilan prévisionnel détaillé — présentation actif net",bsDefs,
       "Actifs immobilisés (nets) + BFR + trésorerie nette − dettes financières = Actif net = Capitaux propres. La trésorerie boucle le bilan ; la ligne de contrôle doit être nulle.");
