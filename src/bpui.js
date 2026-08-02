@@ -126,6 +126,7 @@ function assurerModele(){
   return M;
 }
 function mScenario(k){assurerModele().scenario=k;sauverDossier();rendre();}
+function mDivSeuil(v){var M=assurerModele();if(String(v).trim()==='')delete M.dividendes_seuilCash;else{var x=numFR(v);if(x!==null)M.dividendes_seuilCash=x;}sauverDossier();rendre();}
 function mHNb(n){var M=assurerModele();M.nb=Math.max(3,Math.min(10,Math.round(+n)||5));
   /* les séries « par année » suivent la nouvelle durée : la dernière valeur saisie est reconduite (modifiable) */
   var comp=function(r){if(r&&r.mode==='yearly'){r.vals=r.vals||[];var d=r.vals.length?valSerie(r.vals,r.vals.length):(+r.val||0);while(r.vals.length<M.nb)r.vals.push(d);}};
@@ -383,7 +384,8 @@ function vueModele(){
     var consLigne='<div class="hyp-g"><span>Durée de construction <span class="mut">· 0 = dès l\'an 1</span></span><input class="sel" value="'+(M.dureeConstruction||0)+'" onchange="mSet(\'dureeConstruction\',this.value,1)"><span class="suf">ans</span></div>';
     var empBloc='<div class="hyp-g"><span>Emprunt — taux d\'intérêt</span><input class="sel" value="'+((e.taux||0)*100)+'" onchange="mSet(\'financement.emprunt.taux\',(numFR(this.value)||0)/100)"><span class="suf">%</span></div>'
       +'<div class="hyp-g"><span>Emprunt — durée de remboursement</span><input class="sel" value="'+(e.duree||5)+'" onchange="mSet(\'financement.emprunt.duree\',this.value,1)"><span class="suf">ans</span></div>'
-      +'<div class="hyp-g"><span>Distribution de dividendes <span class="mut">· % du résultat net N−1, si bénéficiaire</span></span><input class="sel" value="'+((M.dividendes_payout||0)*100)+'" onchange="mSet(\'dividendes_payout\',(numFR(this.value)||0)/100)"><span class="suf">%</span></div>';
+      +'<div class="hyp-g"><span>Distribution de dividendes <span class="mut">· % du résultat net N−1, si bénéficiaire</span></span><input class="sel" value="'+((M.dividendes_payout||0)*100)+'" onchange="mSet(\'dividendes_payout\',(numFR(this.value)||0)/100)"><span class="suf">%</span></div>'
+      +'<div class="hyp-g"><span>Trésorerie minimale avant distribution <span class="mut">· vide = sans contrainte</span></span><input class="sel ninm" value="'+(M.dividendes_seuilCash!=null?mAmt(M.dividendes_seuilCash):'')+'" oninput="mSep(this)" onchange="mDivSeuil(this.value)"><span class="suf">FCFA</span></div>';
     var su='<div class="card" style="background:#f6f8fc;margin-top:12px"><div class="sec-titre" style="margin-top:0">Sources & Emplois du montage</div>'
       +'<div class="mut" style="margin:-4px 0 10px">'+(Pf.dureeConstruction>0?('Construction sur '+Pf.dureeConstruction+' an(s) ; exploitation à partir de l\'année '+Pf.anneeExploit+'. Intérêts de construction (IDC) capitalisés dans la dette.'):'Pas de période de construction : investissement et exploitation dès l\'année 1.')+'</div>'
       +'<div class="row" style="gap:24px;flex-wrap:wrap;align-items:flex-start">'
@@ -779,7 +781,8 @@ function vueBPBs(P){
     {lib:"Trésorerie nette",st:"total",hist:v.TRESORERIE_NETTE[a1],proj:a=>P.bs.TRESO[a]},
     {lib:"Provisions pour risques et charges",hist:v.PROVISIONS_RC[a1],proj:a=>-P.bs.PROVISIONS[a]},
     {lib:"Dettes financières",hist:v.DETTES_FINANCIERES[a1],proj:a=>-P.bs.DETTE[a]},
-    {lib:"Actif net",st:"titre",hist:hActifNet,proj:a=>P.bs.IMMO_NET[a]+P.bs.BFR[a]+P.bs.TRESO[a]-P.bs.PROVISIONS[a]-P.bs.DETTE[a]},
+    {lib:"Comptes courants d'associés",hist:0,proj:a=>-((P.bs.CCA&&P.bs.CCA[a])||0)},
+    {lib:"Actif net",st:"titre",hist:hActifNet,proj:a=>P.bs.IMMO_NET[a]+P.bs.BFR[a]+P.bs.TRESO[a]-P.bs.PROVISIONS[a]-P.bs.DETTE[a]-((P.bs.CCA&&P.bs.CCA[a])||0)},
     /* capitaux propres décomposés comme la DD : capital/primes/subventions constants
        (pas d'augmentation de capital ni nouvelle subvention modélisée), report à nouveau
        qui accumule les résultats mis en réserve, résultat net = résultat de l'exercice projeté */
@@ -847,7 +850,7 @@ function analyseSeuilCov(P){
   const cov=a=>{
     const service=(P.dette[a].remboursement||0)+(P.dette[a].interets||0)+(P.dette[a].interetsCT||0);
     const cfads=P.pl.EBITDA[a]+P.pl.IS[a]+(P.tft[a]?P.tft[a].DBFR:0);
-    const detteFin=P.bs.DETTE[a]+(P.bs.LIGNE_CT[a]||0);
+    const detteFin=P.bs.DETTE[a]+((P.bs.CCA&&P.bs.CCA[a])||0)+(P.bs.LIGNE_CT[a]||0);
     const detteNette=detteFin-(P.bs.TRESO_ACTIVE[a]!==undefined?P.bs.TRESO_ACTIVE[a]:Math.max(0,P.bs.TRESO[a]));
     const acCirc=P.bs.STOCKS[a]+P.bs.CLIENTS[a]+P.bs.AUTRES_CREANCES[a]+(P.bs.TRESO_ACTIVE[a]||Math.max(0,P.bs.TRESO[a]));
     const paCirc=-(P.bs.FOURNISSEURS[a]+P.bs.DETTES_FISC_SOC[a]+P.bs.AUTRES_DETTES[a])+(P.bs.LIGNE_CT[a]||0);
@@ -899,7 +902,7 @@ function vueBPAnalyse(P){
   const cov=a=>{
     const service=(P.dette[a].remboursement||0)+(P.dette[a].interets||0)+(P.dette[a].interetsCT||0);
     const cfads=P.pl.EBITDA[a]+P.pl.IS[a]+(P.tft[a]?P.tft[a].DBFR:0);
-    const detteFin=P.bs.DETTE[a]+(P.bs.LIGNE_CT[a]||0);
+    const detteFin=P.bs.DETTE[a]+((P.bs.CCA&&P.bs.CCA[a])||0)+(P.bs.LIGNE_CT[a]||0);
     const detteNette=detteFin-(P.bs.TRESO_ACTIVE[a]!==undefined?P.bs.TRESO_ACTIVE[a]:Math.max(0,P.bs.TRESO[a]));
     const acCirc=P.bs.STOCKS[a]+P.bs.CLIENTS[a]+P.bs.AUTRES_CREANCES[a]+(P.bs.TRESO_ACTIVE[a]||Math.max(0,P.bs.TRESO[a]));
     const paCirc=-(P.bs.FOURNISSEURS[a]+P.bs.DETTES_FISC_SOC[a]+P.bs.AUTRES_DETTES[a])+(P.bs.LIGNE_CT[a]||0);
@@ -972,7 +975,7 @@ function dessinerBPGraphs(){
   const eb=yrs.map(a=>(pr(a)?P.pl.EBITDA[a]:v.EBITDA[a])*u.f);
   const rn=yrs.map(a=>(pr(a)?P.pl.RN[a]:v.RESULTAT_NET[a])*u.f);
   const tr=yrs.map(a=>(pr(a)?P.bs.TRESO[a]:v.TRESORERIE_NETTE[a])*u.f);
-  const det=yrs.map(a=>(pr(a)?P.bs.DETTE[a]+(P.bs.LIGNE_CT[a]||0):-v.DETTES_FINANCIERES[a])*u.f);
+  const det=yrs.map(a=>(pr(a)?P.bs.DETTE[a]+((P.bs.CCA&&P.bs.CCA[a])||0)+(P.bs.LIGNE_CT[a]||0):-v.DETTES_FINANCIERES[a])*u.f);
   const opt=t=>({responsive:true,maintainAspectRatio:false,plugins:{legend:{position:"bottom",labels:{boxWidth:12}},title:{display:false}},scales:{y:{ticks:{callback:v2=>v2.toLocaleString("fr-FR")}}}});
   const g1=document.getElementById("g_bp1");
   if(g1)charts.push(new Chart(g1,{type:"bar",data:{labels:lab,datasets:[

@@ -478,8 +478,11 @@ function projeterModele(M,scenario){
     var fournisseurs=isOp?-(Math.abs(cd)+Math.abs(opexTot))*(1+tva)*((bfrH.dpo||0)*fJours)/360:0;
     var bfr=clients+stocks+fournisseurs;
     /* --- CP & trésorerie de bouclage --- */
-    /* dividendes : payout × résultat net de l'exercice précédent, si bénéficiaire (même convention que projeterBP) */
+    /* dividendes : payout × résultat net de l'exercice précédent, si bénéficiaire (même convention que projeterBP).
+       Plancher optionnel : ne distribuer que ce que la trésorerie d'ouverture permet au-delà du minimum à conserver. */
     var div=(M.dividendes_payout>0&&rnPrec>0)?M.dividendes_payout*rnPrec:0;
+    if(div>0&&M.dividendes_seuilCash!=null&&isFinite(+M.dividendes_seuilCash))
+      div=Math.min(div,Math.max(0,tresoP-(+M.dividendes_seuilCash||0)/SC));
     cp=cp+rn-div;
     var immoNet=brut-amortCum;
     var tresoNette=cp+dette+ccaSolde+provisions-immoNet-bfr;

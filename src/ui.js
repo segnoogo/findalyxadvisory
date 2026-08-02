@@ -1881,6 +1881,7 @@ async function exporterExcelModele(){
     H.taux=one("Taux d'intérêt de la dette",(M.financement&&M.financement.emprunt&&+M.financement.emprunt.taux)||0.08,PCT2);
     H.dur=one("Durée de remboursement (ans)",(M.financement&&M.financement.emprunt&&+M.financement.emprunt.duree)||5,"0");
     H.payout=one("Distribution de dividendes (% du RN N−1, si bénéficiaire)",M.dividendes_payout||0,PCT2);
+    H.divSeuil=one("Trésorerie minimale avant distribution (FCFA — vide : sans contrainte)",M.dividendes_seuilCash!=null?M.dividendes_seuilCash:"",NF);
     sec("BESOIN EN FONDS DE ROULEMENT (jours)");
     const b=M.bfr||{};
     H.dso=one("Délai clients (DSO)",Math.round(+b.dso||0),"0");
@@ -2105,7 +2106,8 @@ async function exporterExcelModele(){
     /* ---- BILAN — bouclage par la trésorerie (actif net = capitaux propres) ---- */
     sec2("BILAN — bouclage (actif net = capitaux propres)");
     row("R_PAY","Rappel — taux de distribution (% du RN N−1)",()=>`${rH}!${H.payout}`,PCT2);
-    row("DIVX","Dividendes versés (payout × RN N−1, si bénéficiaire)",(i,X)=>`${X}${rr("R_PAY")}*MAX(0,${pRef("RN",i)})`,NF);
+    row("R_DSEU","Rappel — trésorerie minimale avant distribution (en unité, vide = sans contrainte)",(i,X)=>`IF(${rH}!${H.divSeuil}="","",${rH}!${H.divSeuil}/${X}${rr("R_DIV")})`,NF);
+    row("DIVX","Dividendes versés (payout × RN N−1, plafonné par la trésorerie disponible)",(i,X)=>`IF(${X}${rr("R_DSEU")}="",${X}${rr("R_PAY")}*MAX(0,${pRef("RN",i)}),MIN(${X}${rr("R_PAY")}*MAX(0,${pRef("RN",i)}),MAX(0,${pRef("TRES",i)}-${X}${rr("R_DSEU")})))`,NF);
     row("CAPSOC","   Capital social (rappel du montage, en unité)",(i,X)=>`${rH}!${H.capital}/${X}${rr("R_DIV")}`,NF);
     row("PRIMESR","   Primes liées au capital (rappel du montage, en unité)",(i,X)=>`${rH}!${H.primes}/${X}${rr("R_DIV")}`,NF);
     row("SUBVR","   Subventions d'investissement (rappel du montage, en unité)",(i,X)=>`${rH}!${H.subv}/${X}${rr("R_DIV")}`,NF);

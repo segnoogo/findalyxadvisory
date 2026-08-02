@@ -2696,8 +2696,11 @@ function projeterModele(M,scenario){
     var fournisseurs=isOp?-(Math.abs(cd)+Math.abs(opexTot))*(1+tva)*((bfrH.dpo||0)*fJours)/360:0;
     var bfr=clients+stocks+fournisseurs;
     /* --- CP & trésorerie de bouclage --- */
-    /* dividendes : payout × résultat net de l'exercice précédent, si bénéficiaire (même convention que projeterBP) */
+    /* dividendes : payout × résultat net de l'exercice précédent, si bénéficiaire (même convention que projeterBP).
+       Plancher optionnel : ne distribuer que ce que la trésorerie d'ouverture permet au-delà du minimum à conserver. */
     var div=(M.dividendes_payout>0&&rnPrec>0)?M.dividendes_payout*rnPrec:0;
+    if(div>0&&M.dividendes_seuilCash!=null&&isFinite(+M.dividendes_seuilCash))
+      div=Math.min(div,Math.max(0,tresoP-(+M.dividendes_seuilCash||0)/SC));
     cp=cp+rn-div;
     var immoNet=brut-amortCum;
     var tresoNette=cp+dette+ccaSolde+provisions-immoNet-bfr;
@@ -6649,6 +6652,7 @@ async function exporterExcelModele(){
     H.taux=one("Taux d'intérêt de la dette",(M.financement&&M.financement.emprunt&&+M.financement.emprunt.taux)||0.08,PCT2);
     H.dur=one("Durée de remboursement (ans)",(M.financement&&M.financement.emprunt&&+M.financement.emprunt.duree)||5,"0");
     H.payout=one("Distribution de dividendes (% du RN N−1, si bénéficiaire)",M.dividendes_payout||0,PCT2);
+    H.divSeuil=one("Trésorerie minimale avant distribution (FCFA — vide : sans contrainte)",M.dividendes_seuilCash!=null?M.dividendes_seuilCash:"",NF);
     sec("BESOIN EN FONDS DE ROULEMENT (jours)");
     const b=M.bfr||{};
     H.dso=one("Délai clients (DSO)",Math.round(+b.dso||0),"0");
@@ -6873,7 +6877,8 @@ async function exporterExcelModele(){
     /* ---- BILAN — bouclage par la trésorerie (actif net = capitaux propres) ---- */
     sec2("BILAN — bouclage (actif net = capitaux propres)");
     row("R_PAY","Rappel — taux de distribution (% du RN N−1)",()=>`${rH}!${H.payout}`,PCT2);
-    row("DIVX","Dividendes versés (payout × RN N−1, si bénéficiaire)",(i,X)=>`${X}${rr("R_PAY")}*MAX(0,${pRef("RN",i)})`,NF);
+    row("R_DSEU","Rappel — trésorerie minimale avant distribution (en unité, vide = sans contrainte)",(i,X)=>`IF(${rH}!${H.divSeuil}="","",${rH}!${H.divSeuil}/${X}${rr("R_DIV")})`,NF);
+    row("DIVX","Dividendes versés (payout × RN N−1, plafonné par la trésorerie disponible)",(i,X)=>`IF(${X}${rr("R_DSEU")}="",${X}${rr("R_PAY")}*MAX(0,${pRef("RN",i)}),MIN(${X}${rr("R_PAY")}*MAX(0,${pRef("RN",i)}),MAX(0,${pRef("TRES",i)}-${X}${rr("R_DSEU")})))`,NF);
     row("CAPSOC","   Capital social (rappel du montage, en unité)",(i,X)=>`${rH}!${H.capital}/${X}${rr("R_DIV")}`,NF);
     row("PRIMESR","   Primes liées au capital (rappel du montage, en unité)",(i,X)=>`${rH}!${H.primes}/${X}${rr("R_DIV")}`,NF);
     row("SUBVR","   Subventions d'investissement (rappel du montage, en unité)",(i,X)=>`${rH}!${H.subv}/${X}${rr("R_DIV")}`,NF);
@@ -7246,6 +7251,7 @@ function assurerModele(){
   return M;
 }
 function mScenario(k){assurerModele().scenario=k;sauverDossier();rendre();}
+function mDivSeuil(v){var M=assurerModele();if(String(v).trim()==='')delete M.dividendes_seuilCash;else{var x=numFR(v);if(x!==null)M.dividendes_seuilCash=x;}sauverDossier();rendre();}
 function mHNb(n){var M=assurerModele();M.nb=Math.max(3,Math.min(10,Math.round(+n)||5));
   /* les séries « par année » suivent la nouvelle durée : la dernière valeur saisie est reconduite (modifiable) */
   var comp=function(r){if(r&&r.mode==='yearly'){r.vals=r.vals||[];var d=r.vals.length?valSerie(r.vals,r.vals.length):(+r.val||0);while(r.vals.length<M.nb)r.vals.push(d);}};
@@ -7503,7 +7509,8 @@ function vueModele(){
     var consLigne='<div class="hyp-g"><span>Durée de construction <span class="mut">· 0 = dès l\'an 1</span></span><input class="sel" value="'+(M.dureeConstruction||0)+'" onchange="mSet(\'dureeConstruction\',this.value,1)"><span class="suf">ans</span></div>';
     var empBloc='<div class="hyp-g"><span>Emprunt — taux d\'intérêt</span><input class="sel" value="'+((e.taux||0)*100)+'" onchange="mSet(\'financement.emprunt.taux\',(numFR(this.value)||0)/100)"><span class="suf">%</span></div>'
       +'<div class="hyp-g"><span>Emprunt — durée de remboursement</span><input class="sel" value="'+(e.duree||5)+'" onchange="mSet(\'financement.emprunt.duree\',this.value,1)"><span class="suf">ans</span></div>'
-      +'<div class="hyp-g"><span>Distribution de dividendes <span class="mut">· % du résultat net N−1, si bénéficiaire</span></span><input class="sel" value="'+((M.dividendes_payout||0)*100)+'" onchange="mSet(\'dividendes_payout\',(numFR(this.value)||0)/100)"><span class="suf">%</span></div>';
+      +'<div class="hyp-g"><span>Distribution de dividendes <span class="mut">· % du résultat net N−1, si bénéficiaire</span></span><input class="sel" value="'+((M.dividendes_payout||0)*100)+'" onchange="mSet(\'dividendes_payout\',(numFR(this.value)||0)/100)"><span class="suf">%</span></div>'
+      +'<div class="hyp-g"><span>Trésorerie minimale avant distribution <span class="mut">· vide = sans contrainte</span></span><input class="sel ninm" value="'+(M.dividendes_seuilCash!=null?mAmt(M.dividendes_seuilCash):'')+'" oninput="mSep(this)" onchange="mDivSeuil(this.value)"><span class="suf">FCFA</span></div>';
     var su='<div class="card" style="background:#f6f8fc;margin-top:12px"><div class="sec-titre" style="margin-top:0">Sources & Emplois du montage</div>'
       +'<div class="mut" style="margin:-4px 0 10px">'+(Pf.dureeConstruction>0?('Construction sur '+Pf.dureeConstruction+' an(s) ; exploitation à partir de l\'année '+Pf.anneeExploit+'. Intérêts de construction (IDC) capitalisés dans la dette.'):'Pas de période de construction : investissement et exploitation dès l\'année 1.')+'</div>'
       +'<div class="row" style="gap:24px;flex-wrap:wrap;align-items:flex-start">'
@@ -7899,7 +7906,8 @@ function vueBPBs(P){
     {lib:"Trésorerie nette",st:"total",hist:v.TRESORERIE_NETTE[a1],proj:a=>P.bs.TRESO[a]},
     {lib:"Provisions pour risques et charges",hist:v.PROVISIONS_RC[a1],proj:a=>-P.bs.PROVISIONS[a]},
     {lib:"Dettes financières",hist:v.DETTES_FINANCIERES[a1],proj:a=>-P.bs.DETTE[a]},
-    {lib:"Actif net",st:"titre",hist:hActifNet,proj:a=>P.bs.IMMO_NET[a]+P.bs.BFR[a]+P.bs.TRESO[a]-P.bs.PROVISIONS[a]-P.bs.DETTE[a]},
+    {lib:"Comptes courants d'associés",hist:0,proj:a=>-((P.bs.CCA&&P.bs.CCA[a])||0)},
+    {lib:"Actif net",st:"titre",hist:hActifNet,proj:a=>P.bs.IMMO_NET[a]+P.bs.BFR[a]+P.bs.TRESO[a]-P.bs.PROVISIONS[a]-P.bs.DETTE[a]-((P.bs.CCA&&P.bs.CCA[a])||0)},
     /* capitaux propres décomposés comme la DD : capital/primes/subventions constants
        (pas d'augmentation de capital ni nouvelle subvention modélisée), report à nouveau
        qui accumule les résultats mis en réserve, résultat net = résultat de l'exercice projeté */
@@ -7967,7 +7975,7 @@ function analyseSeuilCov(P){
   const cov=a=>{
     const service=(P.dette[a].remboursement||0)+(P.dette[a].interets||0)+(P.dette[a].interetsCT||0);
     const cfads=P.pl.EBITDA[a]+P.pl.IS[a]+(P.tft[a]?P.tft[a].DBFR:0);
-    const detteFin=P.bs.DETTE[a]+(P.bs.LIGNE_CT[a]||0);
+    const detteFin=P.bs.DETTE[a]+((P.bs.CCA&&P.bs.CCA[a])||0)+(P.bs.LIGNE_CT[a]||0);
     const detteNette=detteFin-(P.bs.TRESO_ACTIVE[a]!==undefined?P.bs.TRESO_ACTIVE[a]:Math.max(0,P.bs.TRESO[a]));
     const acCirc=P.bs.STOCKS[a]+P.bs.CLIENTS[a]+P.bs.AUTRES_CREANCES[a]+(P.bs.TRESO_ACTIVE[a]||Math.max(0,P.bs.TRESO[a]));
     const paCirc=-(P.bs.FOURNISSEURS[a]+P.bs.DETTES_FISC_SOC[a]+P.bs.AUTRES_DETTES[a])+(P.bs.LIGNE_CT[a]||0);
@@ -8019,7 +8027,7 @@ function vueBPAnalyse(P){
   const cov=a=>{
     const service=(P.dette[a].remboursement||0)+(P.dette[a].interets||0)+(P.dette[a].interetsCT||0);
     const cfads=P.pl.EBITDA[a]+P.pl.IS[a]+(P.tft[a]?P.tft[a].DBFR:0);
-    const detteFin=P.bs.DETTE[a]+(P.bs.LIGNE_CT[a]||0);
+    const detteFin=P.bs.DETTE[a]+((P.bs.CCA&&P.bs.CCA[a])||0)+(P.bs.LIGNE_CT[a]||0);
     const detteNette=detteFin-(P.bs.TRESO_ACTIVE[a]!==undefined?P.bs.TRESO_ACTIVE[a]:Math.max(0,P.bs.TRESO[a]));
     const acCirc=P.bs.STOCKS[a]+P.bs.CLIENTS[a]+P.bs.AUTRES_CREANCES[a]+(P.bs.TRESO_ACTIVE[a]||Math.max(0,P.bs.TRESO[a]));
     const paCirc=-(P.bs.FOURNISSEURS[a]+P.bs.DETTES_FISC_SOC[a]+P.bs.AUTRES_DETTES[a])+(P.bs.LIGNE_CT[a]||0);
@@ -8092,7 +8100,7 @@ function dessinerBPGraphs(){
   const eb=yrs.map(a=>(pr(a)?P.pl.EBITDA[a]:v.EBITDA[a])*u.f);
   const rn=yrs.map(a=>(pr(a)?P.pl.RN[a]:v.RESULTAT_NET[a])*u.f);
   const tr=yrs.map(a=>(pr(a)?P.bs.TRESO[a]:v.TRESORERIE_NETTE[a])*u.f);
-  const det=yrs.map(a=>(pr(a)?P.bs.DETTE[a]+(P.bs.LIGNE_CT[a]||0):-v.DETTES_FINANCIERES[a])*u.f);
+  const det=yrs.map(a=>(pr(a)?P.bs.DETTE[a]+((P.bs.CCA&&P.bs.CCA[a])||0)+(P.bs.LIGNE_CT[a]||0):-v.DETTES_FINANCIERES[a])*u.f);
   const opt=t=>({responsive:true,maintainAspectRatio:false,plugins:{legend:{position:"bottom",labels:{boxWidth:12}},title:{display:false}},scales:{y:{ticks:{callback:v2=>v2.toLocaleString("fr-FR")}}}});
   const g1=document.getElementById("g_bp1");
   if(g1)charts.push(new Chart(g1,{type:"bar",data:{labels:lab,datasets:[
