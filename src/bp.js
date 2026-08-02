@@ -443,16 +443,18 @@ function projeterModele(M,scenario){
     /* --- IDC : intérêts pendant la construction, capitalisés dans la dette ET l'immo (immo en cours) --- */
     var idc=0;
     if(!isOp){ idc=dTaux*detteSolde; detteSolde+=idc; brut+=idc; idcTotal+=idc; }
-    /* échéancier de la dette figé à la mise en service (dette = base + IDC capitalisés) */
-    if(py===anneeExploit){ amortAnnuel=(dDuree>0?detteSolde/dDuree:detteSolde); }
+    /* échéancier de la dette figé au début du remboursement : mise en service + différé de grâce
+       éventuel (différé PARTIEL : les intérêts sont payés pendant la grâce, le capital est décalé) */
+    var dGrace=Math.max(0,Math.round((fin.emprunt&&+fin.emprunt.grace)||0));
+    if(py===anneeExploit+dGrace){ amortAnnuel=(dDuree>0?detteSolde/dDuree:detteSolde); }
     /* --- amortissements : chaque poste à partir de sa mise en service ; IDC à partir de l'exploitation --- */
     var dot=0;
     capex.forEach(function(c){ if(py>=c.mes){ var restant=c.montant-c.amorti; if(restant>0.01){ var d=Math.min(c.montant/c.duree,restant); c.amorti+=d; dot+=d; } } });
     if(isOp && idcTotal>0.01 && idcAmorti<idcTotal-0.01){ var di=Math.min(idcTotal/idcDuree, idcTotal-idcAmorti); idcAmorti+=di; dot+=di; }
     amortCum+=dot;
-    /* --- dette : remboursement à partir de l'exploitation ; en construction, IDC (pas d'intérêts payés) --- */
+    /* --- dette : remboursement à partir de l'exploitation + différé de grâce ; en construction, IDC --- */
     var soldeDebut=detteSolde, remb=0;
-    if(isOp){ remb=Math.min(amortAnnuel,detteSolde); detteSolde-=remb; }
+    if(isOp&&py>=anneeExploit+dGrace){ remb=Math.min(amortAnnuel,detteSolde); detteSolde-=remb; }
     var interets=isOp?dTaux*(soldeDebut+detteSolde)/2:0;
     var interetsCT=(M.decouvert_taux||0.12)*ligneCT;
     var dette=detteSolde;

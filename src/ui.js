@@ -1880,6 +1880,7 @@ async function exporterExcelModele(){
     H.dette=one("Dette de base (hors IDC) (FCFA)",Math.round((P.financement.dette||0)*1000),NF);
     H.taux=one("Taux d'intérêt de la dette",(M.financement&&M.financement.emprunt&&+M.financement.emprunt.taux)||0.08,PCT2);
     H.dur=one("Durée de remboursement (ans)",(M.financement&&M.financement.emprunt&&+M.financement.emprunt.duree)||5,"0");
+    H.grace=one("Différé de remboursement (ans — grâce : intérêts payés, capital décalé)",(M.financement&&M.financement.emprunt&&+M.financement.emprunt.grace)||0,"0");
     H.payout=one("Distribution de dividendes (% du RN N−1, si bénéficiaire)",M.dividendes_payout||0,PCT2);
     H.divSeuil=one("Trésorerie minimale avant distribution (FCFA — vide : sans contrainte)",M.dividendes_seuilCash!=null?M.dividendes_seuilCash:"",NF);
     sec("BESOIN EN FONDS DE ROULEMENT (jours)");
@@ -2059,13 +2060,14 @@ async function exporterExcelModele(){
     /* ---- FINANCEMENT & DETTE : tirage, IDC (période de grâce), intérêts, remboursements ---- */
     sec2("FINANCEMENT & DETTE — période de grâce en construction");
     row("R_TXD","Rappel — taux d'intérêt de la dette",()=>`${rH}!${H.taux}`,PCT2);
+    row("R_GRA","Rappel — différé de remboursement (ans)",()=>`${rH}!${H.grace}`,"0");
     row("R_DEC","Rappel — taux du découvert (ligne court terme)",()=>`${rH}!${H.dec}`,PCT2);
     row("R_DET0","Rappel — dette de base du montage (en unité)",(i,X)=>`${rH}!${H.dette}/${X}${rr("R_DIV")}`,NF);
     const amAn=X=>`(${X}${rr("R_DET0")}*(1+${X}${rr("R_TXD")})^${X}${rr("R_NC")})/${X}${rr("R_DURD")}`;   /* annuité = (dette + IDC à la mise en service) / durée */
     row("TIR","Tirage de dette (année 1)",(i,X)=>`IF(${X}${rr("IDX")}=1,${X}${rr("R_DET0")},0)`,NF);
     row("IDC","Intérêts capitalisés (IDC — période de grâce/construction)",(i,X)=>`${X}${rr("FC")}*${X}${rr("R_TXD")}*(${pRef("DETTE",i)}+${X}${rr("TIR")})`,NF);
     row("IDCTOT","   IDC cumulés (à amortir dès la mise en service)",(i,X)=>`${pRef("IDCTOT",i)}+${X}${rr("IDC")}`,NF);
-    row("REMB","Remboursement du capital (dès l'exploitation)",(i,X)=>`IF(${X}${rr("FO")}=1,MIN(${amAn(X)},${pRef("DETTE",i)}+${X}${rr("TIR")}+${X}${rr("IDC")}),0)`,NF);
+    row("REMB","Remboursement du capital (après mise en service + différé)",(i,X)=>`IF(AND(${X}${rr("FO")}=1,${X}${rr("IDX")}>=${X}${rr("R_NC")}+1+${X}${rr("R_GRA")}),MIN(${amAn(X)},${pRef("DETTE",i)}+${X}${rr("TIR")}+${X}${rr("IDC")}),0)`,NF);
     row("DETTE","Dette financière — solde de clôture",(i,X)=>`${pRef("DETTE",i)}+${X}${rr("TIR")}+${X}${rr("IDC")}-${X}${rr("REMB")}`,NF,true);
     row("INT","Intérêts sur emprunt (exploitation)",(i,X)=>`${X}${rr("FO")}*${X}${rr("R_TXD")}*(${pRef("DETTE",i)}+${X}${rr("DETTE")})/2`,NF);
     row("INTCT","Intérêts du découvert (ligne court terme)",(i,X)=>`${X}${rr("R_DEC")}*${pRef("LCT",i)}`,NF);

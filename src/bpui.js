@@ -384,6 +384,7 @@ function vueModele(){
     var consLigne='<div class="hyp-g"><span>Durée de construction <span class="mut">· 0 = dès l\'an 1</span></span><input class="sel" value="'+(M.dureeConstruction||0)+'" onchange="mSet(\'dureeConstruction\',this.value,1)"><span class="suf">ans</span></div>';
     var empBloc='<div class="hyp-g"><span>Emprunt — taux d\'intérêt</span><input class="sel" value="'+((e.taux||0)*100)+'" onchange="mSet(\'financement.emprunt.taux\',(numFR(this.value)||0)/100)"><span class="suf">%</span></div>'
       +'<div class="hyp-g"><span>Emprunt — durée de remboursement</span><input class="sel" value="'+(e.duree||5)+'" onchange="mSet(\'financement.emprunt.duree\',this.value,1)"><span class="suf">ans</span></div>'
+      +'<div class="hyp-g"><span>Emprunt — différé de remboursement <span class="mut">· grâce : intérêts payés, capital décalé</span></span><input class="sel" value="'+(e.grace||0)+'" onchange="mSet(\'financement.emprunt.grace\',this.value,1)"><span class="suf">ans</span></div>'
       +'<div class="hyp-g"><span>Distribution de dividendes <span class="mut">· % du résultat net N−1, si bénéficiaire</span></span><input class="sel" value="'+((M.dividendes_payout||0)*100)+'" onchange="mSet(\'dividendes_payout\',(numFR(this.value)||0)/100)"><span class="suf">%</span></div>'
       +'<div class="hyp-g"><span>Trésorerie minimale avant distribution <span class="mut">· vide = sans contrainte</span></span><input class="sel ninm" value="'+(M.dividendes_seuilCash!=null?mAmt(M.dividendes_seuilCash):'')+'" oninput="mSep(this)" onchange="mDivSeuil(this.value)"><span class="suf">FCFA</span></div>';
     var su='<div class="card" style="background:#f6f8fc;margin-top:12px"><div class="sec-titre" style="margin-top:0">Sources & Emplois du montage</div>'
@@ -720,12 +721,12 @@ function vueBPPl(P){
     if(det&&mm&&d.code==="CA"){
       /* modèle : déplier le chiffre d'affaires par ligne de revenus (ventes par produit) */
       const CAD=P.pl.CA_DETAIL||{};
-      Object.keys(CAD).forEach(c=>defs.push({lib:"Ventes — "+CAD[c].lib,st:"det",hist:0,proj:a=>CAD[c].vals[a]||0}));
+      Object.keys(CAD).forEach(c=>defs.push({lib:CAD[c].lib,st:"det",hist:0,proj:a=>CAD[c].vals[a]||0}));
     }
     if(det&&mm&&d.code==="COUTS_DIRECTS"){
       /* modèle : tous les coûts directs (unifiés dans coutsDirects) dépliés par ligne de coût */
       const CDI=P.pl.CDIND_DETAIL||{};
-      Object.keys(CDI).forEach(c=>defs.push({lib:"Coûts directs — "+CDI[c].lib,st:"det",hist:0,proj:a=>CDI[c].vals[a]||0}));
+      Object.keys(CDI).forEach(c=>defs.push({lib:CDI[c].lib,st:"det",hist:0,proj:a=>CDI[c].vals[a]||0}));
     }
     if(det&&d.code==="FRAIS_GENERAUX"){
       const OD=P.pl.OPEX_DETAIL||{}, od=(c,a)=>OD[c]?(OD[c].vals[a]||0):0;
