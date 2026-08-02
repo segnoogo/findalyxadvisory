@@ -147,6 +147,29 @@ Après toute modification d'un export (`ui.js`, `bpxl.js`, `etatsxl.js`,
   affichés positifs. Négatifs entre parenthèses à l'affichage.
 - **Langue** : le domaine est en français (noms de fonctions, variables, commentaires).
 
+### 7.1 Tableaux des rapports PowerPoint (`rpTable`)
+
+Tous les tableaux du rapport passent par `rpTable(...)` : la mise en forme est **centralisée**,
+il n'y a pas de style posé à la main dans les diapositives. Règles :
+
+| `styles[i]` | Rendu | Emploi |
+|---|---|---|
+| `groupe` | bandeau pâle, bleu, sans chiffres | intertitre de section *dans* le tableau (TFT, bilan, hypothèses) |
+| `titre` | gras bleu nuit | tête de bloc (CA, EBITDA de référence) |
+| `sous_total` | gras bleu nuit + filet **au-dessus** | « somme de ce qui précède » |
+| `total` | gras + fond très pâle + filet au-dessus | ligne conclusive (Résultat net, WACC, valeur retenue) |
+| `detail` | libellé indenté | ligne courante |
+| `pct` | italique gris | ratio |
+
+- un filet ferme la **dernière ligne** de chaque tableau (sinon une colonne teintée semble flotter) ;
+- `opts.compact` retire les lignes de *détail* vides (états financiers uniquement) ;
+- `opts.enteteClair` donne un en-tête pâle : c'est ainsi qu'un **bloc de ratios** s'accole sous un
+  état, avec les mêmes `largeurs` — les exercices tombent dans le même axe sans mélanger montants
+  et pourcentages dans une seule grille ;
+- `rpTable` renvoie le bas du bloc (tableau + note) : `rpCommentReste(...)` pose le cadre de
+  commentaires juste dessous, ce qui évite les bandes blanches au milieu des pages ;
+- négatifs **entre parenthèses** partout (montants, %, ×, jours) et décimale française.
+
 ## 8. Glossaire
 
 - **TBAGR** : *trial balance* agrégée — une ligne par compte, une colonne par exercice.

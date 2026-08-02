@@ -588,7 +588,10 @@ function vueModele(){
   } else if(SOUS_MODELE==="analyse"){ corps=vueModeleAnalyse(P);
   } else if(SOUS_MODELE==="valo"){
     try{ var Vv=valoriserBP(etatsFromModele(P),{is_taux:M.is_taux,valo:M.valo},P);
-      corps='<div class="mut" style="margin-bottom:8px">Référence : dernière année projetée (EBITDA, dette nette de clôture). Cliquez sur <b>« Modifier les hypothèses »</b> pour le build-up MEDAF (risque pays Damodaran), les multiples et la valeur terminale.</div>'+vueValoCorps(M,P,Vv);
+      /* texte aligné sur le moteur depuis la correction des dates de référence : la dette nette
+         et l'actif net sont pris à la DATE DE VALORISATION (situation d'ouverture), l'EBITDA de
+         référence est celui de la 1re année du plan — et non plus ceux de la dernière année. */
+      corps='<div class="mut" style="margin-bottom:8px">Référence : situation d\'ouverture pour la dette nette et l\'actif net, 1<sup>re</sup> année du plan pour l\'EBITDA. Cliquez sur <b>« Modifier les hypothèses »</b> pour le build-up MEDAF (risque pays Damodaran), les multiples et la valeur terminale.</div>'+vueValoCorps(M,P,Vv);
     }catch(e){ corps='<div class="mut">Valorisation indisponible ('+esc(e.message)+').</div>'; }
   }
   return '<h1>Business plan <span class="chip" style="background:#fff4e8;color:#b45608">Projet</span></h1>'

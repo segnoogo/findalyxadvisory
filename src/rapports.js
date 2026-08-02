@@ -98,30 +98,85 @@ function rpObservations(sl, x, y, w, puces){
     yy+=0.22*Math.max(1,Math.ceil(txt.length/52)+1)+0.14;
   });
 }
-function rpTable(sl, x, y, w, bande, entetes, lignes, styles, colsDelta, largeurs, taille, source, rowH){
+/* Un tableau = bandeau de titre, en-tête de colonnes, lignes typées par `styles`, note de source.
+   Règles de présentation (tenir la même grille partout, c'est ce qui rend un tableau lisible) :
+   - texte centré verticalement : sans cela une colonne teintée paraît déborder d'un cran sous la
+     dernière ligne, et les libellés flottent en haut de leur cellule ;
+   - paliers de lecture : filet fin AU-DESSUS des sous-totaux (« somme de ce qui précède »), fond
+     très pâle réservé aux lignes conclusives (`total`), filet de fermeture sous la dernière ligne
+     — sans quoi une colonne teintée semble flotter hors du tableau ;
+   - `groupe` = intertitre de section à l'intérieur du tableau (bandeau clair, sans chiffres).
+   opts : {compact} retire les lignes de DÉTAIL entièrement vides — un mur de tirets n'informe pas
+   (réservé aux états financiers : ailleurs chaque ligne compte, même à zéro) ; {enteteClair}
+   en-tête pâle au lieu du bandeau navy, pour un bloc de ratios accolé au tableau du dessus ;
+   {centre} centre les cellules chiffrées (matrices de sensibilité).
+   Renvoie l'ordonnée de bas de bloc (tableau + note), pour poser la suite sans blanc mort. */
+const RP_ST_TOTAL={titre:1,sous_total:1,total:1};
+const rpCelVide=v=>{const s=String(v==null?"":v).trim();return s===""||s==="-"||s==="–";};
+/* Retrait des lignes de détail sans information. Exposé séparément car la hauteur de ligne se
+   calcule sur le nombre de lignes RÉELLEMENT rendues, avant composition du tableau. */
+function rpFiltrer(lignes,styles){
+  const L=[],S=[];
+  lignes.forEach((lg,i)=>{
+    const st=styles[i];
+    /* un ratio « n.s. » sur toute la période ne dit rien de plus qu'une ligne absente */
+    const vide=lg.length>1&&lg.slice(1).every(c=>rpCelVide(c)||(st==="pct"&&String(c).trim()==="n.s."));
+    if((st==="detail"||st==="pct")&&vide) return;
+    L.push(lg);S.push(st);
+  });
+  for(let i=L.length-1;i>=0;i--)   /* intertitre devenu orphelin après filtrage */
+    if(S[i]==="groupe"&&(i===L.length-1||S[i+1]==="groupe")){L.splice(i,1);S.splice(i,1);}
+  return {L,S};
+}
+function rpTable(sl, x, y, w, bande, entetes, lignes, styles, colsDelta, largeurs, taille, source, rowH, opts){
+  opts=opts||{};
   taille=taille||8.5;rowH=rowH||0.24;
   if(bande) sl.addText(bande,{x:x,y:y-0.26,w:w,h:0.22,fontSize:9.5,bold:true,
     color:RP.BLEU,charSpacing:1,fontFace:"Arial"});
+  const fl=opts.compact?rpFiltrer(lignes,styles):{L:lignes,S:styles};
+  const L=fl.L,S=fl.S;
   const tot=largeurs.reduce((a,b)=>a+b,0);
   const colW=largeurs.map(l=>w*l/tot);
+  const F_ST="F6F8FB";                  /* sous-total : même fond que dans l'application */
   const rows=[];
-  rows.push(entetes.map((h,j)=>({text:String(h||" "),options:{fill:{color:RP.NAVY},
-    color:RP.BLANC,bold:true,fontSize:taille,align:j?"right":"left",fontFace:"Arial"}})));
-  lignes.forEach((lg,i)=>{
-    const st=styles[i];
+  rows.push(entetes.map((h,j)=>({text:String(h||" "),options:{
+    fill:{color:opts.enteteClair?RP.PALE:RP.NAVY},color:opts.enteteClair?RP.BLEU:RP.BLANC,
+    bold:true,fontSize:taille,align:j?"right":"left",valign:"middle",fontFace:"Arial",
+    charSpacing:opts.enteteClair?1:0}})));
+  const NUL={type:"none"}, FIL={type:"solid",color:RP.FILET,pt:0.75};
+  L.forEach((lg,i)=>{
+    const st=S[i];
+    const haut=(st==="sous_total"||st==="total")&&i>0&&S[i-1]!=="groupe";
+    const bas=(i===L.length-1);          /* filet de fermeture du tableau */
     rows.push(lg.map((v,j)=>{
-      const o={fontSize:taille,align:j?"right":"left",fontFace:"Arial",
-        fill:{color:(colsDelta&&colsDelta.has(j))?RP.PALE:RP.BLANC},color:RP.G_TITRE};
-      if(st==="titre"||st==="sous_total"){o.bold=true;o.color=RP.NAVY;}
+      const teinte=(st==="groupe")?RP.PALE:((colsDelta&&colsDelta.has(j))?RP.PALE
+        :(st==="total")?F_ST:RP.BLANC);
+      const o={fontSize:taille,align:j?(opts.centre?"center":"right"):"left",valign:"middle",
+        fontFace:"Arial",fill:{color:teinte},color:RP.G_TITRE};
+      if(RP_ST_TOTAL[st]){o.bold=true;o.color=RP.NAVY;}
+      if(st==="groupe"){o.bold=true;o.color=RP.BLEU;o.fontSize=Math.max(7,taille-0.5);o.charSpacing=1;}
       if(st==="pct"){o.italic=true;o.color=RP.G_CLAIR;}
-      return {text:(j===0&&(st==="detail"||st==="pct")?"  ":"")+String(v||" "),options:o};
+      if(haut||bas) o.border=[haut?FIL:NUL,NUL,bas?FIL:NUL,NUL];
+      return {text:(j===0&&(st==="detail"||st==="pct")?"  ":"")+String((v===null||v===undefined||v==="")?" ":v),options:o};
     }));
   });
   sl.addTable(rows,{x:x,y:y,w:w,colW:colW,border:{type:"none"},rowH:rowH,margin:0.03});
-  const fin=y+rowH*(lignes.length+1);
-  if(source) sl.addText(source,{x:x,y:fin+0.06,w:w,h:0.22,fontSize:8,italic:true,
-    color:RP.G_CLAIR,fontFace:"Arial"});
-  return fin;
+  const fin=y+rowH*(L.length+1);
+  if(!source) return fin;
+  /* hauteur réelle de la note (≈17 caractères par pouce en 8 pt) : sans cela une note longue
+     passe sous le bloc suivant */
+  const nl=Math.max(1,Math.ceil(String(source).length/Math.max(20,w*17)));
+  sl.addText(source,{x:x,y:fin+0.06,w:w,h:0.15*nl+0.08,fontSize:8,italic:true,
+    color:RP.G_CLAIR,fontFace:"Arial",valign:"top"});
+  return fin+0.16+0.15*nl;
+}
+/* Cadre de commentaires occupant TOUTE la hauteur restante sous le contenu : un tableau court ne
+   laisse plus une bande blanche au milieu de la diapositive. */
+function rpCommentReste(sl,x,y,w,yBas){
+  /* plafonné : un cadre vide de plus de 2,6" occuperait la moitié de la page */
+  const h=Math.min(2.6,Math.max(0.9,(yBas||6.72)-y));
+  rpCadreComment(sl,x,y,w,h);
+  return y+h;
 }
 function rpCartes(sl, items, y){
   y=y||1.85;
@@ -706,17 +761,28 @@ function construireBP(pptx,opts){
   const fyp=ap.map(a=>libFY(a,true));
   /* formats et ratios communs aux états financiers et à la section covenants (mêmes formules
      que l'application) — déclarés ici car les sections de ratios des trois états les utilisent */
-  const pctR=x=>(x==null||!isFinite(x))?"n.s.":Math.round(x*100)+" %";
-  const jrR=x=>(x==null||!isFinite(x))?"n.s.":Math.round(x)+" j";
-  const mltR=x=>(x==null||!isFinite(x))?"n.s.":(Math.round(x*100)/100).toLocaleString("fr-FR",{maximumFractionDigits:2})+"×";
-  const moisR=x=>(x==null||!isFinite(x))?"n.s.":(Math.round(x*10)/10).toLocaleString("fr-FR",{maximumFractionDigits:1})+" mois";
+  /* négatifs entre parenthèses comme les montants : un tableau qui mélange « (12,6) » et
+     « -42 % » se lit deux fois */
+  const negP=(s,x)=>x<0?"("+s+")":s;
+  const pctR=x=>(x==null||!isFinite(x))?"n.s.":negP(Math.round(Math.abs(x)*100)+" %",x);
+  const jrR=x=>(x==null||!isFinite(x))?"n.s.":negP(Math.round(Math.abs(x))+" j",x);
+  const mltR=x=>(x==null||!isFinite(x))?"n.s.":negP((Math.round(Math.abs(x)*100)/100).toLocaleString("fr-FR",{maximumFractionDigits:2})+"×",x);
+  const moisR=x=>(x==null||!isFinite(x))?"n.s.":negP((Math.round(Math.abs(x)*10)/10).toLocaleString("fr-FR",{maximumFractionDigits:1})+" mois",x);
   const rt=(num,den)=>(den&&isFinite(num/den))?num/den:null;
-  /* TCAM de la période affichée (même calcul que l'application) ; « n.s. » si la base n'est pas
-     strictement positive — un taux de croissance depuis une perte n'a pas de sens */
-  const tcamR=vals=>(typeof cagrCell==="function")?cagrCell(vals,rpPct):"";
+  /* TCAM de la période affichée (même calcul que l'application). Cellule VIDE quand le taux n'a
+     pas de sens (bornes de signes opposés, base nulle) : une colonne de « n.s. » est du bruit ;
+     la note du tableau dit à quelle condition le taux est calculé. */
+  const tcamR=vals=>{const s=(typeof cagrCell==="function")?cagrCell(vals,rpPct):"";
+    return (s==="n.s."?"":s);};
+  /* colonne TCAM affichée seulement si elle porte vraiment de l'information : sur un tableau de
+     flux, deux taux calculables sur quinze lignes ne valent pas une colonne */
+  const tcamUtile=lg=>lg.filter(r=>String(r[r.length-1]||"").trim()).length>=Math.max(3,Math.ceil(lg.length/4));
   /* TVA du modèle : le DSO s'apprécie sur le CA facturé — HT si l'activité est exonérée */
   const tvaR=(hyp&&hyp.tvaExonere)?0:((hyp&&hyp.tva!=null)?+hyp.tva:0.18);
   const rhFit=n=>Math.min(0.24,4.95/(n+1));           /* hauteur de ligne : tient sous le pied de page */
+  /* état + bloc de ratios accolé : hauteur de ligne commune aux deux tableaux (colonnes calées),
+     calculée pour que l'ensemble — en-têtes, intervalle et note comprises — tienne sur la page */
+  const rhDuo=n=>Math.min(0.24,4.5/Math.max(1,n));
   const trAct=a=>(proj.bs.TRESO_ACTIVE[a]!==undefined?proj.bs.TRESO_ACTIVE[a]:Math.max(0,proj.bs.TRESO[a]));
   const actifT=a=>proj.bs.IMMO_NET[a]+proj.bs.STOCKS[a]+proj.bs.CLIENTS[a]+proj.bs.AUTRES_CREANCES[a]+trAct(a);
   const cov=a=>{
@@ -767,16 +833,18 @@ function construireBP(pptx,opts){
     return mm?[lib,...ap.map(a=>rpFmt(proj.pl[c][a]))]:[lib,rpFmt(v[ch][a1]),...ap.map(a=>rpFmt(proj.pl[c][a]))];
   });
   trj.push(mm?["Trésorerie nette",...ap.map(a=>rpFmt(proj.bs.TRESO_NETTE[a]))]:["Trésorerie nette",rpFmt(v.TRESORERIE_NETTE[a1]),...ap.map(a=>rpFmt(proj.bs.TRESO_NETTE[a]))]);
-  rpTable(sl,0.55,3.35,6.9,B.societe.toUpperCase()+" - Trajectoire",
+  const finTr=rpTable(sl,0.55,3.35,6.9,B.societe.toUpperCase()+" - Trajectoire",
     mm?[rpLib(),...fyp]:[rpLib(),fy[fy.length-1]+" (réel)",...fyp],trj,
-    ["titre","sous_total","sous_total","sous_total"],new Set(),
-    [2.6,...Array((mm?0:1)+ap.length).fill(1.15)],8.5,
-    "Source : projections Findalyx Advisory (hypothèses modifiables dans l'application)");
+    ["titre","total","sous_total","sous_total"],new Set(),
+    [2.6,...Array((mm?0:1)+ap.length).fill(1.15)],9,
+    "Source : projections Findalyx Advisory (hypothèses modifiables dans l'application)",0.28);
   rpColonnes(sl,7.65,3.35,5.15,2.1,"("+rpLib()+")",mm?[...fyp]:[fy[fy.length-1],...fyp],[
     {name:"CA",values:mm?ap.map(a=>proj.pl.CA[a]):[v.CA[a1],...ap.map(a=>proj.pl.CA[a])],color:"172554"},
     {name:"EBITDA",values:mm?ap.map(a=>proj.pl.EBITDA[a]):[v.EBITDA[a1],...ap.map(a=>proj.pl.EBITDA[a])],color:"2E5AAC"},
     {name:"RN",values:mm?ap.map(a=>proj.pl.RN[a]):[v.RESULTAT_NET[a1],...ap.map(a=>proj.pl.RN[a])],color:"8FAADC"}]);
-  rpCadreComment(sl,7.65,5.55,5.15,1.3);
+  /* le cadre de commentaires prend la place restée vide SOUS le tableau (colonne de gauche) :
+     le graphique ferme la colonne de droite */
+  rpCommentReste(sl,0.55,finTr+0.2,6.9);
   rpPied(sl,mention,++page);
   /* rapport combiné : la synthèse de VALEUR s'insère ici, dans la même section « Note de
      synthèse » que le résumé du plan — un seul document, pas deux rapports accolés. */
@@ -796,9 +864,12 @@ function construireBP(pptx,opts){
   rpTitre(sl,"Hypothèses opérationnelles et financières");
   rpAssertion(sl,mm?"Le modèle est piloté par des inducteurs d'activité (volumes × prix) ; toutes les hypothèses sont modifiables dans l'application.":"Les valeurs par défaut sont dérivées de l'historique "+fy[0]+" – "+fy[fy.length-1]+".");
   const lignesH=[],stylesH=[],notesH=[];
-  const pcH=x=>(x*100).toFixed(1).replace(".0","")+" %";
-  const gH=(t,items)=>{lignesH.push([t,""]);stylesH.push("sous_total");
-    items.forEach(([l,x])=>{lignesH.push([l,x]);stylesH.push("detail");});};
+  const pcH=x=>(x*100).toFixed(1).replace(".0","").replace(".",",")+" %";   /* décimale française */
+  const gH=(t,items)=>{lignesH.push([t,""]);stylesH.push("groupe");
+    items.filter(Boolean).forEach(([l,x])=>{lignesH.push([l,x]);stylesH.push("detail");});};
+  /* montant nul = ligne absente : « Primes liées au capital — MFCFA » n'apprend rien au lecteur */
+  const mtH=x=>rpFmt(x)+" "+rpLib();
+  const nzH=(l,x)=>(Math.abs(+x||0)>0.5)?[l,mtH(x)]:null;
   if(mm){
     const Pf=proj.financement, b=hyp.bfr||{};
     /* volumes et prix RÉELS plutôt que « volume × prix » : le lecteur doit voir les hypothèses,
@@ -822,13 +893,13 @@ function construireBP(pptx,opts){
       ["Délais clients / stocks / fournisseurs",Math.round(b.dso||0)+" / "+Math.round(b.dio||0)+" / "+Math.round(b.dpo||0)+" j"],
       ["Taux d'IS",pcH(hyp.is_taux||0.30)]]);
     gH("Investissement & financement",[
-      ["Durée de construction",(Pf.dureeConstruction||0)+" an(s)"],
-      ["Investissements (jusqu'à la mise en service)",rpFmt(Pf.capexFinance)+" "+rpLib()],
-      ["Financement — capital social",rpFmt(Pf.capital)+" "+rpLib()],
-      ["Financement — primes liées au capital",rpFmt(Pf.primes||0)+" "+rpLib()],
-      ["Financement — comptes courants d'associés",rpFmt(Pf.cca||0)+" "+rpLib()+((Pf.cca&&Pf.ccaTaux)?(" à "+pcH(Pf.ccaTaux)):"")],
-      ["Financement — dette bancaire",rpFmt(Pf.dette)+" "+rpLib()],
-      ["Intérêts de construction capitalisés (IDC)",rpFmt(Pf.idc)+" "+rpLib()]]);
+      (Pf.dureeConstruction?["Durée de construction",Pf.dureeConstruction+" an(s)"]:null),
+      ["Investissements (jusqu'à la mise en service)",mtH(Pf.capexFinance)],
+      ["Financement — capital social",mtH(Pf.capital)],
+      nzH("Financement — primes liées au capital",Pf.primes),
+      (Math.abs(+Pf.cca||0)>0.5?["Financement — comptes courants d'associés",mtH(Pf.cca)+(Pf.ccaTaux?(" à "+pcH(Pf.ccaTaux)):"")]:null),
+      nzH("Financement — dette bancaire",Pf.dette),
+      nzH("Intérêts de construction capitalisés (IDC)",Pf.idc)]);
     /* situation d'ouverture : chiffres dans le tableau, réserves en note sous le tableau
        (un texte long dans une cellule s'enroule et fait déborder la diapositive) */
     { const O=Pf.ouverture||{};
@@ -890,13 +961,15 @@ function construireBP(pptx,opts){
   pages.forEach((pg,pi)=>{
     if(pi>0){ sl=pptx.addSlide(); rpEnTete(sl,B.societe,"Hypothèses");
       rpTitre(sl,"Hypothèses opérationnelles et financières (suite)"); }
-    rpTable(sl,0.55,1.6,7.6,B.societe.toUpperCase()+" - Hypothèses"+(pages.length>1?(" ("+(pi+1)+"/"+pages.length+")"):""),
-      ["Hypothèse","Valeur"],pg.l,pg.s,new Set(),[5.2,1.4],8);
+    /* tableau resserré (le libellé et sa valeur ne sont plus séparés par 3 pouces de blanc) et
+       cadre de commentaires élargi d'autant */
+    rpTable(sl,0.55,1.6,6.9,B.societe.toUpperCase()+" - Hypothèses"+(pages.length>1?(" ("+(pi+1)+"/"+pages.length+")"):""),
+      ["Hypothèse","Valeur"],pg.l,pg.s,new Set(),[4.6,2.0],8.5);
     /* réserves méthodologiques : sous le cadre de commentaires, sur la dernière page */
     if(pi===pages.length-1&&notesH.length)
-      sl.addText(notesH.join(" "),{x:8.35,y:6.05,w:4.45,h:0.85,fontSize:7.5,italic:true,
+      sl.addText(notesH.join(" "),{x:7.65,y:6.05,w:5.13,h:0.85,fontSize:7.5,italic:true,
         color:RP.G_CLAIR,fontFace:"Arial",valign:"top"});
-    rpCadreComment(sl,8.35,1.6,4.45,(pi===pages.length-1&&notesH.length)?4.3:5.25);
+    rpCadreComment(sl,7.65,1.6,5.13,(pi===pages.length-1&&notesH.length)?4.3:5.25);
     rpPied(sl,mention,++page);
   });
   /* projections */
@@ -910,9 +983,9 @@ function construireBP(pptx,opts){
   const codesP=[["CA","Chiffre d'affaires","titre"],["ACHATS","Coûts directs","sous_total"],
     ["MARGE_BRUTE","Marge brute","sous_total"],["AUTRES_PRODUITS","Autres produits","detail"],
     ["FRAIS_GENERAUX","Frais généraux","sous_total"],
-    ["EBITDA","EBITDA","sous_total"],["DOTATIONS","Dotations et reprises","detail"],
-    ["EBIT","EBIT","sous_total"],["RESULTAT_FIN","Résultat financier","sous_total"],
-    ["EBT","Résultat avant impôt","sous_total"],["IS","Impôt sur les sociétés","detail"],["RN","Résultat net","sous_total"]];
+    ["EBITDA","EBITDA","total"],["DOTATIONS","Dotations et reprises","detail"],
+    ["EBIT","EBIT","sous_total"],["RESULTAT_FIN","Résultat financier","detail"],
+    ["EBT","Résultat avant impôt","sous_total"],["IS","Impôt sur les sociétés","detail"],["RN","Résultat net","total"]];
   const histM={CA:"CA",ACHATS:"COUTS_DIRECTS",MARGE_BRUTE:"MARGE_BRUTE",AUTRES_PRODUITS:"AUTRES_PROD",
     FRAIS_GENERAUX:"FRAIS_GENERAUX",EBITDA:"EBITDA",DOTATIONS:"DA",EBIT:"EBIT",
     RESULTAT_FIN:"RESULTAT_FIN",EBT:"RESULTAT_AVANT_IMPOT",IS:"IMPOTS",RN:"RESULTAT_NET"};
@@ -927,14 +1000,26 @@ function construireBP(pptx,opts){
     ["Marge d'EBITDA",...cols.map(a=>pctR(rt(gPL("EBITDA",a),gPL("CA",a))))],
     ["Marge d'exploitation (EBIT)",...cols.map(a=>pctR(rt(gPL("EBIT",a),gPL("CA",a))))],
     ["Marge nette",...cols.map(a=>pctR(rt(gPL("RN",a),gPL("CA",a))))]];
-  const lgPL=lignesBP.concat([["Ratios d'exploitation",...cols.map(()=>""),""]],ratPL.map(r=>r.concat("")));
-  rpTable(sl,0.55,1.6,7.9,B.societe.toUpperCase()+" - P&L prévisionnel",
-    (mm?[rpLib(),...fyp]:[rpLib(),...fy,...fyp]).concat("TCAM"),lgPL,
-    codesP.map(x=>x[2]).concat(["titre"],ratPL.map(()=>"pct")),
-    mm?new Set():new Set(Array.from({length:A.length},(_,k)=>1+k)),
-    [2.6,...Array((mm?0:A.length)+ap.length).fill(1.05),1.0],8,
-    mm?"Projections issues du modèle d'inducteurs ; bilan bouclé par la trésorerie.":"Colonnes bleutées : historique reconstitué ; autres : projections.",
-    rhFit(lgPL.length));
+  /* Le bloc de ratios est un tableau DISTINCT posé sous l'état, calé sur les mêmes colonnes
+     (même x, mêmes largeurs) : les exercices tombent dans le même axe et l'on ne mélange plus
+     dans une seule grille des montants (en-tête « MFCFA ») et des pourcentages. */
+  const tcP=tcamUtile(lignesBP), coupeP=r=>tcP?r:r.slice(0,-1);
+  const nCP=(mm?0:A.length)+ap.length;
+  /* colonne de libellés élargie quand les exercices sont nombreux (historique + projections) :
+     sinon « Frais généraux et personnel / CA » passe sur deux lignes */
+  const largP=[nCP>6?3.2:2.6,...Array(nCP).fill(nCP>6?0.92:1.05),...(tcP?[nCP>6?0.92:1.0]:[])];
+  const setHP=mm?new Set():new Set(Array.from({length:A.length},(_,k)=>1+k));
+  const rhP=rhDuo(rpFiltrer(lignesBP,codesP.map(x=>x[2])).L.length+ratPL.length+2);
+  const finP=rpTable(sl,0.55,1.6,7.9,B.societe.toUpperCase()+" - P&L prévisionnel",
+    (mm?[rpLib(),...fyp]:[rpLib(),...fy,...fyp]).concat(tcP?["TCAM"]:[]),
+    lignesBP.map(coupeP),codesP.map(x=>x[2]),setHP,largP,8,null,rhP,{compact:true});
+  rpTable(sl,0.55,finP+0.14,7.9,null,
+    ["Ratios d'exploitation",...Array(nCP+(tcP?1:0)).fill("")],
+    ratPL.map(r=>coupeP(r.concat(""))),ratPL.map(()=>"pct"),setHP,largP,8,
+    (mm?"Projections issues du modèle d'inducteurs ; bilan bouclé par la trésorerie."
+       :"Colonnes bleutées : historique reconstitué ; autres : projections.")
+    +(tcP?" TCAM calculé lorsque les deux bornes du plan sont de même signe.":""),
+    rhP,{enteteClair:true,compact:true});
   rpCadreComment(sl,8.65,1.6,4.15,5.25);
   rpPied(sl,mention,++page);
   /* bilan & trésorerie prévisionnels */
@@ -942,7 +1027,10 @@ function construireBP(pptx,opts){
   rpEnTete(sl,B.societe,"Projections financières");
   rpTitre(sl,"Bilan et trésorerie prévisionnels");
   rpAssertion(sl,mm?("La trésorerie nette atteint "+rpFmt(proj.bs.TRESO_NETTE[ap[ap.length-1]])+" "+rpLib()+" en "+fyp[fyp.length-1]+"."):("La trésorerie nette évolue de "+rpFmt(v.TRESORERIE_NETTE[a1])+" "+rpLib()+" ("+fy[fy.length-1]+") à "+rpFmt(proj.bs.TRESO_NETTE[ap[ap.length-1]])+" "+rpLib()+" ("+fyp[fyp.length-1]+")."));
-  const bsD=[["Immobilisations nettes",a=>proj.bs.IMMO_NET[a],"sous_total"],
+  /* intertitres « Emplois / Ressources » : le lecteur voit d'un coup l'actif économique d'un côté,
+     son financement de l'autre — sans quoi la liste des grandes masses paraît sans ordre */
+  const bsD=[["Emplois — actif économique",null,"groupe"],
+    ["Immobilisations nettes",a=>proj.bs.IMMO_NET[a],"sous_total"],
     ["Stocks",a=>proj.bs.STOCKS[a],"detail"],
     ["Créances clients",a=>proj.bs.CLIENTS[a],"detail"],
     ["Autres créances",a=>proj.bs.AUTRES_CREANCES[a],"detail"],
@@ -951,24 +1039,34 @@ function construireBP(pptx,opts){
     ["Autres dettes",a=>proj.bs.AUTRES_DETTES[a],"detail"],
     ["Besoin en fonds de roulement",a=>proj.bs.BFR[a],"sous_total"],
     ["Trésorerie nette",a=>proj.bs.TRESO_NETTE[a],"sous_total"],
+    ["Ressources — financement",null,"groupe"],
+    ["Capitaux propres",a=>proj.bs.CP[a],"total"],
     ["Comptes courants d'associés",a=>(proj.bs.CCA&&proj.bs.CCA[a])||0,"detail"],
-    ["Capitaux propres",a=>proj.bs.CP[a],"titre"],
-    ["Provisions pour risques et charges",a=>proj.bs.PROVISIONS[a],"detail"],
-    ["Dettes financières",a=>proj.bs.DETTE[a],"sous_total"]];
-  const bsP=bsD.map(([lib,f])=>{const vals=ap.map(f);return [lib,...vals.map(rpFmt),tcamR(vals)];});
+    ["Dettes financières",a=>proj.bs.DETTE[a],"sous_total"],
+    ["Provisions pour risques et charges",a=>proj.bs.PROVISIONS[a],"detail"]];
+  const bsP=bsD.map(([lib,f])=>{if(!f)return [lib,...ap.map(()=>""),""];
+    const vals=ap.map(f);return [lib,...vals.map(rpFmt),tcamR(vals)];});
   /* section de ratios intégrée au bilan (structure financière et rotation) */
   const ratBS=[
     ["Besoin en fonds de roulement (jours de CA)",...ap.map(a=>jrR(rt(proj.bs.BFR[a]*360,proj.pl.CA[a])))],
     ["Délai de règlement clients (DSO)",...ap.map(a=>jrR(rt(proj.bs.CLIENTS[a]*360,proj.pl.CA[a]*(1+tvaR))))],
     ["Autonomie financière (capitaux propres / total bilan)",...ap.map(a=>pctR(rt(proj.bs.CP[a],actifT(a))))],
-    ["Gearing (dettes financières / capitaux propres)",...ap.map(a=>mltR(cov(a).gear))],
+    /* le gearing intègre le découvert (compris dans la trésorerie nette du bilan) : le préciser,
+       sinon le lecteur compare le ratio à une ligne « Dettes financières » à zéro */
+    ["Gearing (dette et découvert / capitaux propres)",...ap.map(a=>mltR(cov(a).gear))],
     ["Dette nette / EBITDA",...ap.map(a=>mltR(cov(a).lev))],
     ["Rentabilité des capitaux propres (ROE)",...ap.map(a=>pctR(rt(proj.pl.RN[a],proj.bs.CP[a])))]];
-  const lgBS=bsP.concat([["Ratios de structure financière",...ap.map(()=>""),""]],ratBS.map(r=>r.concat("")));
-  rpTable(sl,0.55,1.6,7.9,B.societe.toUpperCase()+" - Bilan prévisionnel (grandes masses)",
-    [rpLib(),...fyp,"TCAM"],lgBS,
-    bsD.map(d=>d[2]).concat(["titre"],ratBS.map(()=>"pct")),
-    new Set(),[3.4,...ap.map(()=>0.86),0.95],8,"Source : projections Findalyx Advisory",rhFit(lgBS.length));
+  const tcB=tcamUtile(bsP), coupeB=r=>tcB?r:r.slice(0,-1);
+  const largB=[3.4,...ap.map(()=>0.86),...(tcB?[0.95]:[])];
+  const rhB=rhDuo(rpFiltrer(bsP,bsD.map(d=>d[2])).L.length+ratBS.length+2);
+  const finB=rpTable(sl,0.55,1.6,7.9,B.societe.toUpperCase()+" - Bilan prévisionnel (grandes masses)",
+    [rpLib(),...fyp].concat(tcB?["TCAM"]:[]),bsP.map(coupeB),bsD.map(d=>d[2]),
+    new Set(),largB,8,null,rhB,{compact:true});
+  rpTable(sl,0.55,finB+0.14,7.9,null,
+    ["Ratios de structure financière",...Array(ap.length+(tcB?1:0)).fill("")],
+    ratBS.map(r=>coupeB(r.concat(""))),ratBS.map(()=>"pct"),new Set(),largB,8,
+    "Source : projections Findalyx Advisory. Les lignes nulles sur toute la période ne sont pas reprises.",
+    rhB,{enteteClair:true,compact:true});
   rpCadreComment(sl,8.65,1.6,4.15,5.25);
   rpPied(sl,mention,++page);
   /* TFT prévisionnel */
@@ -976,15 +1074,33 @@ function construireBP(pptx,opts){
   rpEnTete(sl,B.societe,"Projections financières");
   rpTitre(sl,"Tableau des flux de trésorerie prévisionnel");
   rpAssertion(sl,"La trésorerie de clôture atteint "+rpFmt(proj.tft[ap[ap.length-1]].CLOTURE)+" "+rpLib()+" en "+fyp[fyp.length-1]+".");
-  const tftD=[["Capacité d'autofinancement (CAFG)","FA","detail"],
-    ["Variation des créances","VAR_CREANCES","detail"],["Variation des stocks","FC","detail"],
-    ["Variation des dettes d'exploitation","FE","detail"],["Flux opérationnels","ZB","sous_total"],
-    ["Acquisitions d'immobilisations","ACQUIS_IMMO","detail"],["Cessions d'immobilisations","CESSION_IMMO","detail"],
-    ["Flux d'investissement","ZC","sous_total"],["Nouveaux emprunts","EMPRUNT","detail"],
-    ["Remboursements d'emprunts","REMBOURS","detail"],["Dividendes versés","FN","detail"],
-    ["Flux de financement","ZFIN","sous_total"],["Variation nette de trésorerie","ZF","sous_total"],
-    ["Trésorerie d'ouverture","OUVERTURE","detail"],["Trésorerie de clôture","CLOTURE","sous_total"]];
-  const tftL=tftD.map(d=>{const vals=ap.map(a=>proj.tft[a][d[1]]);return [d[0],...vals.map(rpFmt),tcamR(vals)];});
+  /* Trois blocs (exploitation / investissement / financement) comme dans l'application : un flux
+     de financement ne doit pas apparaître sans ses composantes — l'augmentation de capital, la
+     subvention et les comptes courants manquaient, le sous-total semblait sorti de nulle part. */
+  const tftD=[["Activités opérationnelles",null,"groupe"],
+    ["Capacité d'autofinancement (CAFG)","FA","detail"],
+    ["Variation des créances","VAR_CREANCES","detail"],
+    ["Variation des stocks","FC","detail"],
+    ["Variation des dettes d'exploitation","FE","detail"],
+    ["Flux opérationnels","ZB","sous_total"],
+    ["Activités d'investissement",null,"groupe"],
+    ["Acquisitions d'immobilisations","ACQUIS_IMMO","detail"],
+    ["Cessions d'immobilisations","CESSION_IMMO","detail"],
+    ["Flux d'investissement","ZC","sous_total"],
+    ["Activités de financement",null,"groupe"],
+    ["Augmentation de capital","FK","detail"],
+    ["Subvention d'investissement","FL","detail"],
+    ["Comptes courants d'associés (net)",t=>(t.CCA_TIR||0)+(t.CCA_REMB||0),"detail"],
+    ["Nouveaux emprunts","EMPRUNT","detail"],
+    ["Remboursements d'emprunts","REMBOURS","detail"],
+    ["Dividendes versés","FN","detail"],
+    ["Flux de financement","ZFIN","sous_total"],
+    ["Variation nette de trésorerie","ZF","sous_total"],
+    ["Trésorerie d'ouverture","OUVERTURE","detail"],
+    ["Trésorerie de clôture","CLOTURE","total"]];
+  const tfV=(a,k)=>{const t=proj.tft[a]||{};return (typeof k==="function")?k(t):(t[k]||0);};
+  const tftL=tftD.map(d=>{if(!d[1])return [d[0],...ap.map(()=>""),""];
+    const vals=ap.map(a=>tfV(a,d[1]));return [d[0],...vals.map(rpFmt),tcamR(vals)];});
   /* section de ratios intégrée au tableau de flux (conversion en trésorerie et service de la dette) */
   const chExp=a=>-((proj.pl.ACHATS[a]||0)+(proj.pl.OPEX_TOTAL[a]||0)+(proj.pl.CHARGES_PERSONNEL[a]||0));
   const conv=a=>{const c=rt(proj.tft[a].ZB,proj.pl.EBITDA[a]);
@@ -996,11 +1112,18 @@ function construireBP(pptx,opts){
     ["Couverture du service de la dette (DSCR)",...ap.map(a=>mltR(cov(a).dscr))],
     ["Trésorerie de clôture (mois de charges d'exploitation)",...ap.map(a=>{const t=proj.tft[a].CLOTURE;
       return t>0?moisR(rt(t*12,chExp(a))):"n.s.";})]];
-  const lgTF=tftL.concat([["Ratios de flux",...ap.map(()=>""),""]],ratTF.map(r=>r.concat("")));
-  rpTable(sl,0.55,1.6,7.9,B.societe.toUpperCase()+" - TFT prévisionnel",[rpLib(),...fyp,"TCAM"],lgTF,
-    tftD.map(d=>d[2]).concat(["titre"],ratTF.map(()=>"pct")),
-    new Set(),[3.4,...ap.map(()=>0.86),0.95],8,"Source : projections Findalyx Advisory (bilan bouclé par la trésorerie)",
-    rhFit(lgTF.length));
+  const stTF=tftD.map(d=>d[2]);
+  const tcT=tcamUtile(tftL), coupeT=r=>tcT?r:r.slice(0,-1);
+  const largT=[3.4,...ap.map(()=>0.86),...(tcT?[0.95]:[])];
+  const rhT=rhDuo(rpFiltrer(tftL,stTF).L.length+ratTF.length+2);
+  const finT=rpTable(sl,0.55,1.6,7.9,B.societe.toUpperCase()+" - TFT prévisionnel",
+    [rpLib(),...fyp].concat(tcT?["TCAM"]:[]),tftL.map(coupeT),stTF,
+    new Set(),largT,8,null,rhT,{compact:true});
+  rpTable(sl,0.55,finT+0.14,7.9,null,
+    ["Ratios de flux",...Array(ap.length+(tcT?1:0)).fill("")],
+    ratTF.map(r=>coupeT(r.concat(""))),ratTF.map(()=>"pct"),new Set(),largT,8,
+    "Source : projections Findalyx Advisory (bilan bouclé par la trésorerie). Les lignes nulles sur toute la période ne sont pas reprises.",
+    rhT,{enteteClair:true,compact:true});
   rpCadreComment(sl,8.65,1.6,4.15,5.25);
   rpPied(sl,mention,++page);
   /* ---------- 5. Analyse & covenants ---------- */
@@ -1021,11 +1144,13 @@ function construireBP(pptx,opts){
     ["Point mort (jours de CA)",...ap.map(a=>jrR(sr(a).pm))],
     ["Marge de sécurité",...ap.map(a=>pctR(sr(a).marge))],
     ["Levier opérationnel",...ap.map(a=>mltR(sr(a).levier))]];
-  rpTable(sl,0.55,1.7,8.6,B.societe.toUpperCase()+" - Seuil de rentabilité",
+  /* tableau sur toute la largeur utile, cadre de commentaires juste dessous : un tableau court
+     posé à gauche laissait une bande blanche au milieu de la page */
+  const finS=rpTable(sl,0.55,1.7,12.23,B.societe.toUpperCase()+" - Seuil de rentabilité",
     [rpLib(),...fyp],srRows,["titre","detail","detail","sous_total","detail","detail","detail"],
-    new Set(),[3.8,...ap.map(()=>0.96)],9,
+    new Set(),[4.6,...ap.map(()=>1.2)],9,
     "Point mort où le résultat d'exploitation s'annule : coûts directs = charges variables ; frais généraux, personnel et dotations = charges fixes.");
-  rpCadreComment(sl,0.55,4.65,12.25,1.95);
+  rpCommentReste(sl,0.55,finS+0.18,12.23);
   rpPied(sl,mention,++page);
   /* ratios prévisionnels & covenants bancaires — mêmes formules que l'application */
   sl=pptx.addSlide();
@@ -1037,11 +1162,11 @@ function construireBP(pptx,opts){
     ["Gearing (dette fin. / capitaux propres)","≤ 1,5×",...ap.map(a=>mltR(cov(a).gear))],
     ["Couverture des intérêts (EBITDA / frais fin.)","≥ 3×",...ap.map(a=>mltR(cov(a).couv))],
     ["Liquidité générale","≥ 1×",...ap.map(a=>mltR(cov(a).liq))]];
-  rpTable(sl,0.55,1.7,11.0,B.societe.toUpperCase()+" - Ratios prévisionnels et covenants bancaires",
-    ["Covenant","Norme usuelle",...fyp],covRows,["detail","detail","detail","detail","detail"],
-    new Set([1]),[4.8,1.4,...ap.map(()=>0.94)],9,
+  const finC=rpTable(sl,0.55,1.7,12.23,B.societe.toUpperCase()+" - Ratios prévisionnels et covenants bancaires",
+    ["Covenant","Norme usuelle",...fyp],covRows,covRows.map(()=>"detail"),
+    new Set([1]),[5.0,1.5,...ap.map(()=>1.05)],9,
     "CFADS = EBITDA − impôt − variation du BFR ; service de la dette = remboursements + intérêts (dette et découvert). Normes = seuils bancaires usuels, à comparer aux valeurs projetées.");
-  rpCadreComment(sl,0.55,4.65,12.25,1.95);
+  rpCommentReste(sl,0.55,finC+0.18,12.23);
   rpPied(sl,mention,++page);
   /* ---------- 6. Annexes ---------- */
   if(!opts.combine){
@@ -1113,15 +1238,15 @@ function construireValo(pptx,opts){
   const noteSynth="Source : valorisation multi-méthodes Findalyx Advisory."
     +(ecartees.length?" Écartée(s) de la valeur retenue : "+ecartees.map(m=>COURT[m.id]+" ("+(m.motif||"")+")").join(" · ")+" ; poids redistribué.":"");
   synth.push(["Valeur retenue (pondérée)",rpFmt(val.fourchette.min),rpFmt(val.fourchette.retenue),rpFmt(val.fourchette.max)]);
-  rpTable(sl,0.55,3.35,7.0,B.societe.toUpperCase()+" - Fourchettes de valeur par méthode",
-    [rpLib(),"Bas","Central","Haut"],synth,[...mCles.map(()=>"detail"),"sous_total"],
-    new Set([2]),[3.4,1.2,1.2,1.2],9,noteSynth);
+  const finV=rpTable(sl,0.55,3.35,7.0,B.societe.toUpperCase()+" - Fourchettes de valeur par méthode",
+    [rpLib(),"Bas","Central","Haut"],synth,[...mCles.map(()=>"detail"),"total"],
+    new Set([2]),[3.4,1.2,1.2,1.2],9.5,noteSynth,0.3);
   const mFF=mCles.filter(m=>m.applicable!==false);
   rpBarresH(sl,7.75,3.15,5.05,3.0,"Fourchette — valeur des fonds propres ("+rpLib()+")",
     [...mFF.map(m=>COURT[m.id]),"Retenue"],
     [...mFF.map(m=>m.central),val.fourchette.retenue],
     {colors:["172554","2E5AAC","8FAADC","9E3A38","16904E"]});
-  rpCadreComment(sl,0.55,5.5,7.0,1.35);
+  rpCommentReste(sl,0.55,finV+0.16,7.0);
   rpPied(sl,mention,++page);
   if(opts.synthSeule) return page;   /* rapport combiné : la suite est rendue plus loin */
   }
@@ -1133,30 +1258,31 @@ function construireValo(pptx,opts){
   rpTitre(sl,"Coût du capital et actualisation des flux");
   const wacc=[
     ["Taux sans risque (rf)",pct1(Vh.rf)],
-    ["Prime de marché × β ("+(Vh.beta||1).toFixed(2)+")",pct1((Vh.beta||1)*Vh.primeMarche)],
+    ["Prime de marché × β ("+(Vh.beta||1).toFixed(2).replace(".",",")+")",pct1((Vh.beta||1)*Vh.primeMarche)],
     ["Prime de risque spécifique (pays, taille, illiquidité)",pct1(val.primeSpe)],
     ["= Coût des fonds propres (ke)",pct1(val.ke)],
     ["Coût de la dette après impôt (kd)",pct1(val.kd)],
     ["Poids de la dette dans le financement",pct1(Vh.poidsDette)],
     ["= Coût moyen pondéré du capital (WACC)",pct1(val.wacc)]];
-  rpTable(sl,0.55,1.65,5.7,B.societe.toUpperCase()+" - Coût du capital (build-up)",
-    ["Composante","Taux"],wacc,wacc.map(r=>/^=/.test(r[0])?"sous_total":"detail"),
-    new Set(),[4.4,1.3],9);
+  const finW=rpTable(sl,0.55,1.65,5.7,B.societe.toUpperCase()+" - Coût du capital (build-up)",
+    ["Composante","Taux"],wacc,wacc.map(r=>/^=/.test(r[0])?"total":"detail"),
+    new Set(),[4.4,1.3],9,null,0.28);
   const fcf=[["FCFF",...ap.map(a=>rpFmt(val.fcff[a]))],
              ["FCFF actualisés",...ap.map(a=>rpFmt(val.pv[a]))]];
-  rpTable(sl,6.5,1.65,6.3,"Flux de trésorerie disponibles (FCFF)",
+  const finF=rpTable(sl,6.5,1.65,6.28,"Flux de trésorerie disponibles (FCFF)",
     [rpLib(),...fyp],fcf,["detail","sous_total"],new Set(),
-    [1.8,...Array(ap.length).fill(0.9)],8.5);
+    [1.8,...Array(ap.length).fill(0.9)],9,null,0.28);
   const brg=[["Somme des FCFF actualisés",rpFmt(val.sommePv)],
     ["Valeur terminale actualisée ("+tvTxt+")",rpFmt(val.vtPv)],
     ["= Valeur d'entreprise (EV)",rpFmt(val.ev)],
     [(val.dateValo==="ouverture"?"(−) Dette nette à la date de valorisation (situation d'ouverture)":"(−) Dette nette au 31/12/"+a1),rpFmt(-val.detteNette)],
     (Math.abs(val.bridgeAjust)>0.5?["(±) Ajustements du pont (provisions, etc.)",rpFmt(val.bridgeAjust)]:null),
     ["= Valeur des fonds propres (DCF)",rpFmt(val.equityDcf)]].filter(Boolean);
-  rpTable(sl,6.5,4.15,6.3,"Passage valeur d'entreprise → fonds propres",
-    [rpLib(),"Valeur"],brg,brg.map(r=>/^=/.test(r[0])?"sous_total":"detail"),
-    new Set(),[4.4,1.9],8.5);
-  rpCadreComment(sl,0.55,4.15,5.7,2.35);
+  const finB2=rpTable(sl,6.5,finF+0.55,6.28,"Passage valeur d'entreprise → fonds propres",
+    [rpLib(),"Valeur"],brg,brg.map(r=>/^=/.test(r[0])?"total":"detail"),
+    new Set(),[4.4,1.9],9,null,0.28);
+  /* cadre sous les DEUX colonnes : le bas de page restait vide à droite */
+  rpCommentReste(sl,0.55,Math.max(finW,finB2)+0.3,12.23);
   rpPied(sl,mention,++page);
   /* sensibilité : WACC × pilote de la valeur terminale (g en Gordon, multiple de sortie en exit) */
   {
@@ -1167,10 +1293,10 @@ function construireValo(pptx,opts){
     const colLbl=x=>axes.colType==="multiple"?(Math.round(x*10)/10)+"×":pct1(x);
     const entS=[gordon?"WACC \\ g":"WACC \\ mult.",...axes.col.map(colLbl)];
     const rowsS=(val.sensi||[]).map((ligne,i)=>[pct1(axes.wacc[i]),...ligne.map(x=>rpFmt(x))]);
-    rpTable(sl,0.55,2.2,12.25,B.societe.toUpperCase()+" - Valeur des fonds propres selon le WACC et "+(gordon?"la croissance perpétuelle g":"le multiple de sortie"),
+    const finSe=rpTable(sl,0.55,1.75,12.23,B.societe.toUpperCase()+" - Valeur des fonds propres selon le WACC et "+(gordon?"la croissance perpétuelle g":"le multiple de sortie"),
       entS,rowsS,rowsS.map((r,i)=>i===2?"sous_total":"detail"),new Set([3]),
-      [1.7,...axes.col.map(()=>1.0)],9,"Chaque cellule = valeur des fonds propres (EV actualisée − dette nette + ajustements du pont).");
-    rpCadreComment(sl,0.55,4.6,12.25,1.9);
+      [2.1,...axes.col.map(()=>1.2)],9.5,"Chaque cellule = valeur des fonds propres (EV actualisée − dette nette + ajustements du pont). Ligne et colonne centrales = hypothèses retenues.",0.3,{centre:true});
+    rpCommentReste(sl,0.55,finSe+0.18,12.23);
     rpPied(sl,mention,++page);
   }
   /* ---------- 3. Multiples de marché & actif net ---------- */
@@ -1181,27 +1307,30 @@ function construireValo(pptx,opts){
   const mc=Vh.multiplesComparables, mt=Vh.multiplesTransactions;
   const na=m=>(m&&m.applicable===false)?"n.a.":null;
   const fm=(m,k)=>na(m)||rpFmt(m&&m[k]);
+  const xR=x=>(Math.round((+x||0)*10)/10).toLocaleString("fr-FR",{minimumFractionDigits:1})+"×";
   const tMult=[
     [(val.dateValo==="ouverture"?"EBITDA de référence (1re année du plan)":"EBITDA de référence "+fy[fy.length-1]),rpFmt(val.ebitdaRef),"",""],
-    ["Comparables — EV/EBITDA",mc.min.toFixed(1)+"×",mc.central.toFixed(1)+"×",mc.max.toFixed(1)+"×"],
+    ["Comparables — EV/EBITDA",xR(mc.min),xR(mc.central),xR(mc.max)],
     ["→ fonds propres induits",fm(mKey.comp,"min"),fm(mKey.comp,"central"),fm(mKey.comp,"max")],
-    ["Transactions — EV/EBITDA",mt.min.toFixed(1)+"×",mt.central.toFixed(1)+"×",mt.max.toFixed(1)+"×"],
+    ["Transactions — EV/EBITDA",xR(mt.min),xR(mt.central),xR(mt.max)],
     ["→ fonds propres induits",fm(mKey.trans,"min"),fm(mKey.trans,"central"),fm(mKey.trans,"max")]];
-  rpTable(sl,0.55,1.7,8.2,B.societe.toUpperCase()+" - Multiples d'EBITDA et fonds propres induits",
-    ["","Bas","Central","Haut"],tMult,["titre","detail","sous_total","detail","sous_total"],
+  const finM=rpTable(sl,0.55,1.7,8.2,B.societe.toUpperCase()+" - Multiples d'EBITDA et fonds propres induits",
+    ["Paramètre","Bas","Central","Haut"],tMult,["titre","detail","sous_total","detail","sous_total"],
     new Set([2]),[3.9,1.2,1.2,1.2],9,
     "Fonds propres = multiple × EBITDA de référence − dette nette + ajustements du pont."
-    +((mKey.comp&&mKey.comp.applicable===false)?" Méthodes écartées de la valeur retenue : "+(mKey.comp.motif||"EBITDA de référence non significatif")+".":""));
+    +((mKey.comp&&mKey.comp.applicable===false)?" Méthodes écartées de la valeur retenue : "+(mKey.comp.motif||"EBITDA de référence non significatif")+".":""),0.3);
   const anrB=(val.anrBase!==undefined)?val.anrBase:v.CAPITAUX_PROPRES[a1];
   const anrC=mKey.anr?mKey.anr.central:anrB;
+  /* libellés courts : dans une colonne de 2,6" un libellé long passe sur deux lignes et décale
+     tout le tableau par rapport à celui d'à côté */
   const tAnr=[
-    [(val.dateValo==="ouverture"?"Situation nette à la date de valorisation":"Actif net comptable au 31/12/"+a1),rpFmt(anrB)],
-    ["Retraitements (réévaluations, actifs hors exploitation)",rpFmt(anrC-anrB)],
+    [(val.dateValo==="ouverture"?"Situation nette d'ouverture":"Actif net comptable "+fy[fy.length-1]),rpFmt(anrB)],
+    ["Retraitements de réévaluation",rpFmt(anrC-anrB)],
     ["= Actif net réévalué (ANR)",na(mKey.anr)||rpFmt(anrC)]];
-  rpTable(sl,9.0,1.7,3.8,"Approche patrimoniale (ANR)",
-    [rpLib(),"Valeur"],tAnr,["detail","detail","sous_total"],new Set(),[2.6,1.2],8.5,
-    (mKey.anr&&mKey.anr.applicable===false)?("Écartée : "+(mKey.anr.motif||"")+"."):null);
-  rpCadreComment(sl,0.55,4.35,12.25,2.15);
+  const finA=rpTable(sl,8.98,1.7,3.8,"Approche patrimoniale (ANR)",
+    [rpLib(),"Valeur"],tAnr,["detail","detail","sous_total"],new Set(),[2.6,1.2],9,
+    (mKey.anr&&mKey.anr.applicable===false)?("Écartée de la valeur retenue : "+(mKey.anr.motif||"")+"."):null,0.3);
+  rpCommentReste(sl,0.55,Math.max(finM,finA)+0.18,12.23);
   rpPied(sl,mention,++page);
   /* ---------- 4. Risques ---------- */
   rpSection(pptx,S+4,"Risques",["Risques majeurs et couverture"],mention,++page);
