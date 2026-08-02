@@ -145,49 +145,49 @@ function rpTexteRubrique(r,I){
   const cle=RP_RUBRIQUE_INFO[r];
   return (cle&&I[cle])?I[cle]:null;
 }
-function rpPlaceholder(pptx, societe, section, titreS, rubriques, mention, page){
+/* Diapositive de rubriques : chaque rubrique occupe un CADRE dimensionné pour remplir la
+   hauteur utile — renseigné, il contient le texte du dossier ; vide, il offre à l'analyste
+   une zone d'écriture visible plutôt qu'un titre suivi de blanc.
+   opts.fiche : n'affiche la fiche d'identité (tableau clé/valeur) que sur la page où elle a
+   du sens — elle était jusqu'ici répétée en gras sur toutes les diapositives de rubriques. */
+function rpPlaceholder(pptx, societe, section, titreS, rubriques, mention, page, opts){
+  opts=opts||{};
   const sl=pptx.addSlide();
   rpEnTete(sl,societe,section); rpTitre(sl,titreS);
   const I=rpInfos();
-  let y=1.62;
-  const idBits=[I.secteur,I.formeJuridique,I.creation?("créée en "+I.creation):null,
-    I.effectif,I.adresse].filter(Boolean);
-  if(idBits.length){
-    sl.addText(idBits.join("  ·  "),{x:0.8,y:y,w:11.9,h:0.3,fontSize:11.5,bold:true,
-      color:RP.NAVY,fontFace:"Arial"});
-    y+=0.46;
+  const yTop=1.58, yMax=6.9;
+  let xG=0.55, wG=12.23;
+  if(opts.fiche){
+    /* fiche d'identité en tableau à gauche (lisible), rubriques à droite */
+    const ficheL=[["Secteur",I.secteur],["Forme juridique",I.formeJuridique],
+      ["Création",I.creation],["Effectifs",I.effectif],["Dirigeant",I.dirigeant],
+      ["Actionnariat",I.actionnariat],["Implantation",I.adresse]]
+      .filter(([,v])=>v&&String(v).trim());
+    if(ficheL.length){
+      rpTable(sl,0.55,yTop+0.28,5.25,societe.toUpperCase()+" - Fiche d'identité",
+        ["Rubrique","Information"],ficheL,ficheL.map(()=>"detail"),new Set(),[1.75,3.5],8.5);
+      xG=6.15; wG=6.63;
+    }
   }
-  /* deux colonnes, hauteur estimée d'après le texte, jamais au-delà du pied de page */
-  const yTop=y, yMax=6.55;
-  const cols=[{x:0.8,w:5.75},{x:6.95,w:5.75}];
-  let col=0;y=yTop;
-  const lignesDe=(txt,w)=>{
-    const cpl=Math.max(20,Math.floor(w*16.5));   /* ~16,5 caractères par pouce en Arial 10,5 */
-    let n=0;
-    String(txt).split(/\n/).forEach(seg=>{n+=Math.max(1,Math.ceil(seg.length/cpl));});
-    return n;
-  };
-  /* préparer les blocs puis les répartir équitablement sur les deux colonnes */
-  const cpl=Math.max(20,Math.floor(cols[0].w*16.5));
-  const blocs=rubriques.map(r=>{
-    let txt=rpTexteRubrique(r,I);
-    const estPh=!txt;
-    if(estPh)txt="[À COMPLÉTER par l'analyste]";
-    let nl=lignesDe(txt,cols[0].w);
-    if(nl>9){txt=String(txt).slice(0,9*cpl-2)+"…";nl=9;}
-    const hTxt=0.06+nl*0.185;
-    return {r,txt,estPh,hTxt,h:0.32+hTxt+0.18};
-  });
-  const hTot=blocs.reduce((t,b)=>t+b.h,0);
-  let cumule=0;
-  blocs.forEach(b=>{
-    if(col===0&&(cumule>=hTot/2||y+b.h>yMax)){col=1;y=yTop;}
-    if(col===1&&y+b.h>yMax)return;
-    sl.addText(b.r,{x:cols[col].x,y:y,w:cols[col].w,h:0.28,fontSize:12.5,bold:true,
-      color:RP.NAVY,fontFace:"Arial"});
-    sl.addText(b.txt,{x:cols[col].x,y:y+0.3,w:cols[col].w,h:b.hTxt,fontSize:10.5,
-      italic:b.estPh,color:b.estPh?RP.G_TXT:"333333",fontFace:"Arial",valign:"top"});
-    y+=b.h;cumule+=b.h;
+  /* cadres : hauteur répartie sur la colonne disponible, deux par ligne si la place le permet */
+  const n=rubriques.length;
+  const deuxCol=(wG>8&&n>2);
+  const cw=deuxCol?(wG-0.28)/2:wG;
+  const nl=deuxCol?Math.ceil(n/2):n;
+  const ch=Math.max(0.95,(yMax-yTop-(nl-1)*0.22)/nl);
+  rubriques.forEach((r,i)=>{
+    const li=deuxCol?Math.floor(i/2):i, ci=deuxCol?(i%2):0;
+    const x=xG+ci*(cw+0.28), y=yTop+li*(ch+0.22);
+    const txt=rpTexteRubrique(r,I);
+    sl.addText(r,{x:x,y:y,w:cw,h:0.26,fontSize:11,bold:true,color:RP.BLEU,fontFace:"Arial"});
+    sl.addShape("roundRect",{x:x,y:y+0.3,w:cw,h:ch-0.3,rectRadius:0.02,
+      fill:{color:txt?"FFFFFF":"FBFCFE"},line:{color:RP.FILET,width:1}});
+    /* police ajustée à la place réelle du cadre : un texte long se réduit au lieu de déborder */
+    const hTxt=ch-0.5, cpl=Math.max(24,Math.floor((cw-0.3)*16.5)), nlTxt=Math.max(1,Math.ceil(String(txt||"").length/cpl));
+    const dispo=Math.max(1,Math.floor(hTxt/0.175));
+    const fs=txt?(nlTxt>dispo?Math.max(7.5,Math.round(10*dispo/nlTxt*2)/2):10):9;
+    sl.addText(txt||"À compléter",{x:x+0.14,y:y+0.4,w:cw-0.28,h:hTxt,fontSize:fs,
+      italic:!txt,color:txt?"333333":RP.G_CLAIR,fontFace:"Arial",valign:"top"});
   });
   rpPied(sl,mention,page);
 }
@@ -526,7 +526,7 @@ function construireDD(pptx){
   rpSection(pptx,2,"Business overview",["Présentation de la société","Structure organisationnelle"],mention,++page);
   rpPlaceholder(pptx,B.societe,"Business overview","Présentation de la société",
     ["Historique et actionnariat","Activités et offre","Organisation et effectifs",
-     "Marché et positionnement","Faits marquants de la période"],mention,++page);
+     "Marché et positionnement","Faits marquants de la période"],mention,++page,{fiche:true});
   rpPlaceholder(pptx,B.societe,"Business overview","Structure organisationnelle",
     ["Organigramme et instances de gouvernance","Équipe dirigeante et management",
      "Structure du groupe, filiales et participations","Effectifs par fonction et implantations"],mention,++page);
@@ -721,7 +721,7 @@ function construireBP(pptx,opts){
     ["Structure du projet","Étude de marché"],mention,++page);
   rpPlaceholder(pptx,B.societe,"Présentation du projet","Projet, structure et motivations",
     ["Description du projet et du promoteur","Structure juridique et actionnariat",
-     "Motivations et objectifs du financement","Points d'attention"],mention,++page);
+     "Motivations et objectifs du financement","Points d'attention"],mention,++page,{fiche:true});
   rpPlaceholder(pptx,B.societe,"Étude de marché","Étude de marché et positionnement",
     ["Marché et positionnement","Taille du marché et dynamique de croissance",
      "Concurrence et acteurs clés","Clientèle cible, canaux et différenciation"],mention,++page);
