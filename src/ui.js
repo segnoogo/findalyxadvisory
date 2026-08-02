@@ -76,6 +76,36 @@ const fmt=v=>{if(v===null||v===undefined)return "-";
 const fpct=v=>{if(v===null||!isFinite(v))return "-";if(Math.abs(v)>9.99)return "n.s.";
   const s=Math.round(Math.abs(v*100))+"%";return v<0?`(${s})`:s;};
 const esc=s=>String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");
+/* Colonnes des états : libellé + n colonnes chiffrées de largeur égale. Utilisé par un état ET
+   par son bloc de ratios, avec le même n, pour que les exercices tombent dans le même axe. */
+function colsEtat(n,pctLib){
+  const p=pctLib||34,r=(100-p)/Math.max(1,n);
+  return `<colgroup><col style="width:${p}%">${Array.from({length:n},()=>`<col style="width:${r.toFixed(3)}%">`).join("")}</colgroup>`;
+}
+/* TCAM sur la période affichée. L'exposant est le nombre réel d'intervalles écoulés (pas le
+   nombre de valeurs renseignées). Les charges étant stockées en négatif, le taux se calcule en
+   valeur absolue — mais un changement de signe entre les bornes (une perte qui devient un
+   bénéfice) n'a aucun taux de croissance : la cellule affiche alors « n.s. ». */
+function cagr(vals){
+  const a=(vals||[]).map(v=>(v===null||v===undefined||!isFinite(v))?null:v);
+  const i0=a.findIndex(v=>v!==null);let i1=-1;
+  for(let k=a.length-1;k>=0;k--) if(a[k]!==null){i1=k;break;}
+  if(i0<0||(i1-i0)<2) return null;
+  const v0=a[i0],v1=a[i1];
+  if(!v0||!v1||(v0>0)!==(v1>0)) return null;
+  /* un signe qui s'inverse en cours de route (trésorerie qui plonge puis remonte) rendrait le
+     taux calculé sur les seules bornes trompeur */
+  if(a.slice(i0,i1+1).some(v=>v!==null&&v!==0&&(v>0)!==(v1>0))) return null;
+  return Math.pow(Math.abs(v1)/Math.abs(v0),1/(i1-i0))-1;
+}
+/* Cellule TCAM : vide sur une ligne sans montant (sinon une ligne de tirets se termine par un
+   « n.s. » parasite), « n.s. » quand la ligne existe mais que le taux n'a pas de sens. */
+function cagrCell(vals,fpc){
+  const s=(vals||[]).filter(x=>x!==null&&x!==undefined&&isFinite(x));
+  if(!s.length||s.every(x=>Math.abs(x)<0.5)) return "";
+  const t=cagr(vals);
+  return t===null?"n.s.":fpc(t);
+}
 
 /* ---------- calcul ---------- */
 function recalculer(){
@@ -1018,29 +1048,26 @@ function fermerModal(e){if(!e||e.target.classList.contains("voile"))document.get
 let SOUS_ETAT="pl";
 function tableEtat(defs,titre){
   const A=ETATS.annees;
-  const n=A.length;
+  const n=A.length, cg=n>2;      /* une seule colonne de variation : le TCAM de la période */
   const th=A.map(a=>`<th class="num">FY${String(a).slice(-2)}</th>`).join("")
-    +A.slice(1).map((a,i)=>`<th class="num delta">Δ${String(A[i]).slice(-2)}-${String(a).slice(-2)}</th>`).join("")
-    +(n>2?'<th class="num delta">CAGR</th>':"");
+    +(cg?'<th class="num delta">TCAM</th>':"");
   const lignes=(PL_VUE==="detail"?defs:defs.filter(d=>!d.detail)).map(d=>{
     if(d.type==="pct"){
       const cells=A.map(a=>{const ca=ETATS.v.CA[a];return `<td class="num pctl">${ca?Math.round(ETATS.v[d.code][a]/ca*100)+"%":"-"}</td>`;}).join("");
-      return `<tr class="pct"><td>% ${esc(d.lib)}/CA</td>${cells}${'<td class="delta"></td>'.repeat(n-1+(n>2?1:0))}</tr>`;
+      return `<tr class="pct"><td>% ${esc(d.lib)}/CA</td>${cells}${cg?'<td class="delta"></td>':""}</tr>`;
     }
     const vals=A.map(a=>ETATS.v[d.code][a]);
     if(vals.every(v=>Math.abs(v)<0.5)&&!d.toujours) return "";
-    const deltas=A.slice(1).map((a,i)=>vals[i]?fpct(vals[i+1]/vals[i]-1):"-");
-    const cagr=n>2?(vals[0]>0&&vals[n-1]>0?fpct(Math.pow(vals[n-1]/vals[0],1/(n-1))-1):"-"):null;
     const dr=drillable(d.code);
     return `<tr class="${d.st||""}${d.detail?" det":""}${dr?" cliquable":""}"${dr?` onclick="detailLigne('${d.code}','${d.lib.replace(/'/g,"\\'")}')" title="Voir les comptes"`:""}>
       <td>${esc(d.lib)}${dr?'<span class="chev">›</span>':""}</td>
       ${vals.map(v=>`<td class="num">${fmt(v)}</td>`).join("")}
-      ${deltas.map(x=>`<td class="num delta">${x}</td>`).join("")}
-      ${cagr!==null?`<td class="num delta">${cagr}</td>`:""}</tr>`;
+      ${cg?`<td class="num delta">${cagrCell(vals,fpct)}</td>`:""}</tr>`;
   }).join("");
   return `<div class="card" style="padding:0">
     <div class="bande">${esc(DOSSIER.societe.toUpperCase())} — ${titre}</div>
-    <div class="tscroll"><table class="tb etat"><tr><th>${uni().lib}</th>${th}</tr>${lignes}</table></div></div>`;
+    <div class="tscroll"><table class="tb etat fixe">${colsEtat(n+(cg?1:0))}
+    <tr><th>${uni().lib}</th>${th}</tr>${lignes}</table></div></div>`;
 }
 let PL_VUE="synth";   /* "synth" (défaut) | "detail" — bascule d'affichage du P&L */
 const DEF_PL=[
@@ -1149,21 +1176,20 @@ function tableTFT(){
   const A=ETATS.annees;
   if(A.length<2) return '<div class="mut">Il faut au moins deux exercices pour le tableau de flux.</div>';
   const cols=A.slice(1);
-  const nd=cols.length-1;
-  const dTft=code=>cols.slice(1).map((a,i)=>{
-    const v0=ETATS.tft[cols[i]][code],v1=ETATS.tft[a][code];
-    return `<td class="num delta">${v0?fpct(v1/v0-1):"-"}</td>`;
-  }).join("");
+  const cg=cols.length>2;      /* une seule colonne de variation : le TCAM de la période */
   const lignes=TFT_DEF.map(([code,lib,st])=>{
-    if(!code) return `<tr class="sec"><td colspan="${cols.length+1+nd}">${lib}</td></tr>`;
+    if(!code) return `<tr class="sec"><td colspan="${cols.length+1+(cg?1:0)}">${lib}</td></tr>`;
+    const vals=cols.map(a=>ETATS.tft[a][code]);
     return `<tr class="${st||""}"><td>${lib}</td>
-      ${cols.map(a=>`<td class="num">${fmt(ETATS.tft[a][code])}</td>`).join("")}${nd>0?dTft(code):""}</tr>`;
+      ${vals.map(v=>`<td class="num">${fmt(v)}</td>`).join("")}
+      ${cg?`<td class="num delta">${cagrCell(vals,fpct)}</td>`:""}</tr>`;
   }).join("");
   return `<div class="card" style="padding:0">
     <div class="bande">${esc(DOSSIER.societe.toUpperCase())} — Tableau des flux de trésorerie (modèle officiel SYSCOHADA)</div>
-    <div class="tscroll"><table class="tb etat"><tr><th>${uni().lib}</th>
+    <div class="tscroll"><table class="tb etat fixe">${colsEtat(cols.length+(cg?1:0))}
+    <tr><th>${uni().lib}</th>
     ${cols.map(a=>`<th class="num">FY${String(a).slice(-2)}</th>`).join("")}
-    ${cols.slice(1).map((a,i)=>`<th class="num delta">Δ${String(cols[i]).slice(-2)}-${String(a).slice(-2)}</th>`).join("")}</tr>${lignes}</table></div></div>
+    ${cg?'<th class="num delta">TCAM</th>':""}</tr>${lignes}</table></div></div>
   <div class="mut" style="margin-top:8px">CAFG approchée (résultat net + dotations nettes) ; flux reconstruits par
   variations bilancielles — réconciliés exactement avec la trésorerie du bilan. Reconstruits en <b>net</b> depuis les
   bilans : les cessions d'immobilisations et les remboursements d'emprunts ne sont pas isolables des acquisitions /
@@ -1194,26 +1220,33 @@ function fmtRatioV(v,unit){
 function fmtRatioD(prev,next,unit){
   if(prev===null||next===null||prev===undefined||next===undefined||!isFinite(prev)||!isFinite(next)) return "-";
   const d=next-prev;
-  if(unit==="%"){const pb=Math.round(d*100);return (pb>0?"+":"")+pb+" pb";}
+  /* variation d'un ratio en % : exprimée en points (une marge qui passe de -42 % à +51 % gagne
+     93,5 points — « +9 349 pb » serait illisible) */
+  if(unit==="%"){const p=Math.round(d*10)/10;return (p>0?"+":"")+p.toString().replace(".",",")+" pts";}
   if(unit==="j"){const j=Math.round(d);return (j>0?"+":"")+j+" j";}
   if(unit==="mois"){const m=Math.round(d*10)/10;return (m>0?"+":"")+m.toString().replace(".",",")+" mois";}
   const x=Math.round(d*100)/100;return (x>0?"+":"")+x.toString().replace(".",",")+" ×";
 }
 function blocRatios(titre,items,annees,libs){
-  const A=annees||ETATS.annees, n=A.length;
+  const A=annees||ETATS.annees, n=A.length, cg=n>2;
   if(!items.length||n<1) return "";
+  /* colonnes strictement alignées sur l'état du dessus : mêmes exercices, une seule colonne de
+     variation. Un TCAM sur une marge n'aurait pas de sens (base négative, unité en points) :
+     la colonne porte donc la variation totale de la période, dans l'unité du ratio. */
   const th=A.map((a,i)=>`<th class="num">${(libs&&libs[i])||("FY"+String(a).slice(-2))}</th>`).join("")
-    +A.slice(1).map((a,i)=>`<th class="num delta">Δ${String(A[i]).slice(-2)}-${String(a).slice(-2)}</th>`).join("")
-    +(n>2?'<th class="num delta">CAGR</th>':"");
+    +(cg?'<th class="num delta">Variation</th>':"");
   const lignes=items.map(it=>{
     const m=A.map(a=>it.vals[a]===undefined?null:it.vals[a]);
     const fy=m.map(v=>`<td class="num">${fmtRatioV(v,it.unit)}</td>`).join("");
-    const dl=A.slice(1).map((a,i)=>`<td class="num delta">${fmtRatioD(m[i],m[i+1],it.unit)}</td>`).join("");
-    return `<tr class="pct"><td>${esc(it.lab)}</td>${fy}${dl}${n>2?'<td class="num delta"></td>':""}</tr>`;
+    const p=m.findIndex(v=>v!==null&&isFinite(v));let d=-1;
+    for(let k=m.length-1;k>=0;k--) if(m[k]!==null&&isFinite(m[k])){d=k;break;}
+    const va=(cg&&p>=0&&d>p)?fmtRatioD(m[p],m[d],it.unit):"-";
+    return `<tr class="pct"><td>${esc(it.lab)}</td>${fy}${cg?`<td class="num delta">${va}</td>`:""}</tr>`;
   }).join("");
   return `<div class="card" style="padding:0;margin-top:12px">
     <div class="bande">${esc(titre)}</div>
-    <div class="tscroll"><table class="tb etat"><tr><th>Indicateur</th>${th}</tr>${lignes}</table></div></div>`;
+    <div class="tscroll"><table class="tb etat fixe">${colsEtat(n+(cg?1:0))}
+    <tr><th>Indicateur</th>${th}</tr>${lignes}</table></div></div>`;
 }
 function blocRatiosMarge(){
   const A=ETATS.annees, v=ETATS.v;

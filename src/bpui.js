@@ -674,22 +674,27 @@ function tableBP(P,defs,titre){
   const A0=ETATS.annees,a1=A0[A0.length-1],AP=P.annees,v=ETATS.v;
   const mm=(typeof modeleMode==="function"&&modeleMode());   /* pas de colonne « historique » en mode modèle */
   const nc=(mm&&P.financement&&P.financement.dureeConstruction)||0;   /* années de construction (badge dans l'en-tête) */
+  const nCh=AP.length+(mm?0:1), cg=nCh>2;   /* colonnes chiffrées + colonne de variation (TCAM) */
   const th=(mm?"":`<th class="num" style="opacity:.75">${libFY(a1)}</th>`)
-    +AP.map((a,i)=>`<th class="num">${libFY(a,true)}${i<nc?'<div style="font-size:9px;font-weight:700;color:#b45608;letter-spacing:.02em">construction</div>':''}</th>`).join("");
+    +AP.map((a,i)=>`<th class="num">${libFY(a,true)}${i<nc?'<div style="font-size:9px;font-weight:700;color:#b45608;letter-spacing:.02em">construction</div>':''}</th>`).join("")
+    +(cg?'<th class="num delta">TCAM</th>':"");
   const lignes=defs.map(d=>{
-    if(d.sec!==undefined) return `<tr class="sec"><td colspan="${AP.length+(mm?1:2)}">${d.sec}</td></tr>`;
+    if(d.sec!==undefined) return `<tr class="sec"><td colspan="${nCh+1+(cg?1:0)}">${d.sec}</td></tr>`;
     if(d.type==="pct"){
       const arr=mm?AP.map(a=>d.proj(a)):[d.hist,...AP.map(a=>d.proj(a))];
       const cells=arr.map(x=>`<td class="num pctl">${x===null?"-":Math.round(x*100)+"%"}</td>`).join("");
-      return `<tr class="pct"><td>${d.lib}</td>${cells}</tr>`;
+      return `<tr class="pct"><td>${d.lib}</td>${cells}${cg?'<td class="delta"></td>':""}</tr>`;
     }
+    const vals=mm?AP.map(a=>d.proj(a)):[d.hist,...AP.map(a=>d.proj(a))];
     const histCell=mm?"":`<td class="num" style="opacity:.75">${d.hist!==undefined&&d.hist!==null?fmt(d.hist):"-"}</td>`;
     return `<tr class="${d.st||""}${d.clic?" cliquable":""}"${d.clic?` onclick="${d.clic}" title="Voir le détail"`:""}><td>${d.lib}${d.clic?' <span class="chev">›</span>':""}</td>${histCell}
-      ${AP.map(a=>`<td class="num">${fmt(d.proj(a))}</td>`).join("")}</tr>`;
+      ${AP.map(a=>`<td class="num">${fmt(d.proj(a))}</td>`).join("")}
+      ${cg?`<td class="num delta">${cagrCell(vals,fpct)}</td>`:""}</tr>`;
   }).join("");
   return `<div class="card" style="padding:0">
     <div class="bande">${esc(DOSSIER.societe.toUpperCase())} — ${titre} <span style="opacity:.7">· scénario ${P.scenario}</span></div>
-    <div class="tscroll"><table class="tb etat"><tr><th>${uni().lib}</th>${th}</tr>${lignes}</table></div></div>`;
+    <div class="tscroll"><table class="tb etat fixe">${colsEtat(nCh+(cg?1:0))}
+    <tr><th>${uni().lib}</th>${th}</tr>${lignes}</table></div></div>`;
 }
 
 function vueBP(){
@@ -917,16 +922,20 @@ function vueBPBs(P){
   +blocRatiosBPBs(P);
 }
 function vueBPTft(P){
-  const AP=P.annees;
+  const AP=P.annees, cg=AP.length>2;
   const lignes=TFT_DEF.map(([code,lib,st])=>{
-    if(!code) return `<tr class="sec"><td colspan="${AP.length+1}">${lib}</td></tr>`;
+    if(!code) return `<tr class="sec"><td colspan="${AP.length+1+(cg?1:0)}">${lib}</td></tr>`;
+    const vals=AP.map(a=>P.tft[a][code]);
     return `<tr class="${st||""}"><td>${lib}</td>
-      ${AP.map(a=>`<td class="num">${fmt(P.tft[a][code])}</td>`).join("")}</tr>`;
+      ${vals.map(v=>`<td class="num">${fmt(v)}</td>`).join("")}
+      ${cg?`<td class="num delta">${cagrCell(vals,fpct)}</td>`:""}</tr>`;
   }).join("");
   return `<div class="card" style="padding:0">
     <div class="bande">${esc(DOSSIER.societe.toUpperCase())} — TFT prévisionnel (modèle officiel) · scénario ${P.scenario}</div>
-    <div class="tscroll"><table class="tb etat"><tr><th>${uni().lib}</th>
-    ${AP.map(a=>`<th class="num">${libFY(a,true)}</th>`).join("")}</tr>${lignes}</table></div></div>`
+    <div class="tscroll"><table class="tb etat fixe">${colsEtat(AP.length+(cg?1:0))}
+    <tr><th>${uni().lib}</th>
+    ${AP.map(a=>`<th class="num">${libFY(a,true)}</th>`).join("")}
+    ${cg?'<th class="num delta">TCAM</th>':""}</tr>${lignes}</table></div></div>`
     +blocRatiosBPTft(P);
 }
 /* --- blocs de ratios sous les états prévisionnels ---------------------------------------
@@ -946,44 +955,73 @@ function baseRatiosBP(P,a){
     passifCirc:-(P.bs.FOURNISSEURS[a]+P.bs.DETTES_FISC_SOC[a]+P.bs.AUTRES_DETTES[a])+ct,
     totalActif:P.bs.IMMO_NET[a]+actifCirc};
 }
-function bpSerie(P,fn){const o={};P.annees.forEach(a=>{const x=fn(a);o[a]=(x===null||x===undefined||!isFinite(x))?null:x;});return o;}
-function bpLibsFY(P){return P.annees.map(a=>libFY(a,true));}
+/* Axe des colonnes identique à tableBP : colonne historique (hors mode modèle) puis projections.
+   L'année historique n'appartient pas à P : les accesseurs ci-dessous détectent la source. */
+function bpAxes(P,sansHist){
+  const h=!sansHist&&!(typeof modeleMode==="function"&&modeleMode());   /* colonne historique de tableBP */
+  const a1=ETATS.annees[ETATS.annees.length-1];
+  return {hist:h,a1:a1,
+    annees:h?[a1].concat(P.annees):P.annees.slice(),
+    libs:(h?[libFY(a1)]:[]).concat(P.annees.map(a=>libFY(a,true)))};
+}
+function bpSerie(ax,fn){const o={};ax.annees.forEach(a=>{const x=fn(a);o[a]=(x===null||x===undefined||!isFinite(x))?null:x;});return o;}
 function blocRatiosBPPl(P){
-  const surCA=fn=>bpSerie(P,a=>P.pl.CA[a]?fn(a)/P.pl.CA[a]*100:null);
+  const ax=bpAxes(P),v=ETATS.v;
+  /* agrégats du compte de résultat, projetés ou historiques selon la colonne */
+  const b=a=>(P.pl.CA[a]===undefined)
+    ?{ca:v.CA[a],mb:v.MARGE_BRUTE[a],ebitda:v.EBITDA[a],ebit:v.EBIT[a],rn:v.RESULTAT_NET[a],
+      fg:v.FRAIS_GENERAUX[a],pers:v.CHARGES_PERSONNEL[a],ebt:v.RESULTAT_AVANT_IMPOT[a],is:v.IMPOTS[a]}
+    :{ca:P.pl.CA[a],mb:P.pl.MARGE_BRUTE[a],ebitda:P.pl.EBITDA[a],ebit:P.pl.EBIT[a],rn:P.pl.RN[a],
+      fg:(P.pl.OPEX_TOTAL[a]||0)+(P.pl.CHARGES_PERSONNEL[a]||0),pers:P.pl.CHARGES_PERSONNEL[a],
+      ebt:P.pl.EBT[a],is:P.pl.IS[a]};
+  const surCA=fn=>bpSerie(ax,a=>{const x=b(a);return x.ca?fn(x)/x.ca*100:null;});
   return blocRatios("Ratios du compte de résultat prévisionnel",[
-    {lab:"Marge brute / CA",unit:"%",vals:surCA(a=>P.pl.MARGE_BRUTE[a])},
-    {lab:"Marge d'EBITDA",unit:"%",vals:surCA(a=>P.pl.EBITDA[a])},
-    {lab:"Marge d'exploitation (EBIT)",unit:"%",vals:surCA(a=>P.pl.EBIT[a])},
-    {lab:"Marge nette",unit:"%",vals:surCA(a=>P.pl.RN[a])},
-    {lab:"Frais généraux (overhead) / CA",unit:"%",vals:surCA(a=>-((P.pl.OPEX_TOTAL[a]||0)+(P.pl.CHARGES_PERSONNEL[a]||0)))},
-    {lab:"Charges de personnel / CA",unit:"%",vals:surCA(a=>-(P.pl.CHARGES_PERSONNEL[a]||0))},
-    {lab:"Croissance du chiffre d'affaires",unit:"%",vals:bpSerie(P,(a)=>{
-      const i=P.annees.indexOf(a),p=i>0?P.pl.CA[P.annees[i-1]]:null;return p?(P.pl.CA[a]/p-1)*100:null;})},
-    {lab:"Taux d'impôt effectif",unit:"%",vals:bpSerie(P,a=>P.pl.EBT[a]>0?-P.pl.IS[a]/P.pl.EBT[a]*100:null)}],
-    P.annees,bpLibsFY(P));
+    {lab:"Marge brute / CA",unit:"%",vals:surCA(x=>x.mb)},
+    {lab:"Marge d'EBITDA",unit:"%",vals:surCA(x=>x.ebitda)},
+    {lab:"Marge d'exploitation (EBIT)",unit:"%",vals:surCA(x=>x.ebit)},
+    {lab:"Marge nette",unit:"%",vals:surCA(x=>x.rn)},
+    {lab:"Frais généraux (overhead) / CA",unit:"%",vals:surCA(x=>-x.fg)},
+    {lab:"Charges de personnel / CA",unit:"%",vals:surCA(x=>-x.pers)},
+    {lab:"Croissance du chiffre d'affaires",unit:"%",vals:bpSerie(ax,a=>{
+      const i=ax.annees.indexOf(a),p=i>0?b(ax.annees[i-1]).ca:null;return p?(b(a).ca/p-1)*100:null;})},
+    {lab:"Taux d'impôt effectif",unit:"%",vals:bpSerie(ax,a=>{const x=b(a);return x.ebt>0?-x.is/x.ebt*100:null;})}],
+    ax.annees,ax.libs);
 }
 function blocRatiosBPBs(P){
   if(typeof RATIOS_META==="undefined") return "";
+  const ax=bpAxes(P);
+  /* colonne historique : on reprend telle quelle la valeur calculée par la due diligence */
+  let hist=null; if(!ax.mm){try{hist=calculerRatios(ETATS).ratios;}catch(e){hist=null;}}
   const items=RATIOS_META.filter(m=>["margeBrute","margeEbitda","margeNette"].indexOf(m.k)<0)
-    .map(m=>({lab:m.lab,unit:m.unit,vals:bpSerie(P,a=>m.calc(baseRatiosBP(P,a)))}));
-  return blocRatios("Ratios prévisionnels de structure, rentabilité et liquidité",items,P.annees,bpLibsFY(P));
+    .map(m=>({lab:m.lab,unit:m.unit,vals:bpSerie(ax,a=>{
+      if(P.bs.CP[a]===undefined){const h=hist&&hist.filter(r=>r.k===m.k)[0];return h?h.vals[a]:null;}
+      return m.calc(baseRatiosBP(P,a));})}));
+  return blocRatios("Ratios prévisionnels de structure, rentabilité et liquidité",items,ax.annees,ax.libs);
 }
 function blocRatiosBPTft(P){
-  const pc=fn=>bpSerie(P,a=>P.pl.CA[a]?fn(a)/P.pl.CA[a]*100:null);
-  const chExp=a=>-((P.pl.COUTS_DIRECTS[a]||0)+(P.pl.OPEX_TOTAL[a]||0)+(P.pl.CHARGES_PERSONNEL[a]||0));
+  const ax=bpAxes(P,true),v=ETATS.v;   /* le TFT prévisionnel n'a pas de colonne historique */
+  /* flux projetés ou historiques ; l'historique n'a pas de TFT sur son premier exercice */
+  const b=a=>{const pj=(P.tft[a]!==undefined),t=pj?P.tft[a]:(ETATS.tft&&ETATS.tft[a]);
+    if(!t) return null;
+    return {ca:pj?P.pl.CA[a]:v.CA[a], eb:pj?P.pl.EBITDA[a]:v.EBITDA[a],
+      ch:pj?-((P.pl.COUTS_DIRECTS[a]||0)+(P.pl.OPEX_TOTAL[a]||0)+(P.pl.CHARGES_PERSONNEL[a]||0))
+           :-((v.COUTS_DIRECTS[a]||0)+(v.OPEX[a]||0)+(v.CHARGES_PERSONNEL[a]||0)),
+      fa:t.FA, zb:t.ZB, zc:t.ZC, inv:t.ACQUIS_IMMO, clot:pj?t.CLOTURE:t.ZG};};
+  const pc=fn=>bpSerie(ax,a=>{const x=b(a);return (x&&x.ca)?fn(x)/x.ca*100:null;});
   return blocRatios("Ratios de flux et de trésorerie prévisionnels",[
-    {lab:"Capacité d'autofinancement (CAFG) / CA",unit:"%",vals:pc(a=>P.tft[a].FA)},
-    {lab:"Conversion en cash (flux d'exploitation / EBITDA)",unit:"%",vals:bpSerie(P,a=>{
+    {lab:"Capacité d'autofinancement (CAFG) / CA",unit:"%",vals:pc(x=>x.fa)},
+    {lab:"Conversion en cash (flux d'exploitation / EBITDA)",unit:"%",vals:bpSerie(ax,a=>{
+      const x=b(a);
       /* un EBITDA proche de zéro rend le taux de conversion non significatif */
-      if(!(P.pl.EBITDA[a]>0.02*Math.abs(P.pl.CA[a]||0))) return null;
-      const c=P.tft[a].ZB/P.pl.EBITDA[a]*100;return Math.abs(c)<=300?c:null;})},
-    {lab:"Free cash flow / CA (exploitation + investissement)",unit:"%",vals:pc(a=>P.tft[a].ZB+P.tft[a].ZC)},
-    {lab:"Investissements / CA",unit:"%",vals:pc(a=>-P.tft[a].ACQUIS_IMMO)},
-    {lab:"Couverture des investissements (flux d'exploitation / investissements)",unit:"x",
-     vals:bpSerie(P,a=>P.tft[a].ZC?P.tft[a].ZB/Math.abs(P.tft[a].ZC):null)},
+      if(!x||!(x.eb>0.02*Math.abs(x.ca||0))) return null;
+      const c=x.zb/x.eb*100;return Math.abs(c)<=300?c:null;})},
+    {lab:"Free cash flow / CA (exploitation + investissement)",unit:"%",vals:pc(x=>x.zb+x.zc)},
+    {lab:"Investissements / CA",unit:"%",vals:pc(x=>-x.inv)},
+    {lab:"Couverture des investissements (flux d'exploitation / CAPEX)",unit:"x",
+     vals:bpSerie(ax,a=>{const x=b(a);return (x&&x.zc)?x.zb/Math.abs(x.zc):null;})},
     {lab:"Trésorerie de clôture (mois de charges d'exploitation)",unit:"mois",
-     vals:bpSerie(P,a=>P.tft[a].CLOTURE>0&&chExp(a)>0?P.tft[a].CLOTURE*12/chExp(a):null)}],
-    P.annees,bpLibsFY(P));
+     vals:bpSerie(ax,a=>{const x=b(a);return (x&&x.clot>0&&x.ch>0)?x.clot*12/x.ch:null;})}],
+    ax.annees,ax.libs);
 }
 function vueBPDette(P){
   const AP=P.annees;

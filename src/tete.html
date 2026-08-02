@@ -110,6 +110,10 @@ letter-spacing:.3px;padding:6px 10px;border-top:2px solid #c9d6ea}
 .tb.etat td.delta{background:var(--lblue)}
 .tb.etat th.delta{background:#3d5486;color:#fff}
 .tb.etat td.delta{color:var(--blue);font-weight:600}
+/* largeurs figées (colgroup) : un état et son bloc de ratios sont deux tableaux distincts,
+   c'est la seule façon d'aligner exactement leurs colonnes d'exercices */
+.tb.fixe{table-layout:fixed}
+.tb.fixe td:first-child,.tb.fixe th:first-child{white-space:normal;overflow-wrap:break-word}
 .h2{font-size:12.8px;color:var(--navy);margin:20px 0 10px}
 .badge{font-size:9.0px;font-weight:700;padding:2px 9px;border-radius:10px;white-space:nowrap}
 .badge.good{background:#e7f4ee;color:var(--green)}

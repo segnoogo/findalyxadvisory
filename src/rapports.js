@@ -711,6 +711,9 @@ function construireBP(pptx,opts){
   const mltR=x=>(x==null||!isFinite(x))?"n.s.":(Math.round(x*100)/100).toLocaleString("fr-FR",{maximumFractionDigits:2})+"×";
   const moisR=x=>(x==null||!isFinite(x))?"n.s.":(Math.round(x*10)/10).toLocaleString("fr-FR",{maximumFractionDigits:1})+" mois";
   const rt=(num,den)=>(den&&isFinite(num/den))?num/den:null;
+  /* TCAM de la période affichée (même calcul que l'application) ; « n.s. » si la base n'est pas
+     strictement positive — un taux de croissance depuis une perte n'a pas de sens */
+  const tcamR=vals=>(typeof cagrCell==="function")?cagrCell(vals,rpPct):"";
   const tvaR=(hyp&&hyp.tva!=null)?+hyp.tva:0.18;      /* TVA du modèle : les délais s'apprécient en TTC */
   const rhFit=n=>Math.min(0.24,4.95/(n+1));           /* hauteur de ligne : tient sous le pied de page */
   const trAct=a=>(proj.bs.TRESO_ACTIVE[a]!==undefined?proj.bs.TRESO_ACTIVE[a]:Math.max(0,proj.bs.TRESO[a]));
@@ -912,11 +915,10 @@ function construireBP(pptx,opts){
   const histM={CA:"CA",ACHATS:"COUTS_DIRECTS",MARGE_BRUTE:"MARGE_BRUTE",AUTRES_PRODUITS:"AUTRES_PROD",
     FRAIS_GENERAUX:"FRAIS_GENERAUX",EBITDA:"EBITDA",DOTATIONS:"DA",EBIT:"EBIT",
     RESULTAT_FIN:"RESULTAT_FIN",EBT:"RESULTAT_AVANT_IMPOT",IS:"IMPOTS",RN:"RESULTAT_NET"};
-  const lignesBP=codesP.map(([c,lib])=>mm?[lib,...ap.map(a=>rpFmt(proj.pl[c][a]))]:[lib,...A.map(a=>rpFmt(v[histM[c]][a])),
-    ...ap.map(a=>rpFmt(proj.pl[c][a]))]);
   /* section de ratios intégrée au compte de résultat (structure d'exploitation en % du CA) */
   const cols=mm?ap:[...A,...ap];
   const gPL=(c,a)=>{const src=(!mm&&A.indexOf(a)>=0)?v[histM[c]]:proj.pl[c];return src?src[a]:null;};
+  const lignesBP=codesP.map(([c,lib])=>{const vals=cols.map(a=>gPL(c,a));return [lib,...vals.map(rpFmt),tcamR(vals)];});
   const ratPL=[
     ["Croissance du chiffre d'affaires",...cols.map((a,k)=>{const p=k?gPL("CA",cols[k-1]):null;return p?pctR(gPL("CA",a)/p-1):"n.s.";})],
     ["Taux de marge brute",...cols.map(a=>pctR(rt(gPL("MARGE_BRUTE",a),gPL("CA",a))))],
@@ -924,12 +926,12 @@ function construireBP(pptx,opts){
     ["Marge d'EBITDA",...cols.map(a=>pctR(rt(gPL("EBITDA",a),gPL("CA",a))))],
     ["Marge d'exploitation (EBIT)",...cols.map(a=>pctR(rt(gPL("EBIT",a),gPL("CA",a))))],
     ["Marge nette",...cols.map(a=>pctR(rt(gPL("RN",a),gPL("CA",a))))]];
-  const lgPL=lignesBP.concat([["Ratios d'exploitation",...cols.map(()=>"")]],ratPL);
+  const lgPL=lignesBP.concat([["Ratios d'exploitation",...cols.map(()=>""),""]],ratPL.map(r=>r.concat("")));
   rpTable(sl,0.55,1.6,7.9,B.societe.toUpperCase()+" - P&L prévisionnel",
-    mm?[rpLib(),...fyp]:[rpLib(),...fy,...fyp],lgPL,
+    (mm?[rpLib(),...fyp]:[rpLib(),...fy,...fyp]).concat("TCAM"),lgPL,
     codesP.map(x=>x[2]).concat(["titre"],ratPL.map(()=>"pct")),
     mm?new Set():new Set(Array.from({length:A.length},(_,k)=>1+k)),
-    [2.6,...Array((mm?0:A.length)+ap.length).fill(1.05)],8,
+    [2.6,...Array((mm?0:A.length)+ap.length).fill(1.05),1.0],8,
     mm?"Projections issues du modèle d'inducteurs ; bilan bouclé par la trésorerie.":"Colonnes bleutées : historique reconstitué ; autres : projections.",
     rhFit(lgPL.length));
   rpCadreComment(sl,8.65,1.6,4.15,5.25);
@@ -939,18 +941,20 @@ function construireBP(pptx,opts){
   rpEnTete(sl,B.societe,"Projections financières");
   rpTitre(sl,"Bilan et trésorerie prévisionnels");
   rpAssertion(sl,mm?("La trésorerie nette atteint "+rpFmt(proj.bs.TRESO_NETTE[ap[ap.length-1]])+" "+rpLib()+" en "+fyp[fyp.length-1]+"."):("La trésorerie nette évolue de "+rpFmt(v.TRESORERIE_NETTE[a1])+" "+rpLib()+" ("+fy[fy.length-1]+") à "+rpFmt(proj.bs.TRESO_NETTE[ap[ap.length-1]])+" "+rpLib()+" ("+fyp[fyp.length-1]+")."));
-  const bsP=[["Immobilisations nettes",...ap.map(a=>rpFmt(proj.bs.IMMO_NET[a]))],
-    ["Stocks",...ap.map(a=>rpFmt(proj.bs.STOCKS[a]))],
-    ["Créances clients",...ap.map(a=>rpFmt(proj.bs.CLIENTS[a]))],
-    ["Autres créances",...ap.map(a=>rpFmt(proj.bs.AUTRES_CREANCES[a]))],
-    ["Dettes fournisseurs",...ap.map(a=>rpFmt(proj.bs.FOURNISSEURS[a]))],
-    ["Dettes fiscales et sociales",...ap.map(a=>rpFmt(proj.bs.DETTES_FISC_SOC[a]))],
-    ["Autres dettes",...ap.map(a=>rpFmt(proj.bs.AUTRES_DETTES[a]))],
-    ["Besoin en fonds de roulement",...ap.map(a=>rpFmt(proj.bs.BFR[a]))],
-    ["Trésorerie nette",...ap.map(a=>rpFmt(proj.bs.TRESO_NETTE[a]))],
-    ["Capitaux propres",...ap.map(a=>rpFmt(proj.bs.CP[a]))],
-    ["Provisions pour risques et charges",...ap.map(a=>rpFmt(proj.bs.PROVISIONS[a]))],
-    ["Dettes financières",...ap.map(a=>rpFmt(proj.bs.DETTE[a]))]];
+  const bsD=[["Immobilisations nettes",a=>proj.bs.IMMO_NET[a],"sous_total"],
+    ["Stocks",a=>proj.bs.STOCKS[a],"detail"],
+    ["Créances clients",a=>proj.bs.CLIENTS[a],"detail"],
+    ["Autres créances",a=>proj.bs.AUTRES_CREANCES[a],"detail"],
+    ["Dettes fournisseurs",a=>proj.bs.FOURNISSEURS[a],"detail"],
+    ["Dettes fiscales et sociales",a=>proj.bs.DETTES_FISC_SOC[a],"detail"],
+    ["Autres dettes",a=>proj.bs.AUTRES_DETTES[a],"detail"],
+    ["Besoin en fonds de roulement",a=>proj.bs.BFR[a],"sous_total"],
+    ["Trésorerie nette",a=>proj.bs.TRESO_NETTE[a],"sous_total"],
+    ["Comptes courants d'associés",a=>(proj.bs.CCA&&proj.bs.CCA[a])||0,"detail"],
+    ["Capitaux propres",a=>proj.bs.CP[a],"titre"],
+    ["Provisions pour risques et charges",a=>proj.bs.PROVISIONS[a],"detail"],
+    ["Dettes financières",a=>proj.bs.DETTE[a],"sous_total"]];
+  const bsP=bsD.map(([lib,f])=>{const vals=ap.map(f);return [lib,...vals.map(rpFmt),tcamR(vals)];});
   /* section de ratios intégrée au bilan (structure financière et rotation) */
   const ratBS=[
     ["Besoin en fonds de roulement (jours de CA)",...ap.map(a=>jrR(rt(proj.bs.BFR[a]*360,proj.pl.CA[a])))],
@@ -959,10 +963,11 @@ function construireBP(pptx,opts){
     ["Gearing (dettes financières / capitaux propres)",...ap.map(a=>mltR(cov(a).gear))],
     ["Dette nette / EBITDA",...ap.map(a=>mltR(cov(a).lev))],
     ["Rentabilité des capitaux propres (ROE)",...ap.map(a=>pctR(rt(proj.pl.RN[a],proj.bs.CP[a])))]];
-  const lgBS=bsP.concat([["Ratios de structure financière",...ap.map(()=>"")]],ratBS);
-  rpTable(sl,0.55,1.6,7.9,B.societe.toUpperCase()+" - Bilan prévisionnel (grandes masses)",[rpLib(),...fyp],lgBS,
-    ["sous_total","detail","detail","detail","detail","detail","detail","sous_total","sous_total","titre","detail","sous_total","titre"].concat(ratBS.map(()=>"pct")),
-    new Set(),[3.4,...ap.map(()=>0.86)],8,"Source : projections Findalyx Advisory",rhFit(lgBS.length));
+  const lgBS=bsP.concat([["Ratios de structure financière",...ap.map(()=>""),""]],ratBS.map(r=>r.concat("")));
+  rpTable(sl,0.55,1.6,7.9,B.societe.toUpperCase()+" - Bilan prévisionnel (grandes masses)",
+    [rpLib(),...fyp,"TCAM"],lgBS,
+    bsD.map(d=>d[2]).concat(["titre"],ratBS.map(()=>"pct")),
+    new Set(),[3.4,...ap.map(()=>0.86),0.95],8,"Source : projections Findalyx Advisory",rhFit(lgBS.length));
   rpCadreComment(sl,8.65,1.6,4.15,5.25);
   rpPied(sl,mention,++page);
   /* TFT prévisionnel */
@@ -978,7 +983,7 @@ function construireBP(pptx,opts){
     ["Remboursements d'emprunts","REMBOURS","detail"],["Dividendes versés","FN","detail"],
     ["Flux de financement","ZFIN","sous_total"],["Variation nette de trésorerie","ZF","sous_total"],
     ["Trésorerie d'ouverture","OUVERTURE","detail"],["Trésorerie de clôture","CLOTURE","sous_total"]];
-  const tftL=tftD.map(d=>[d[0],...ap.map(a=>rpFmt(proj.tft[a][d[1]]))]);
+  const tftL=tftD.map(d=>{const vals=ap.map(a=>proj.tft[a][d[1]]);return [d[0],...vals.map(rpFmt),tcamR(vals)];});
   /* section de ratios intégrée au tableau de flux (conversion en trésorerie et service de la dette) */
   const chExp=a=>-((proj.pl.ACHATS[a]||0)+(proj.pl.OPEX_TOTAL[a]||0)+(proj.pl.CHARGES_PERSONNEL[a]||0));
   const conv=a=>{const c=rt(proj.tft[a].ZB,proj.pl.EBITDA[a]);
@@ -990,10 +995,10 @@ function construireBP(pptx,opts){
     ["Couverture du service de la dette (DSCR)",...ap.map(a=>mltR(cov(a).dscr))],
     ["Trésorerie de clôture (mois de charges d'exploitation)",...ap.map(a=>{const t=proj.tft[a].CLOTURE;
       return t>0?moisR(rt(t*12,chExp(a))):"n.s.";})]];
-  const lgTF=tftL.concat([["Ratios de flux",...ap.map(()=>"")]],ratTF);
-  rpTable(sl,0.55,1.6,7.9,B.societe.toUpperCase()+" - TFT prévisionnel",[rpLib(),...fyp],lgTF,
+  const lgTF=tftL.concat([["Ratios de flux",...ap.map(()=>""),""]],ratTF.map(r=>r.concat("")));
+  rpTable(sl,0.55,1.6,7.9,B.societe.toUpperCase()+" - TFT prévisionnel",[rpLib(),...fyp,"TCAM"],lgTF,
     tftD.map(d=>d[2]).concat(["titre"],ratTF.map(()=>"pct")),
-    new Set(),[3.4,...ap.map(()=>0.86)],8,"Source : projections Findalyx Advisory (bilan bouclé par la trésorerie)",
+    new Set(),[3.4,...ap.map(()=>0.86),0.95],8,"Source : projections Findalyx Advisory (bilan bouclé par la trésorerie)",
     rhFit(lgTF.length));
   rpCadreComment(sl,8.65,1.6,4.15,5.25);
   rpPied(sl,mention,++page);
