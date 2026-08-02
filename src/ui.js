@@ -1187,6 +1187,7 @@ function blocCommentaires(){
 function fmtRatioV(v,unit){
   if(v===null||v===undefined||!isFinite(v)) return "-";
   if(unit==="j") return Math.round(v)+" j";
+  if(unit==="mois") return (Math.round(v*10)/10).toString().replace(".",",")+" mois";
   const dec=unit==="%"?1:2;
   return (Math.round(v*Math.pow(10,dec))/Math.pow(10,dec)).toString().replace(".",",")+(unit==="%"?" %":" ×");
 }
@@ -1195,12 +1196,13 @@ function fmtRatioD(prev,next,unit){
   const d=next-prev;
   if(unit==="%"){const pb=Math.round(d*100);return (pb>0?"+":"")+pb+" pb";}
   if(unit==="j"){const j=Math.round(d);return (j>0?"+":"")+j+" j";}
+  if(unit==="mois"){const m=Math.round(d*10)/10;return (m>0?"+":"")+m.toString().replace(".",",")+" mois";}
   const x=Math.round(d*100)/100;return (x>0?"+":"")+x.toString().replace(".",",")+" ×";
 }
-function blocRatios(titre,items,annees){
+function blocRatios(titre,items,annees,libs){
   const A=annees||ETATS.annees, n=A.length;
   if(!items.length||n<1) return "";
-  const th=A.map(a=>`<th class="num">FY${String(a).slice(-2)}</th>`).join("")
+  const th=A.map((a,i)=>`<th class="num">${(libs&&libs[i])||("FY"+String(a).slice(-2))}</th>`).join("")
     +A.slice(1).map((a,i)=>`<th class="num delta">Δ${String(A[i]).slice(-2)}-${String(a).slice(-2)}</th>`).join("")
     +(n>2?'<th class="num delta">CAGR</th>':"");
   const lignes=items.map(it=>{
@@ -1211,7 +1213,7 @@ function blocRatios(titre,items,annees){
   }).join("");
   return `<div class="card" style="padding:0;margin-top:12px">
     <div class="bande">${esc(titre)}</div>
-    <div class="tscroll"><table class="tb etat"><tr><th>${uni().lib}</th>${th}</tr>${lignes}</table></div></div>`;
+    <div class="tscroll"><table class="tb etat"><tr><th>Indicateur</th>${th}</tr>${lignes}</table></div></div>`;
 }
 function blocRatiosMarge(){
   const A=ETATS.annees, v=ETATS.v;

@@ -870,7 +870,7 @@ function vueBPPl(P){
     }
     defs.push({lib:d.lib,st:d.st,hist:(v[d.code]&&v[d.code][a1])||0,proj:proj[d.code]||(a=>0)});
   });
-  return tableBP(P,defs,"Compte de résultat prévisionnel");
+  return tableBP(P,defs,"Compte de résultat prévisionnel")+blocRatiosBPPl(P);
 }
 function vueBPBs(P){
   /* MÊME présentation que la Due Diligence (actif net = capitaux propres), en agrégé.
@@ -913,7 +913,8 @@ function vueBPBs(P){
     {lib:"Capitaux propres",st:"titre",hist:v.CAPITAUX_PROPRES[a1],proj:a=>P.bs.CP[a]}];
   return tableBP(P,defs,"Bilan prévisionnel")+
   `<div class="mut" style="margin-top:8px">Présentation en actif net, identique à la due diligence : Actifs immobilisés + BFR + trésorerie − provisions − dettes financières = Actif net = Capitaux propres (la trésorerie boucle le bilan). BFR d'exploitation projeté (stocks, clients, fournisseurs, dettes fiscales et sociales) ; autres créances et dettes hors exploitation (HAO inclus) figées à leur niveau historique.
-  ${mOuv?"<b>Situation d'ouverture</b> : éléments déclarés par la direction, non audités et non exhaustifs — l'écart éventuel relève d'une garantie d'actif et de passif (cession de titres) ou d'un ajustement de prix au closing.":""}</div>`;
+  ${mOuv?"<b>Situation d'ouverture</b> : éléments déclarés par la direction, non audités et non exhaustifs — l'écart éventuel relève d'une garantie d'actif et de passif (cession de titres) ou d'un ajustement de prix au closing.":""}</div>`
+  +blocRatiosBPBs(P);
 }
 function vueBPTft(P){
   const AP=P.annees;
@@ -925,7 +926,64 @@ function vueBPTft(P){
   return `<div class="card" style="padding:0">
     <div class="bande">${esc(DOSSIER.societe.toUpperCase())} — TFT prévisionnel (modèle officiel) · scénario ${P.scenario}</div>
     <div class="tscroll"><table class="tb etat"><tr><th>${uni().lib}</th>
-    ${AP.map(a=>`<th class="num">${libFY(a,true)}</th>`).join("")}</tr>${lignes}</table></div></div>`;
+    ${AP.map(a=>`<th class="num">${libFY(a,true)}</th>`).join("")}</tr>${lignes}</table></div></div>`
+    +blocRatiosBPTft(P);
+}
+/* --- blocs de ratios sous les états prévisionnels ---------------------------------------
+   Mêmes blocs que la due diligence (blocRatiosMarge / blocRatiosBilan / blocRatiosTFT), mais
+   alimentés par la projection. Pour le bilan on réutilise RATIOS_META : les formules et les
+   seuils sont donc strictement ceux de la due diligence, appliqués aux années projetées. */
+function baseRatiosBP(P,a){
+  const trA=(P.bs.TRESO_ACTIVE[a]!==undefined?P.bs.TRESO_ACTIVE[a]:Math.max(0,P.bs.TRESO[a]));
+  const ct=P.bs.LIGNE_CT[a]||0;
+  const dettesFin=P.bs.DETTE[a]+((P.bs.CCA&&P.bs.CCA[a])||0)+ct;
+  const actifCirc=P.bs.STOCKS[a]+P.bs.CLIENTS[a]+P.bs.AUTRES_CREANCES[a]+trA;
+  return {ca:P.pl.CA[a], mb:P.pl.MARGE_BRUTE[a], ebitda:P.pl.EBITDA[a], ebit:P.pl.EBIT[a], rn:P.pl.RN[a],
+    cp:P.bs.CP[a], dettesFin:dettesFin, detteNette:dettesFin-trA, fraisFin:-(P.pl.FRAIS_FIN[a]||0),
+    stocks:P.bs.STOCKS[a], clients:P.bs.CLIENTS[a], fournisseurs:-P.bs.FOURNISSEURS[a],
+    achats:-P.pl.COUTS_DIRECTS[a], opex:-((P.pl.OPEX_TOTAL[a]||0)+(P.pl.CHARGES_PERSONNEL[a]||0)),
+    bfr:P.bs.BFR[a], tresoActif:trA, actifCirc:actifCirc,
+    passifCirc:-(P.bs.FOURNISSEURS[a]+P.bs.DETTES_FISC_SOC[a]+P.bs.AUTRES_DETTES[a])+ct,
+    totalActif:P.bs.IMMO_NET[a]+actifCirc};
+}
+function bpSerie(P,fn){const o={};P.annees.forEach(a=>{const x=fn(a);o[a]=(x===null||x===undefined||!isFinite(x))?null:x;});return o;}
+function bpLibsFY(P){return P.annees.map(a=>libFY(a,true));}
+function blocRatiosBPPl(P){
+  const surCA=fn=>bpSerie(P,a=>P.pl.CA[a]?fn(a)/P.pl.CA[a]*100:null);
+  return blocRatios("Ratios du compte de résultat prévisionnel",[
+    {lab:"Marge brute / CA",unit:"%",vals:surCA(a=>P.pl.MARGE_BRUTE[a])},
+    {lab:"Marge d'EBITDA",unit:"%",vals:surCA(a=>P.pl.EBITDA[a])},
+    {lab:"Marge d'exploitation (EBIT)",unit:"%",vals:surCA(a=>P.pl.EBIT[a])},
+    {lab:"Marge nette",unit:"%",vals:surCA(a=>P.pl.RN[a])},
+    {lab:"Frais généraux (overhead) / CA",unit:"%",vals:surCA(a=>-((P.pl.OPEX_TOTAL[a]||0)+(P.pl.CHARGES_PERSONNEL[a]||0)))},
+    {lab:"Charges de personnel / CA",unit:"%",vals:surCA(a=>-(P.pl.CHARGES_PERSONNEL[a]||0))},
+    {lab:"Croissance du chiffre d'affaires",unit:"%",vals:bpSerie(P,(a)=>{
+      const i=P.annees.indexOf(a),p=i>0?P.pl.CA[P.annees[i-1]]:null;return p?(P.pl.CA[a]/p-1)*100:null;})},
+    {lab:"Taux d'impôt effectif",unit:"%",vals:bpSerie(P,a=>P.pl.EBT[a]>0?-P.pl.IS[a]/P.pl.EBT[a]*100:null)}],
+    P.annees,bpLibsFY(P));
+}
+function blocRatiosBPBs(P){
+  if(typeof RATIOS_META==="undefined") return "";
+  const items=RATIOS_META.filter(m=>["margeBrute","margeEbitda","margeNette"].indexOf(m.k)<0)
+    .map(m=>({lab:m.lab,unit:m.unit,vals:bpSerie(P,a=>m.calc(baseRatiosBP(P,a)))}));
+  return blocRatios("Ratios prévisionnels de structure, rentabilité et liquidité",items,P.annees,bpLibsFY(P));
+}
+function blocRatiosBPTft(P){
+  const pc=fn=>bpSerie(P,a=>P.pl.CA[a]?fn(a)/P.pl.CA[a]*100:null);
+  const chExp=a=>-((P.pl.COUTS_DIRECTS[a]||0)+(P.pl.OPEX_TOTAL[a]||0)+(P.pl.CHARGES_PERSONNEL[a]||0));
+  return blocRatios("Ratios de flux et de trésorerie prévisionnels",[
+    {lab:"Capacité d'autofinancement (CAFG) / CA",unit:"%",vals:pc(a=>P.tft[a].FA)},
+    {lab:"Conversion en cash (flux d'exploitation / EBITDA)",unit:"%",vals:bpSerie(P,a=>{
+      /* un EBITDA proche de zéro rend le taux de conversion non significatif */
+      if(!(P.pl.EBITDA[a]>0.02*Math.abs(P.pl.CA[a]||0))) return null;
+      const c=P.tft[a].ZB/P.pl.EBITDA[a]*100;return Math.abs(c)<=300?c:null;})},
+    {lab:"Free cash flow / CA (exploitation + investissement)",unit:"%",vals:pc(a=>P.tft[a].ZB+P.tft[a].ZC)},
+    {lab:"Investissements / CA",unit:"%",vals:pc(a=>-P.tft[a].ACQUIS_IMMO)},
+    {lab:"Couverture des investissements (flux d'exploitation / investissements)",unit:"x",
+     vals:bpSerie(P,a=>P.tft[a].ZC?P.tft[a].ZB/Math.abs(P.tft[a].ZC):null)},
+    {lab:"Trésorerie de clôture (mois de charges d'exploitation)",unit:"mois",
+     vals:bpSerie(P,a=>P.tft[a].CLOTURE>0&&chExp(a)>0?P.tft[a].CLOTURE*12/chExp(a):null)}],
+    P.annees,bpLibsFY(P));
 }
 function vueBPDette(P){
   const AP=P.annees;
