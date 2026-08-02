@@ -1828,8 +1828,9 @@ async function exporterExcelModele(){
         else if(m==="unit"){ info.val=one("   Coût direct unitaire (FCFA / unité)",(+cl.val||0),QF); }
         else { const inds=[];
           (cl.rows||[]).forEach((r,j)=>{ const pct=String(r.unit||"").indexOf("%")>=0, nm=(r.name||("Inducteur "+(j+1)))+(pct?" (ratio %)":""), lib="   "+((r.op==='d')?"÷ ":"× ")+nm;
-            if(r.mode==='yearly'){ const vals=[];for(let y=0;y<N;y++){let v=(+((r.vals||[])[y])||0);if(pct)v/=100;vals.push(v);} inds.push({row:ser(lib,vals,pct?RF:QF),op:(r.op==='d'?'d':'x'),name:nm,pct:pct}); }
-            else { let base=(+r.val||0); if(pct)base/=100; const gg=grow2(lib,base,(+r.g||0)/100,pct?RF:QF); inds.push({row:gg.row,op:(r.op==='d'?'d':'x'),name:nm,pct:pct}); } });
+            if(r.refLigne){ inds.push({ref:idToK[r.refLigne],op:(r.op==='d'?'d':'x'),name:(r.name||"Effectif — référence"),pct:false,ceil:!!r.ceil}); return; }   /* référence : rien à saisir ici, calculé dans le Modèle */
+            if(r.mode==='yearly'){ const vals=[];for(let y=0;y<N;y++){let v=(+((r.vals||[])[y])||0);if(pct)v/=100;vals.push(v);} inds.push({row:ser(lib,vals,pct?RF:QF),op:(r.op==='d'?'d':'x'),name:nm,pct:pct,ceil:!!r.ceil}); }
+            else { let base=(+r.val||0); if(pct)base/=100; const gg=grow2(lib,base,(+r.g||0)/100,pct?RF:QF); inds.push({row:gg.row,op:(r.op==='d'?'d':'x'),name:nm,pct:pct,ceil:!!r.ceil}); } });
           if(!inds.length){ const gg=grow2("   Quantité",0,0); inds.push({row:gg.row,op:'x',name:"Quantité"}); }
           let taux; if((cl.prix&&cl.prix.mode)==='yearly'){ const tv=[];for(let y=0;y<N;y++)tv.push((+((cl.prix.vals||[])[y])||0)); taux={row:ser("   Taux unitaire (FCFA)",tv,QF)}; }
             else { const gg=grow2("   Taux unitaire (FCFA)",(+((cl.prix||{}).val)||0),(+((cl.prix||{}).g||0))/100,QF); taux={row:gg.row}; }
@@ -1870,7 +1871,11 @@ async function exporterExcelModele(){
       wsH.getCell(hr,6).value="montant (FCFA) / durée / année";wsH.getCell(hr,6).font={italic:true,size:9,color:{argb:"FF808080"}};
     });
     sec("FINANCEMENT — montage initial (tiré en année 1)");
-    H.capital=one("Fonds propres (capital + apports) (FCFA)",Math.round((P.financement.capital||0)*1000),NF);
+    H.capital=one("Capital social (FCFA)",Math.round((P.financement.capital||0)*1000),NF);
+    H.primes=one("Primes liées au capital (FCFA)",Math.round((P.financement.primes||0)*1000),NF);
+    H.cca0=one("Comptes courants d'associés — CCA (FCFA)",Math.round((P.financement.cca||0)*1000),NF);
+    H.ccaTaux=one("CCA — taux de rémunération",P.financement.ccaTaux||0,PCT2);
+    H.ccaRembRow=ser("   CCA — remboursement de l'année (FCFA, selon le mode choisi)",P.annees.map(a=>Math.round(((P.dette[a]&&P.dette[a].ccaRemb)||0)*1000)),NF);
     H.subv=one("Subvention (FCFA)",Math.round((P.financement.subvention||0)*1000),NF);
     H.dette=one("Dette de base (hors IDC) (FCFA)",Math.round((P.financement.dette||0)*1000),NF);
     H.taux=one("Taux d'intérêt de la dette",(M.financement&&M.financement.emprunt&&+M.financement.emprunt.taux)||0.08,PCT2);
@@ -1975,11 +1980,36 @@ async function exporterExcelModele(){
         row("CDI"+k,"   = Coût de l'année",(i,X)=>`-${X}${rr("VOL"+kk)}*${X}${rr("CUC"+k)}*(1+${X}${rr("R_INFL")})^(${OI(X)}-1)*${X}${rr("R_FCOUT")}/${X}${rr("R_DIV")}`,NF);
       } else {
         sst(nom);
-        (info.inds||[]).forEach((ind,j)=>{ const lbl="   "+((ind.op==='d')?"÷ ":"× ")+ind.name;
-          row("CIN"+k+"_"+j,lbl,(i,X)=>`INDEX(${rng(ind.row)},${OI(X)})`,ind.pct?RF:QF); });
+        /* la chaîne se découpe en segments : chaque drapeau « arrondi sup. » matérialise
+           une ligne « = Groupes » (ROUNDUP), et la suite du calcul repart de cette ligne */
+        let seg=[], baseCode=null;
+        (info.inds||[]).forEach((ind,j)=>{
+          if(ind.ref!=null){
+            const kk=ind.ref, srcs=(H.rev[kk]&&H.rev[kk].inds)||[];
+            const phys=srcs.map((si,jj)=>si.pct?null:("IND"+kk+"_"+jj)).filter(Boolean);
+            row("CIN"+k+"_"+j,"   "+((ind.op==='d')?"÷ ":"× ")+ind.name+" (réf. « "+((H.lignes[kk]&&H.lignes[kk].name)||"ligne")+" » × scénario)",
+              (i,X)=>`(${phys.length?phys.map(c=>`${X}${rr(c)}`).join("*"):"0"})*${X}${rr("R_FCA")}`,QF);
+          } else {
+            row("CIN"+k+"_"+j,"   "+((ind.op==='d')?"÷ ":"× ")+ind.name,(i,X)=>`INDEX(${rng(ind.row)},${OI(X)})`,ind.pct?RF:QF);
+          }
+          seg.push({code:"CIN"+k+"_"+j,op:ind.op});
+          if(ind.ceil){
+            const gcode="GRP"+k+"_"+j, curBase=baseCode, curSeg=seg.slice();
+            row(gcode,"   = Groupes (arrondi supérieur)",(i,X)=>{
+              let e=curBase?`${X}${rr(curBase)}`:"";
+              curSeg.forEach((s,idx)=>{const ref=`${X}${rr(s.code)}`;
+                if(!e&&idx===0)e=(s.op==='d')?`1/${ref}`:ref; else e+=(s.op==='d')?`/${ref}`:`*${ref}`;});
+              return `ROUNDUP(${e||"0"},0)`;
+            },"0");
+            baseCode=gcode; seg=[];
+          }
+        });
         row("CTX"+k,"   × Taux unitaire (FCFA)",(i,X)=>`INDEX(${rng(info.taux.row)},${OI(X)})`,QF);
+        const finBase=baseCode, finSeg=seg.slice();
         row("CDI"+k,"   = Coût de l'année",(i,X)=>{
-          let e=""; (info.inds||[]).forEach((ind,j)=>{const ref=`${X}${rr("CIN"+k+"_"+j)}`; if(j===0)e=(ind.op==='d')?`1/${ref}`:ref; else e+=(ind.op==='d')?`/${ref}`:`*${ref}`;});
+          let e=finBase?`${X}${rr(finBase)}`:"";
+          finSeg.forEach((s,idx)=>{const ref=`${X}${rr(s.code)}`;
+            if(!e&&idx===0)e=(s.op==='d')?`1/${ref}`:ref; else e+=(s.op==='d')?`/${ref}`:`*${ref}`;});
           return `-IFERROR(${X}${rr("FO")}*(${e||"0"})*${X}${rr("CTX"+k)}*${X}${rr("R_FCOUT")},0)/${X}${rr("R_DIV")}`;
         },NF);
       }
@@ -2037,13 +2067,22 @@ async function exporterExcelModele(){
     row("DETTE","Dette financière — solde de clôture",(i,X)=>`${pRef("DETTE",i)}+${X}${rr("TIR")}+${X}${rr("IDC")}-${X}${rr("REMB")}`,NF,true);
     row("INT","Intérêts sur emprunt (exploitation)",(i,X)=>`${X}${rr("FO")}*${X}${rr("R_TXD")}*(${pRef("DETTE",i)}+${X}${rr("DETTE")})/2`,NF);
     row("INTCT","Intérêts du découvert (ligne court terme)",(i,X)=>`${X}${rr("R_DEC")}*${pRef("LCT",i)}`,NF);
+    blank();
+    sst("Comptes courants d'associés (CCA) — dette financière, quasi-fonds propres");
+    row("R_CCA0","Rappel — CCA du montage (en unité)",(i,X)=>`${rH}!${H.cca0}/${X}${rr("R_DIV")}`,NF);
+    row("R_TXCCA","Rappel — taux de rémunération du CCA",()=>`${rH}!${H.ccaTaux}`,PCT2);
+    row("R_RCCA","Rappel — remboursement CCA de l'année (en unité)",(i,X)=>`INDEX(${rng(H.ccaRembRow)},${X}${rr("IDX")})/${X}${rr("R_DIV")}`,NF);
+    row("TIRCCA","Apport en CCA (année 1)",(i,X)=>`IF(${X}${rr("IDX")}=1,${X}${rr("R_CCA0")},0)`,NF);
+    row("REMCCA","Remboursement du CCA (−)",(i,X)=>`-${X}${rr("R_RCCA")}`,NF);
+    row("CCAS","CCA — solde de clôture",(i,X)=>`${pRef("CCAS",i)}+${X}${rr("TIRCCA")}-${X}${rr("R_RCCA")}`,NF,true);
+    row("INTCCA","Intérêts sur CCA",(i,X)=>`${X}${rr("R_TXCCA")}*(${pRef("CCAS",i)}+${X}${rr("CCAS")})/2`,NF);
 
     /* ---- COMPTE DE RÉSULTAT : cascade EBIT → résultat net ---- */
     sec2("COMPTE DE RÉSULTAT — cascade");
     row("R_IS","Rappel — taux d'IS",()=>`${rH}!${H.is}`,PCT2);
     row("R_IMF","Rappel — impôt minimum forfaitaire (% du CA)",()=>`${rH}!${H.imf}`,PCT2);
     row("EBIT","EBIT (EBITDA − dotations)",(i,X)=>`${X}${rr("EBITDA")}+${X}${rr("DA")}`,NF,true);
-    row("RFIN","Résultat financier",(i,X)=>`-${X}${rr("INT")}-${X}${rr("INTCT")}`,NF);
+    row("RFIN","Résultat financier",(i,X)=>`-${X}${rr("INT")}-${X}${rr("INTCT")}-${X}${rr("INTCCA")}`,NF);
     row("EBT","Résultat avant impôt",(i,X)=>`${X}${rr("EBIT")}+${X}${rr("RFIN")}`,NF,true);
     row("USE","   Déficit antérieur imputé",(i,X)=>`MIN(${pRef("CARRY",i)},MAX(0,${X}${rr("EBT")}))`,NF);
     row("CARRY","   Déficits reportables (stock)",(i,X)=>`${pRef("CARRY",i)}-${X}${rr("USE")}+MAX(0,-${X}${rr("EBT")})`,NF);
@@ -2065,13 +2104,15 @@ async function exporterExcelModele(){
     /* ---- BILAN — bouclage par la trésorerie (actif net = capitaux propres) ---- */
     sec2("BILAN — bouclage (actif net = capitaux propres)");
     row("CAPSOC","   Capital social (rappel du montage, en unité)",(i,X)=>`${rH}!${H.capital}/${X}${rr("R_DIV")}`,NF);
+    row("PRIMESR","   Primes liées au capital (rappel du montage, en unité)",(i,X)=>`${rH}!${H.primes}/${X}${rr("R_DIV")}`,NF);
     row("SUBVR","   Subventions d'investissement (rappel du montage, en unité)",(i,X)=>`${rH}!${H.subv}/${X}${rr("R_DIV")}`,NF);
-    row("RANR","   Report à nouveau & résultats antérieurs",(i,X)=>`${X}${rr("CP")}-${X}${rr("CAPSOC")}-${X}${rr("SUBVR")}-${X}${rr("RN")}`,NF);
-    row("CP","Capitaux propres",(i,X)=>`${pRef("CP",i)}+${X}${rr("RN")}+IF(${X}${rr("IDX")}=1,${X}${rr("CAPSOC")}+${X}${rr("SUBVR")},0)`,NF,true);
-    row("TRES","Trésorerie nette (bouclage du bilan)",(i,X)=>`${X}${rr("CP")}+${X}${rr("DETTE")}-${X}${rr("IMN")}-${X}${rr("BFR")}`,NF,true);
+    row("RANR","   Report à nouveau & résultats antérieurs",(i,X)=>`${X}${rr("CP")}-${X}${rr("CAPSOC")}-${X}${rr("PRIMESR")}-${X}${rr("SUBVR")}-${X}${rr("RN")}`,NF);
+    row("CP","Capitaux propres",(i,X)=>`${pRef("CP",i)}+${X}${rr("RN")}+IF(${X}${rr("IDX")}=1,${X}${rr("CAPSOC")}+${X}${rr("PRIMESR")}+${X}${rr("SUBVR")},0)`,NF,true);
+    row("TRES","Trésorerie nette (bouclage du bilan)",(i,X)=>`${X}${rr("CP")}+${X}${rr("DETTE")}+${X}${rr("CCAS")}-${X}${rr("IMN")}-${X}${rr("BFR")}`,NF,true);
     row("LCT","   Découvert (si trésorerie négative)",(i,X)=>`MAX(0,-${X}${rr("TRES")})`,NF);
     row("DETTEN","   Dettes financières (−, présentation actif net)",(i,X)=>`-${X}${rr("DETTE")}`,NF);
-    row("AN","Actif net = Immo nettes + BFR + Trésorerie − Dettes",(i,X)=>`${X}${rr("IMN")}+${X}${rr("BFR")}+${X}${rr("TRES")}-${X}${rr("DETTE")}`,NF,true);
+    row("CCAN","   Comptes courants d'associés (−, présentation actif net)",(i,X)=>`-${X}${rr("CCAS")}`,NF);
+    row("AN","Actif net = Immo nettes + BFR + Trésorerie − Dettes − CCA",(i,X)=>`${X}${rr("IMN")}+${X}${rr("BFR")}+${X}${rr("TRES")}-${X}${rr("DETTE")}-${X}${rr("CCAS")}`,NF,true);
     row("CTRL","Contrôle : actif net − capitaux propres (= 0)",(i,X)=>`${X}${rr("AN")}-${X}${rr("CP")}`,NF);
 
     /* ---- TABLEAU DE FLUX DE TRÉSORERIE ---- */
@@ -2083,9 +2124,9 @@ async function exporterExcelModele(){
     row("VFR","   Variation des dettes d'exploitation",(i,X)=>`-(${X}${rr("FRN")}-${pRef("FRN",i)})`,NF);
     row("ZB","Flux de trésorerie opérationnels",(i,X)=>`${X}${rr("FA")}+${X}${rr("VCR")}+${X}${rr("VST")}+${X}${rr("VFR")}`,NF,true);
     row("ZC","Flux d'investissement",(i,X)=>`-${X}${rr("CAPEX")}`,NF,true);
-    row("FK","   Augmentation de capital",(i,X)=>`IF(${X}${rr("IDX")}=1,${X}${rr("CAPSOC")},0)`,NF);
+    row("FK","   Augmentation de capital (capital + primes)",(i,X)=>`IF(${X}${rr("IDX")}=1,${X}${rr("CAPSOC")}+${X}${rr("PRIMESR")},0)`,NF);
     row("FL","   Subvention",(i,X)=>`IF(${X}${rr("IDX")}=1,${X}${rr("SUBVR")},0)`,NF);
-    row("ZFIN","Flux de financement",(i,X)=>`${X}${rr("FK")}+${X}${rr("FL")}+${X}${rr("TIR")}-${X}${rr("REMB")}`,NF,true);
+    row("ZFIN","Flux de financement",(i,X)=>`${X}${rr("FK")}+${X}${rr("FL")}+${X}${rr("TIR")}-${X}${rr("REMB")}+${X}${rr("TIRCCA")}-${X}${rr("R_RCCA")}`,NF,true);
     row("ZF","Variation nette de trésorerie",(i,X)=>`${X}${rr("ZB")}+${X}${rr("ZC")}+${X}${rr("ZFIN")}`,NF,true);
     row("ZG","Trésorerie à la clôture",(i,X)=>`${X}${rr("ZA")}+${X}${rr("ZF")}`,NF,true);
     row("ECART","Contrôle (clôture TFT − trésorerie bilan = 0)",(i,X)=>`${X}${rr("ZG")}-${X}${rr("TRES")}`,NF);
@@ -2095,6 +2136,7 @@ async function exporterExcelModele(){
     row("FCFF","Flux de trésorerie disponible (FCFF)",(i,X)=>`${X}${rr("EBIT")}*(1-IF(${X}${rr("EBIT")}>0,${X}${rr("R_IS")},0))+${X}${rr("DOT")}-(${X}${rr("BFR")}-${pRef("BFR",i)})-${X}${rr("CAPEX")}`,NF);
     row("INTP","Intérêts sur emprunts (charge)",(i,X)=>`-${X}${rr("INT")}`,NF);
     row("DECP","Intérêts sur découvert (charge)",(i,X)=>`-${X}${rr("INTCT")}`,NF);
+    row("INTCCAP","Intérêts sur CCA (charge)",(i,X)=>`-${X}${rr("INTCCA")}`,NF);
     row("AMCN","Amortissements cumulés (−)",(i,X)=>`-${X}${rr("AMC")}`,NF);
     row("TRA","Trésorerie active",(i,X)=>`${X}${rr("TRES")}+${X}${rr("LCT")}`,NF);
     row("DECN","Concours bancaires (découvert, −)",(i,X)=>`-${X}${rr("LCT")}`,NF);
@@ -2151,6 +2193,7 @@ async function exporterExcelModele(){
     plDefs.push(["EBIT","EBIT",1]);
     plDefs.push(["   Intérêts sur emprunts","INTP"]);
     plDefs.push(["   Intérêts sur découvert","DECP"]);
+    plDefs.push(["   Intérêts sur comptes courants d'associés","INTCCAP"]);
     plDefs.push(["Résultat financier","RFIN",1]);
     plDefs.push(["Résultat avant impôt","EBT",1]);
     plDefs.push(["Impôt sur les sociétés","IS"]);
@@ -2168,10 +2211,11 @@ async function exporterExcelModele(){
       ["Trésorerie",null],
       ["   Trésorerie active","TRA"],["   Concours bancaires courants (découvert)","DECN"],["Trésorerie nette","TRES",1],
       ["Dettes financières","DETTEN"],
+      ["Comptes courants d'associés","CCAN"],
       ["Actif net","AN",1],
       [],
       ["Capitaux propres",null],
-      ["   Capital social","CAPSOC"],["   Subventions d'investissement","SUBVR"],
+      ["   Capital social","CAPSOC"],["   Primes liées au capital","PRIMESR"],["   Subventions d'investissement","SUBVR"],
       ["   Report à nouveau et résultats antérieurs","RANR"],["   Résultat net de l'exercice","RN"],["Capitaux propres","CP",1],
       [],
       ["Contrôle : actif net − capitaux propres (= 0)","CTRL"]];
@@ -2181,14 +2225,18 @@ async function exporterExcelModele(){
       ["Trésorerie nette à l'ouverture","ZA"],["Capacité d'autofinancement (CAFG)","FA"],
       ["Variation des créances","VCR"],["Variation des stocks","VST"],["Variation des dettes d'exploitation","VFR"],
       ["Flux opérationnels","ZB",1],["Flux d'investissement","ZC",1],["Augmentation de capital","FK"],
-      ["Subvention","FL"],["Emprunts nouveaux","TIR"],["Remboursements","REMB"],["Flux de financement","ZFIN",1],
+      ["Subvention","FL"],["Emprunts nouveaux","TIR"],["Remboursements","REMB"],
+      ["Apport en comptes courants d'associés","TIRCCA"],["Remboursement des comptes courants","REMCCA"],["Flux de financement","ZFIN",1],
       ["Variation nette de trésorerie","ZF",1],["Trésorerie nette à la clôture","ZG",1]],
       "En période de construction, capital / emprunt / investissement apparaissent dans l'année concernée ; l'exploitation démarre après.");
     feuille(nD,"Tableau de la dette financière",[
-      ["Encours à l'ouverture (année précédente)","DETTE"],
+      ["Emprunt bancaire",null],
       ["Tirages","TIR"],["Intérêts de construction capitalisés (IDC)","IDC"],
-      ["Remboursements","REMB"],["Intérêts payés","INT"],["Encours à la clôture","DETTE",1]],
-      "IDC = intérêts capitalisés pendant la construction (dette croissante, remboursement différé).");
+      ["Remboursements","REMB"],["Intérêts payés","INT"],["Encours à la clôture","DETTE",1],
+      [],
+      ["Comptes courants d'associés (CCA)",null],
+      ["Apport (année 1)","TIRCCA"],["Remboursements","REMCCA"],["Intérêts sur CCA","INTCCA"],["Solde à la clôture","CCAS",1]],
+      "IDC = intérêts capitalisés pendant la construction. Le CCA est une dette financière (quasi-fonds propres) : rémunération optionnelle, remboursement selon le mode choisi (maintenu / in fine / linéaire), série modifiable dans les Hypothèses.");
 
     /* Sources & Emplois (valeurs de synthèse) */
     const Pf=P.financement, wsSU=wb.addWorksheet(nSU);
@@ -2202,7 +2250,9 @@ async function exporterExcelModele(){
     const rEmp=wsSU.rowCount+1;suRow("Total emplois",Pf.emplois,true);
     wsSU.addRow([]);
     wsSU.addRow([null,"RESSOURCES"]).getCell(2).font={bold:true,color:{argb:"FF224289"}};
-    suRow("Fonds propres ("+Math.round(Pf.partFP*100)+" %)",Pf.capital);
+    suRow("Capital social"+(Pf.mode==="auto"?" ("+Math.round(Pf.partFP*100)+" %)":""),Pf.capital);
+    if(Pf.primes>0.01)suRow("Primes liées au capital",Pf.primes);
+    if(Pf.cca>0.01)suRow("Comptes courants d'associés (CCA)",Pf.cca);
     if(Pf.subvention>0.01)suRow("Subvention",Pf.subvention);
     suRow("Dette"+(Pf.idc>0.01?" (dont IDC)":""),Pf.detteAvecIDC);
     suRow("Total ressources",Pf.sources,true);

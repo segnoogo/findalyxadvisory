@@ -143,13 +143,13 @@ function etatsFromModele(P){
   var aL=P.annees[P.annees.length-1], v={};
   var s=function(k,x){v[k]={};v[k][aL]=x;};
   s('CA',P.pl.CA[aL]);s('EBITDA',P.pl.EBITDA[aL]);s('EBIT',P.pl.EBIT[aL]);s('RESULTAT_NET',P.pl.RN[aL]);s('MARGE_BRUTE',P.pl.MARGE_BRUTE[aL]);
-  s('CAPITAUX_PROPRES',P.bs.CP[aL]);s('DETTES_FINANCIERES',-P.bs.DETTE[aL]);s('TRESORERIE_NETTE',P.bs.TRESO[aL]);s('PROVISIONS_RC',-P.bs.PROVISIONS[aL]);
+  s('CAPITAUX_PROPRES',P.bs.CP[aL]);s('DETTES_FINANCIERES',-(P.bs.DETTE[aL]+((P.bs.CCA&&P.bs.CCA[aL])||0)));s('TRESORERIE_NETTE',P.bs.TRESO[aL]);s('PROVISIONS_RC',-P.bs.PROVISIONS[aL]);
   s('RESULTAT_FIN',P.pl.RESULTAT_FIN[aL]);s('BFR',P.bs.BFR[aL]);s('ACTIF_NET',P.bs.CP[aL]);
   s('ACTIFS_IMMOBILISES',P.bs.IMMO_NET[aL]);s('CLIENTS',P.bs.CLIENTS[aL]);s('STOCKS',P.bs.STOCKS[aL]);s('FOURNISSEURS',P.bs.FOURNISSEURS[aL]);
   /* capitaux propres décomposés à partir du montage (capital + subventions figés, le report à nouveau
      absorbe les résultats accumulés) → décomposition CP correcte en mode modèle (pas de bilan d'ouverture) */
   var mtg=P.financement||{};
-  s('CAPITAL',mtg.capital||0);s('SUBV_PROV_REGL',mtg.subvention||0);
+  s('CAPITAL',mtg.capital||0);s('PRIMES_RESERVES',mtg.primes||0);s('SUBV_PROV_REGL',mtg.subvention||0);
   ['COUTS_DIRECTS','AUTRES_PROD','OPEX','CHARGES_PERSONNEL','DA','IMPOTS','AMORT_DEPREC','AUTRES_CREANCES','AVANCES_FRS','HAO_ACTIF','HAO_PASSIF','DETTES_SOCIALES','DETTES_FISCALES','AUTRES_DETTES','CLIENTS_AVANCES','TRESO_ACTIF','TRESO_PASSIF','PRIMES_RESERVES','RAN_RESULTATS_ANT','RESULTAT_AVANT_IMPOT','PRODUITS_FIN','FRAIS_FIN'].forEach(function(k){if(!v[k])s(k,0);});
   return {annees:[aL],v:v,tft:P.tft||{}};
 }
@@ -183,6 +183,8 @@ function mCoutIndOp(ci,ri){var r=mCoutIndInit(mCoutsArr()[ci]).rows[ri];r.op=r.o
 function mCoutInd(ci,ri,champ,val){var r=mCoutIndInit(mCoutsArr()[ci]).rows[ri];if(champ==='name'||champ==='unit')r[champ]=val;else{var x=numFR(val);if(x!==null)r[champ]=x;}sauverDossier();rendre();}
 function mCoutIndMode(ci,ri,mode){var r=mCoutIndInit(mCoutsArr()[ci]).rows[ri];if(mode==='yearly'&&r.mode!=='yearly'){r.mode='yearly';r.vals=[];var N=assurerModele().nb||5;for(var k=0;k<N;k++)r.vals.push(Math.round((r.val||0)*Math.pow(1+(r.g||0)/100,k)*1000)/1000);}else if(mode!=='yearly'){r.mode='grow';if(r.vals&&r.vals.length)r.val=r.vals[0];}sauverDossier();rendre();}
 function mCoutIndYv(ci,ri,k,val){var r=mCoutIndInit(mCoutsArr()[ci]).rows[ri];if(!r.vals)r.vals=[];var x=numFR(val);if(x!==null)r.vals[k]=x;sauverDossier();rendre();}
+function mCoutIndRef(ci,ri,v){var r=mCoutIndInit(mCoutsArr()[ci]).rows[ri];if(v){r.refLigne=v;delete r.unit;}else delete r.refLigne;sauverDossier();rendre();}
+function mCoutIndCeil(ci,ri){var r=mCoutIndInit(mCoutsArr()[ci]).rows[ri];r.ceil=!r.ceil;sauverDossier();rendre();}
 function mCoutTaux(ci,champ,val){var pr=mCoutIndInit(mCoutsArr()[ci]).prix;if(champ==='unit')pr.unit=val;else{var x=numFR(val);if(x!==null)pr[champ]=x;}sauverDossier();rendre();}
 function mCoutMethode(ci,m){var cl=mCoutsArr()[ci];cl.m=m;
   /* le coût unitaire a BESOIN d'une ligne de produit (son volume) → périmètre par défaut = 1ʳᵉ ligne */
@@ -281,15 +283,21 @@ function mCarteCout(cl,ci){
   } else {
     var rows=(cl.rows||[]).map(function(r,ri){
       var vals;
-      if(r.mode==='yearly'){var cells='';for(var k=0;k<N;k++){var yv=valSerie(r.vals,k);cells+='<span class="mind-yv"><label>An '+(k+1)+'</label><input class="nin ninm" value="'+mAmt(yv)+'" oninput="mSep(this)" onchange="mCoutIndYv('+ci+','+ri+','+k+',this.value)"></span>';}vals='<div class="mind-vals">'+cells+'</div>';}
+      var refSel='<select class="sel" style="width:auto;max-width:180px" onchange="mCoutIndRef('+ci+','+ri+',this.value)"><option value="">Valeur saisie</option>'
+        +revs.map(function(L){return '<option value="'+L.id+'"'+(r.refLigne===L.id?' selected':'')+'>Réf. effectif — '+esc(L.name||'Ligne')+'</option>';}).join('')+'</select>';
+      var ceilBtn='<button class="btn sm '+(r.ceil?'primary':'')+'" title="Arrondi supérieur du produit courant (ex. groupes de classes)" onclick="mCoutIndCeil('+ci+','+ri+')" style="min-width:34px;font-weight:700">⌈⌉</button>';
+      if(r.refLigne){var Lref=null;revs.forEach(function(L){if(L.id===r.refLigne)Lref=L;});
+        vals='<div class="mind-vals"><span class="mut" style="padding:4px 0">= effectif physique de « '+esc((Lref&&Lref.name)||'?')+' » (an 1 : '+Math.round(Lref?volPhysique(Lref,0):0)+') — suit les Revenus et le scénario</span></div>';}
+      else if(r.mode==='yearly'){var cells='';for(var k=0;k<N;k++){var yv=valSerie(r.vals,k);cells+='<span class="mind-yv"><label>An '+(k+1)+'</label><input class="nin ninm" value="'+mAmt(yv)+'" oninput="mSep(this)" onchange="mCoutIndYv('+ci+','+ri+','+k+',this.value)"></span>';}vals='<div class="mind-vals">'+cells+'</div>';}
       else vals='<div class="mind-vals"><span class="mind-f"><label>Valeur an 1</label><input class="nin ninm" value="'+mAmt(r.val)+'" oninput="mSep(this)" onchange="mCoutInd('+ci+','+ri+',\'val\',this.value)"></span><span class="mind-f"><label>Croissance %/an</label><input class="nin" value="'+(r.g||0)+'" onchange="mCoutInd('+ci+','+ri+',\'g\',this.value)"></span></div>';
       return '<div class="mind"><div class="mind-top"><button class="btn sm" title="× ou ÷" onclick="mCoutIndOp('+ci+','+ri+')" style="min-width:34px;font-weight:700">'+(r.op==='d'?'÷':'×')+'</button>'
         +'<input class="sel" style="flex:1;min-width:130px" placeholder="Nom de l\'inducteur" value="'+esc(r.name||'')+'" onchange="mCoutInd('+ci+','+ri+',\'name\',this.value)">'
-        +'<input class="nin" style="width:78px" placeholder="unité" value="'+esc(r.unit||'')+'" onchange="mCoutInd('+ci+','+ri+',\'unit\',this.value)">'
-        +'<span class="segvue"><button class="'+(r.mode==='yearly'?'':'on')+'" onclick="mCoutIndMode('+ci+','+ri+',\'grow\')">Croissance</button><button class="'+(r.mode==='yearly'?'on':'')+'" onclick="mCoutIndMode('+ci+','+ri+',\'yearly\')">Par année</button></span>'
+        +refSel+ceilBtn
+        +(r.refLigne?'':'<input class="nin" style="width:78px" placeholder="unité" value="'+esc(r.unit||'')+'" onchange="mCoutInd('+ci+','+ri+',\'unit\',this.value)">'
+        +'<span class="segvue"><button class="'+(r.mode==='yearly'?'':'on')+'" onclick="mCoutIndMode('+ci+','+ri+',\'grow\')">Croissance</button><button class="'+(r.mode==='yearly'?'on':'')+'" onclick="mCoutIndMode('+ci+','+ri+',\'yearly\')">Par année</button></span>')
         +'<button class="btn sm" title="Retirer" onclick="mDelCoutInd('+ci+','+ri+')">✕</button></div>'+vals+'</div>';
     }).join('');
-    var q=volInducteurs(cl.rows,0), taux=(cl.prix&&cl.prix.val)||0, cout=q*taux;
+    var q=volInducteurs(cl.rows,0,{revenus:revs,fCA:1}), taux=(cl.prix&&cl.prix.val)||0, cout=q*taux;
     corps='<div class="mut" style="text-transform:uppercase;letter-spacing:.5px;font-size:11px;font-weight:700;margin-bottom:8px">Inducteurs de quantité (× ou ÷ · unité % = ratio)</div>'
     +rows
     +'<button class="btn sm" style="margin-top:2px" onclick="mAddCoutInd('+ci+')">+ inducteur</button>'
@@ -379,7 +387,9 @@ function vueModele(){
           +(Pf.idc>0.01?'<div class="hyp-l"><span>Intérêts de construction (IDC)</span><b>'+fmt(Pf.idc)+' '+u.suf+'</b></div>':'')
           +'<div class="hyp-l" style="border-top:2px solid #224289;padding-top:6px"><span><b>Total emplois</b></span><b>'+fmt(Pf.emplois)+' '+u.suf+'</b></div></div>'
         +'<div style="flex:1;min-width:230px"><div class="mut" style="font-weight:700;text-transform:uppercase;font-size:11px;letter-spacing:.5px;margin-bottom:4px">Ressources</div>'
-          +'<div class="hyp-l"><span>Fonds propres ('+Math.round(Pf.partFP*100)+' %)</span><b style="color:#16904E">'+fmt(Pf.capital)+' '+u.suf+'</b></div>'
+          +'<div class="hyp-l"><span>Capital social'+(Pf.mode==="auto"?' ('+Math.round(Pf.partFP*100)+' %)':'')+'</span><b style="color:#16904E">'+fmt(Pf.capital)+' '+u.suf+'</b></div>'
+          +(Pf.primes?'<div class="hyp-l"><span>Primes liées au capital</span><b style="color:#16904E">'+fmt(Pf.primes)+' '+u.suf+'</b></div>':'')
+          +(Pf.cca?'<div class="hyp-l"><span>Comptes courants d\'associés (CCA'+(Pf.ccaTaux?', '+(Pf.ccaTaux*100).toFixed(1)+' %':', 0 %')+' · '+(Pf.ccaMode==='infine'?'in fine':Pf.ccaMode==='lineaire'?'linéaire':'maintenu')+')</span><b style="color:#8a5a00">'+fmt(Pf.cca)+' '+u.suf+'</b></div>':'')
           +(Pf.subvention?'<div class="hyp-l"><span>Subvention</span><b>'+fmt(Pf.subvention)+' '+u.suf+'</b></div>':'')
           +'<div class="hyp-l"><span>Dette'+(Pf.idc>0.01?' (dont IDC)':'')+'</span><b style="color:#224289">'+fmt(Pf.detteAvecIDC)+' '+u.suf+'</b></div>'
           +'<div class="hyp-l" style="border-top:2px solid #224289;padding-top:6px"><span><b>Total ressources</b></span><b>'+fmt(Pf.sources)+' '+u.suf+'</b></div></div>'
@@ -392,13 +402,22 @@ function vueModele(){
         +empBloc+su
         +'<div class="mut" style="margin-top:8px">Le besoin (investissements + BFR de démarrage + IDC) est réparti fonds propres / dette selon la part choisie ; amortissement et remboursement démarrent à la mise en service.</div></div>';
     } else {
+      var ccaMode=(f.ccaMode||"maintenu");
+      var ccaSeg='<span class="segvue">'
+        +'<button class="'+(ccaMode==="maintenu"?"on":"")+'" onclick="mSet(\'financement.ccaMode\',\'maintenu\')">Maintenu</button>'
+        +'<button class="'+(ccaMode==="infine"?"on":"")+'" onclick="mSet(\'financement.ccaMode\',\'infine\')">In fine</button>'
+        +'<button class="'+(ccaMode==="lineaire"?"on":"")+'" onclick="mSet(\'financement.ccaMode\',\'lineaire\')">Linéaire</button></span>';
       corps='<div class="card"><div class="sec-titre" style="margin-top:0">Financement — manuel</div>'+modeSeg+consLigne
         +'<div class="hyp-g"><span>Capital social</span><input class="sel ninm" value="'+mAmt(f.capital||0)+'" oninput="mSep(this)" onchange="mSet(\'financement.capital\',this.value,1)"><span class="suf"></span></div>'
-        +'<div class="hyp-g"><span>Apports en compte courant</span><input class="sel ninm" value="'+mAmt(f.apports||0)+'" oninput="mSep(this)" onchange="mSet(\'financement.apports\',this.value,1)"><span class="suf"></span></div>'
+        +'<div class="hyp-g"><span>Primes liées au capital <span class="mut">· émission / apport</span></span><input class="sel ninm" value="'+mAmt(f.primes||0)+'" oninput="mSep(this)" onchange="mSet(\'financement.primes\',this.value,1)"><span class="suf"></span></div>'
+        +'<div class="hyp-g"><span>Comptes courants d\'associés (CCA) <span class="mut">· dette financière</span></span><input class="sel ninm" value="'+mAmt(f.apports||0)+'" oninput="mSep(this)" onchange="mSet(\'financement.apports\',this.value,1)"><span class="suf"></span></div>'
+        +'<div class="hyp-g"><span>CCA — taux de rémunération <span class="mut">· 0 % = non rémunéré</span></span><input class="sel" value="'+((f.ccaTaux||0)*100)+'" onchange="mSet(\'financement.ccaTaux\',(numFR(this.value)||0)/100)"><span class="suf">%</span></div>'
+        +'<div class="hyp-l"><span>CCA — remboursement</span>'+ccaSeg+'</div>'
+        +(ccaMode!=="maintenu"?'<div class="hyp-g"><span>CCA — '+(ccaMode==="infine"?'année de remboursement':'durée de remboursement')+'</span><input class="sel" value="'+(f.ccaDuree||(M.nb||5))+'" onchange="mSet(\'financement.ccaDuree\',this.value,1)"><span class="suf">'+(ccaMode==="infine"?'(année du plan)':'ans')+'</span></div>':'')
         +'<div class="hyp-g"><span>Subvention</span><input class="sel ninm" value="'+mAmt(f.subvention||0)+'" oninput="mSep(this)" onchange="mSet(\'financement.subvention\',this.value,1)"><span class="suf"></span></div>'
         +'<div class="hyp-g"><span>Emprunt — montant</span><input class="sel ninm" value="'+mAmt(e.montant||0)+'" oninput="mSep(this)" onchange="mSet(\'financement.emprunt.montant\',this.value,1)"><span class="suf"></span></div>'
         +empBloc+su
-        +'<div class="mut" style="margin-top:8px">Le financement est tiré en année 1 ; en cas de construction, les intérêts courent et sont capitalisés dans la dette (IDC). Aucun bilan d\'ouverture.</div></div>';
+        +'<div class="mut" style="margin-top:8px">Le financement est tiré en année 1 ; en cas de construction, les intérêts courent et sont capitalisés dans la dette (IDC). Le CCA est une dette financière (quasi-fonds propres) : inclus dans la dette nette de la valorisation, reclassable dans le pont. Aucun bilan d\'ouverture.</div></div>';
     }
   } else if(SOUS_MODELE==="bfr"){
     var b=M.bfr;

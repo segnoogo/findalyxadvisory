@@ -283,14 +283,25 @@ function valSerie(vals,i){
   for(var j=Math.min(i,vv.length-1);j>=0;j--) if(vv[j]!=null) return +vv[j];
   return 0;
 }
-/* volume d'une ligne = enchaînement d'inducteurs (× ou ÷) ; unité contenant « % » = ratio */
-function volInducteurs(rows,i){
+/* volume d'une ligne = enchaînement d'inducteurs (× ou ÷) ; unité contenant « % » = ratio.
+   ctx (lignes de coûts) : {revenus, fCA} permet à un inducteur de RÉFÉRENCER l'effectif physique
+   d'une ligne de revenus (produit de ses inducteurs hors ratios %, × facteur de scénario), et le
+   drapeau r.ceil applique un ARRONDI SUPÉRIEUR au produit courant (ex. groupes = effectif ÷ places). */
+function volPhysique(L,i){
+  return volInducteurs((L&&L.rows||[]).filter(function(x){return String(x.unit||"").indexOf("%")<0&&!x.refLigne;}),i);
+}
+function volInducteurs(rows,i,ctx){
   var v=1;
   (rows||[]).forEach(function(r){
     var pct=String(r.unit||"").indexOf("%")>=0, base;
-    if(r.mode==="yearly"){ var x=valSerie(r.vals,i); base=pct?x/100:x; }
+    if(r.refLigne&&ctx&&ctx.revenus){
+      var L=null; for(var k=0;k<ctx.revenus.length;k++){ if((ctx.revenus[k].id||("L"+k))===r.refLigne){L=ctx.revenus[k];break;} }
+      base=(L?volPhysique(L,i):0)*((ctx.fCA!=null?ctx.fCA:1));
+    }
+    else if(r.mode==="yearly"){ var x=valSerie(r.vals,i); base=pct?x/100:x; }
     else { var b=pct?(+r.val||0)/100:(+r.val||0); base=b*Math.pow(1+(+r.g||0)/100,i); }
     v=(r.op==="d")?(base?v/base:0):v*base;
+    if(r.ceil) v=Math.ceil(v-1e-9);   /* arrondi supérieur (tolérance flottants) */
   });
   return v;
 }
@@ -314,7 +325,7 @@ function projeterModele(M,scenario){
   P.pl.OPEX_DETAIL={};P.pl.PERS_DETAIL={};   /* frais généraux dépliés : hors personnel (OPEX_DETAIL) + personnel (PERS_DETAIL) — le personnel FAIT PARTIE des frais généraux */
   P.pl.CA_DETAIL={};   /* détail du CA par ligne de revenus (vue détaillée) ; les coûts directs sont dans CDIND_DETAIL */
   P.pl.CDIND_DETAIL={};   /* coûts directs pilotés par inducteurs (indépendants des lignes de revenus : ex. vacataires = classes × heures × taux horaire) */
-  ["IMMO_BRUT","AMORT_CUM","IMMO_NET","STOCKS","CLIENTS","AUTRES_CREANCES","FOURNISSEURS","DETTES_FISC_SOC","AUTRES_DETTES","BFR","CP","DETTE","PROVISIONS","TRESO","LIGNE_CT","TRESO_ACTIVE"].forEach(function(c){P.bs[c]={};});
+  ["IMMO_BRUT","AMORT_CUM","IMMO_NET","STOCKS","CLIENTS","AUTRES_CREANCES","FOURNISSEURS","DETTES_FISC_SOC","AUTRES_DETTES","BFR","CP","DETTE","CCA","PROVISIONS","TRESO","LIGNE_CT","TRESO_ACTIVE"].forEach(function(c){P.bs[c]={};});
   var infl=M.inflation||0.03, bfrH=M.bfr||{dso:30,dio:45,dpo:30};
   var tva=(M.tva!=null?+M.tva:0.18);   /* TVA paramétrable : créances TTC & dettes fournisseurs TTC (plus de 1,18 en dur) */
   var isTx=(M.is_taux!=null?M.is_taux:0.30);
@@ -346,10 +357,11 @@ function projeterModele(M,scenario){
   (M.chargesFixes||[]).forEach(function(c){ if(c.personnel){ PERSLIST.push({poste:(c.name||'Personnel'),effectif:1,salaireMensuel:(+c.montant|| +c.val||0)/12,g:(+c.g||0)}); } });
   var coutsD1=0, charges1=0, ca1=0, caLine1={}, volLine1={};
   (M.revenus||[]).forEach(function(L,li){ var vol=volInducteurs(L.rows,0)*fCA, prix=valAnnee(L.prix,0), caL=vol*prix/SC; ca1+=caL; caLine1[L.id||("L"+li)]=caL; volLine1[L.id||("L"+li)]=vol; });
+  var CTXC={revenus:(M.revenus||[]),fCA:fCA};   /* contexte des coûts : inducteurs « référence » (effectif d'une ligne) */
   CDLIST.forEach(function(cl){ var m=(cl.m||"ind"), sc=(cl.scope||"all"), mt;
     if(m==="pct")mt=((sc==="all")?ca1:(caLine1[sc]||0))*(+cl.pct||0)/100;
     else if(m==="unit")mt=(volLine1[sc]||0)*(+cl.val||0)/SC;
-    else mt=volInducteurs(cl.rows,0)*valAnnee(cl.prix,0)/SC;
+    else mt=volInducteurs(cl.rows,0,CTXC)*valAnnee(cl.prix,0)/SC;
     coutsD1+=mt*fCout; });
   (M.chargesFixes||[]).forEach(function(c){ if(c.personnel)return; charges1+=valAnnee({val:(c.montant!=null?c.montant:c.val),g:c.g,mode:c.mode,vals:c.vals},0)/SC; });
   PERSLIST.forEach(function(pp){ charges1+=(+pp.effectif||0)*(+pp.salaireMensuel||0)*12/SC; });
@@ -357,11 +369,15 @@ function projeterModele(M,scenario){
   /* montage initial = CAPEX jusqu'à la mise en service (incluse) + BFR de démarrage ; subvention en déduction */
   var capexFinance=capex.filter(function(c){return c.annee<=anneeExploit;}).reduce(function(s,c){return s+c.montant;},0);
   var subv=(+fin.subvention||0)/SC;
-  var capital, detteBase;
+  /* structure des fonds apportés : capital social + primes liées au capital (capitaux propres),
+     CCA = comptes courants d'associés (dette financière, rémunération optionnelle, remboursement
+     paramétrable : maintenu / in fine / linéaire). Le champ historique fin.apports = montant du CCA. */
+  var capital, primes=0, cca0=0, detteBase;
+  var ccaTaux=(+fin.ccaTaux||0), ccaMode=(fin.ccaMode||"maintenu"), ccaDuree=Math.max(1,Math.round(+fin.ccaDuree||N));
   if(fin.mode==="auto"){ var baseBesoin=Math.max(0,capexFinance+bfrDem-subv); capital=baseBesoin*partFP; detteBase=baseBesoin*(1-partFP); }
-  else { capital=((+fin.capital||0)+(+fin.apports||0))/SC; detteBase=((fin.emprunt&&+fin.emprunt.montant)||0)/SC; }
+  else { capital=(+fin.capital||0)/SC; primes=(+fin.primes||0)/SC; cca0=(+fin.apports||0)/SC; detteBase=((fin.emprunt&&+fin.emprunt.montant)||0)/SC; }
 
-  var brut=0, amortCum=0, cp=0, provisions=0, detteSolde=0, ligneCT=0, bfrP=0, tresoP=0;
+  var brut=0, amortCum=0, cp=0, provisions=0, detteSolde=0, ccaSolde=0, ligneCT=0, bfrP=0, tresoP=0;
   var idcTotal=0, idcAmorti=0, idcDuree=(dDuree>0?dDuree:5), amortAnnuel=0;
   var horizonDef=M.reportDef_horizon||3;
   var deficits=(M.reportDeficitaire>0)?[{montant:+M.reportDeficitaire,resteAns:horizonDef}]:[];
@@ -370,9 +386,15 @@ function projeterModele(M,scenario){
     var py=i+1;                 /* année du plan (base 1) */
     var isOp=(py>=anneeExploit);
     var oi=py-Nc-1;             /* indice d'exploitation (0-based), utilisé si isOp */
-    /* --- financement tiré en année 1 : capital + subvention en CP, dette de base --- */
-    var capInj=0, subvInj=0, tirageDette=0;
-    if(py===1){ capInj=capital; subvInj=subv; tirageDette=detteBase; cp+=capital+subv; detteSolde+=detteBase; }
+    /* --- financement tiré en année 1 : capital + primes + subvention en CP, dette de base, CCA --- */
+    var capInj=0, subvInj=0, tirageDette=0, tirageCCA=0;
+    if(py===1){ capInj=capital+primes; subvInj=subv; tirageDette=detteBase; cp+=capital+primes+subv; detteSolde+=detteBase; ccaSolde+=cca0; tirageCCA=cca0; }
+    /* --- CCA : remboursement selon le mode, intérêts optionnels sur solde moyen --- */
+    var ccaDebut=ccaSolde, rembCCA=0;
+    if(ccaMode==="lineaire"&&py<=ccaDuree) rembCCA=Math.min(cca0/ccaDuree,ccaSolde);
+    else if(ccaMode==="infine"&&py===Math.min(ccaDuree,N)) rembCCA=ccaSolde;
+    ccaSolde-=rembCCA;
+    var intCCA=ccaTaux*(ccaDebut+ccaSolde)/2;
     /* --- revenus par ligne (le coût est désormais entièrement géré dans M.coutsDirects) --- */
     var ca=0, coutsD=0, caLine={}, volLine={};
     if(isOp){ (M.revenus||[]).forEach(function(L,li){
@@ -387,7 +409,7 @@ function projeterModele(M,scenario){
       var m=(cl.m||"ind"), sc=(cl.scope||"all"), montant;
       if(m==="pct"){ var base=(sc==="all")?ca:(caLine[sc]||0); montant=base*(+cl.pct||0)/100; }
       else if(m==="unit"){ var vl=(volLine[sc]!=null?volLine[sc]:0); montant=vl*(+cl.val||0)*Math.pow(1+infl,oi)/SC; }
-      else { montant=volInducteurs(cl.rows,oi)*valAnnee(cl.prix,oi)/SC; }
+      else { montant=volInducteurs(cl.rows,oi,CTXC)*valAnnee(cl.prix,oi)/SC; }
       montant*=fCout;
       coutsD += montant;
       var cc="CDI"+ci, libc=(cl.name||("Coût "+(ci+1)));
@@ -431,7 +453,7 @@ function projeterModele(M,scenario){
     var ebitda=ca+cd+autresProd+opexTot+persTot;
     var ebit=ebitda-dot;
     var pf=isOp?valAnnee(M.produitsFin,oi)/SC:0;
-    var rf=pf-interets-interetsCT;
+    var rf=pf-interets-interetsCT-intCCA;
     var ebt=ebit+rf;
     var baseIS=ebt;
     if(ebt>0){var dispo=ebt; deficits.forEach(function(d){var im=Math.min(d.montant,dispo);d.montant-=im;dispo-=im;}); deficits=deficits.filter(function(d){return d.montant>0.01;}); baseIS=dispo;}
@@ -451,7 +473,7 @@ function projeterModele(M,scenario){
     /* --- CP & trésorerie de bouclage --- */
     var div=0; cp=cp+rn-div;
     var immoNet=brut-amortCum;
-    var tresoNette=cp+dette+provisions-immoNet-bfr;
+    var tresoNette=cp+dette+ccaSolde+provisions-immoNet-bfr;
     ligneCT=tresoNette<0?-tresoNette:0;
     var tresoActive=tresoNette+ligneCT, treso=tresoNette;
     /* --- TFT --- */
@@ -460,32 +482,35 @@ function projeterModele(M,scenario){
     var prevFrnDet=(P.bs.FOURNISSEURS[AP[i-1]]!==undefined)?(P.bs.FOURNISSEURS[AP[i-1]]+P.bs.DETTES_FISC_SOC[AP[i-1]]+P.bs.AUTRES_DETTES[AP[i-1]]):0;
     var dBfr=bfr-bfrP;
     var t={ZA:tresoP,FA:rn+dot,FB:0,FC:-(stocks-prevStk),FD:-(clients-prevCliCr),FE:-(fournisseurs-prevFrnDet),ZB:0,
-      FF:0,FG:-capexAn,FH:0,FI:0,ZC:0,FK:capInj,FL:subvInj,FN:-div,ZD:0,EMPRUNT:tirageDette,REMBOURS:-remb,ZE:0,ZFIN:0,ZF:0,ZG:0,
+      FF:0,FG:-capexAn,FH:0,FI:0,ZC:0,FK:capInj,FL:subvInj,FN:-div,ZD:0,EMPRUNT:tirageDette,REMBOURS:-remb,
+      CCA_TIR:tirageCCA,CCA_REMB:-rembCCA,ZE:0,ZFIN:0,ZF:0,ZG:0,
       RN:rn,AMORT:dot,PROV:0,DBFR:-dBfr,OP:0,CAPEX:-capexAn,FIN:0,FCF:0,IDC:idc,OUVERTURE:tresoP,CLOTURE:treso};
     t.ZB=t.FA+t.FB+t.FC+t.FD+t.FE; t.ZC=t.FF+t.FG+t.FH+t.FI;
-    t.ZD=t.FK+t.FL+t.FN; t.ZE=t.EMPRUNT+t.REMBOURS; t.ZFIN=t.ZD+t.ZE;
+    t.ZD=t.FK+t.FL+t.FN; t.ZE=t.EMPRUNT+t.REMBOURS+t.CCA_TIR+t.CCA_REMB; t.ZFIN=t.ZD+t.ZE;
     t.ZF=t.ZB+t.ZC+t.ZFIN; t.ZG=t.ZA+t.ZF;
     t.VAR_CREANCES=t.FD+t.FB; t.ACQUIS_IMMO=t.FF+t.FG+t.FH; t.CESSION_IMMO=t.FI; t.FCF=t.ZF; t.OP=t.ZB;
     /* --- stocker --- */
     P.pl.CA[a]=ca;P.pl.COUTS_DIRECTS[a]=cd;P.pl.MARGE_BRUTE[a]=ca+cd;
     P.pl.AUTRES_PROD[a]=autresProd;P.pl.OPEX_TOTAL[a]=opexTot;P.pl.CHARGES_PERSONNEL[a]=persTot;
     P.pl.EBITDA[a]=ebitda;P.pl.DA[a]=-dot;P.pl.EBIT[a]=ebit;
-    P.pl.PRODUITS_FIN[a]=pf;P.pl.FRAIS_FIN[a]=-(interets+interetsCT);P.pl.RESULTAT_FIN[a]=rf;
+    P.pl.PRODUITS_FIN[a]=pf;P.pl.FRAIS_FIN[a]=-(interets+interetsCT+intCCA);P.pl.RESULTAT_FIN[a]=rf;
     P.pl.EBT[a]=ebt;P.pl.IS[a]=impots;P.pl.RN[a]=rn;
     P.bs.IMMO_BRUT[a]=brut;P.bs.AMORT_CUM[a]=-amortCum;P.bs.IMMO_NET[a]=immoNet;
     P.bs.STOCKS[a]=stocks;P.bs.CLIENTS[a]=clients;P.bs.AUTRES_CREANCES[a]=0;
     P.bs.FOURNISSEURS[a]=fournisseurs;P.bs.DETTES_FISC_SOC[a]=0;P.bs.AUTRES_DETTES[a]=0;P.bs.BFR[a]=bfr;
-    P.bs.CP[a]=cp;P.bs.DETTE[a]=dette;P.bs.PROVISIONS[a]=provisions;P.bs.TRESO[a]=treso;
+    P.bs.CP[a]=cp;P.bs.DETTE[a]=dette;P.bs.CCA[a]=ccaSolde;P.bs.PROVISIONS[a]=provisions;P.bs.TRESO[a]=treso;
     P.bs.LIGNE_CT[a]=ligneCT;P.bs.TRESO_ACTIVE[a]=tresoActive;
-    P.dette[a]={ouverture:soldeDebut,tirage:tirageDette,remboursement:remb,interets:(isOp?interets:idc),interetsCT:interetsCT,ligneCT:ligneCT,cloture:dette,div:div,idc:(isOp?0:idc),construction:!isOp};
+    P.dette[a]={ouverture:soldeDebut,tirage:tirageDette,remboursement:remb,interets:(isOp?interets:idc),interetsCT:interetsCT,ligneCT:ligneCT,cloture:dette,div:div,idc:(isOp?0:idc),construction:!isOp,
+      ccaOuverture:ccaDebut,ccaTirage:tirageCCA,ccaRemb:rembCCA,ccaInterets:intCCA,ccaCloture:ccaSolde};
     P.tft[a]=t; P.tft[a].ECART=t.ZG-treso;
     bfrP=bfr;tresoP=treso;rnPrec=rn;
   });
   /* synthèse Sources & Emplois (base KFCFA) — pas de bilan d'ouverture */
   P.financement={mode:(fin.mode||"manuel"),partFP:partFP,moisBFR:moisBFR,dureeConstruction:Nc,anneeExploit:anneeExploit,
     capexFinance:capexFinance,bfrDemarrage:bfrDem,idc:idcTotal,subvention:subv,
-    capital:capital,dette:detteBase,detteAvecIDC:detteBase+idcTotal,
-    sources:capital+subv+detteBase+idcTotal,emplois:capexFinance+bfrDem+idcTotal,taux:dTaux,duree:dDuree};
+    capital:capital,primes:primes,cca:cca0,ccaTaux:ccaTaux,ccaMode:ccaMode,ccaDuree:ccaDuree,
+    dette:detteBase,detteAvecIDC:detteBase+idcTotal,
+    sources:capital+primes+cca0+subv+detteBase+idcTotal,emplois:capexFinance+bfrDem+idcTotal,taux:dTaux,duree:dDuree};
   P.pl.AUTRES_PRODUITS=P.pl.AUTRES_PROD;P.pl.PERSONNEL=P.pl.CHARGES_PERSONNEL;
   P.pl.AUTRES_OPEX=P.pl.OPEX_TOTAL;P.pl.DOTATIONS=P.pl.DA;P.pl.ACHATS=P.pl.COUTS_DIRECTS;
   P.bs.TRESO_NETTE=P.bs.TRESO;
