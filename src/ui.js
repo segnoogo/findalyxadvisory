@@ -1973,15 +1973,23 @@ async function exporterExcelModele(sansFormule){
     H.dpo=one("Délai fournisseurs (DPO)",Math.round(+b.dpo||0),"0");
     sec("COÛT DU CAPITAL & VALORISATION");
     const V=M.valo||{};
-    H.rf=one("Taux sans risque (rf)",V.rf||0.06,PCT2);
-    H.pm=one("Prime de risque marché",V.primeMarche||0.055,PCT2);
-    H.beta=one("Beta",V.beta||1,"0.00");
-    H.ppays=one("Prime de risque pays"+(V.pays?" ("+V.pays+")":""),V.primePays||0,PCT2);
-    H.ptaille=one("Prime de taille",V.primeTaille||0,PCT2);
-    H.pilliq=one("Prime d'illiquidité",V.primeIlliquidite||0,PCT2);
-    H.kd=one("Coût de la dette (brut)",V.coutDette||0.09,PCT2);
-    H.wd=one("Poids de la dette (structure cible)",V.poidsDette||0.35,PCT);
-    H.g=one("Croissance à l'infini (g)",V.g||0.03,PCT2);
+    /* défauts appliqués seulement si l'hypothèse est ABSENTE : « || » aurait écrasé un 0 saisi
+       volontairement (structure sans dette, pas de croissance à l'infini, dette non rémunérée) */
+    const vNum=(x,def)=>(x!=null&&x!==""&&isFinite(+x))?+x:def;
+    H.rf=one("Taux sans risque (rf)",vNum(V.rf,0.06),PCT2);
+    H.pm=one("Prime de risque marché",vNum(V.primeMarche,0.055),PCT2);
+    H.beta=one("Beta",vNum(V.beta,1),"0.00");
+    H.ppays=one("Prime de risque pays"+(V.pays?" ("+V.pays+")":""),vNum(V.primePays,0),PCT2);
+    H.ptaille=one("Prime de taille",vNum(V.primeTaille,0),PCT2);
+    H.pilliq=one("Prime d'illiquidité",vNum(V.primeIlliquidite,0),PCT2);
+    H.kd=one("Coût de la dette (brut)",vNum(V.coutDette,0.09),PCT2);
+    H.wd=one("Poids de la dette (structure cible)",vNum(V.poidsDette,0.35),PCT);
+    H.g=one("Croissance à l'infini (g)",vNum(V.g,0.03),PCT2);
+    /* convention d'actualisation et mode de valeur terminale : le classeur doit suivre le choix
+       de l'application, sinon il calcule une autre valeur avec les mêmes hypothèses */
+    H.my=one("Convention mi-année (1 = oui, 0 = fin d'exercice)",V.midYear?1:0,"0");
+    H.tvx=one("Multiple de sortie (× EBITDA) — 0 = valeur terminale de Gordon",
+      (V.tvMode==="exit"?vNum(V.exitMultiple,0):0),"0.0");
     const mcB=(V.multiplesComparables||{}), mtB=(V.multiplesTransactions||{});
     H.mcMin=one("Multiple boursier bas (× EBITDA)",mcB.min!=null?mcB.min:4,"0.0");
     H.mc=one("Multiple boursier central (× EBITDA)",mcB.central!=null?mcB.central:5.5,"0.0");
@@ -2244,7 +2252,8 @@ async function exporterExcelModele(sansFormule){
 
     /* ---- POSTES DE DÉTAIL (alimentent les états détaillés & la valorisation) ---- */
     sec2("POSTES DE DÉTAIL (états & valorisation)");
-    row("FCFF","Flux de trésorerie disponible (FCFF)",(i,X)=>`${X}${rr("EBIT")}*(1-IF(${X}${rr("EBIT")}>0,${X}${rr("R_IS")},0))+${X}${rr("DOT")}-(${X}${rr("BFR")}-${pRef("BFR",i)})-${X}${rr("CAPEX")}`,NF);
+    /* année 1 : BFR de départ = celui de la situation d'ouverture (créances retenues − dettes) */
+    row("FCFF","Flux de trésorerie disponible (FCFF)",(i,X)=>`${X}${rr("EBIT")}*(1-IF(${X}${rr("EBIT")}>0,${X}${rr("R_IS")},0))+${X}${rr("DOT")}-(${X}${rr("BFR")}-${i>0?pRef("BFR",i):`(${X}${rr("R_OUVCR")}-${X}${rr("R_OUVDT")})`})-${X}${rr("CAPEX")}`,NF);
     row("INTP","Intérêts sur emprunts (charge)",(i,X)=>`-${X}${rr("INT")}`,NF);
     row("DECP","Intérêts sur découvert (charge)",(i,X)=>`-${X}${rr("INTCT")}`,NF);
     row("INTCCAP","Intérêts sur CCA (charge)",(i,X)=>`-${X}${rr("INTCCA")}`,NF);
@@ -2430,17 +2439,30 @@ async function exporterExcelModele(sansFormule){
     const rIMP=vSerie("(−) Impôt théorique sur l'EBIT (taux d'IS des Hypothèses)",(i,X)=>`-MAX(0,${X}${rEBI})*${rH}!${H.is}`);
     const rNOP=vSerie("= NOPAT (résultat d'exploitation après impôt)",(i,X)=>`${X}${rEBI}+${X}${rIMP}`);
     const rDOT=vSerie("(+) Dotations aux amortissements (Modèle)",(i,X)=>`${rC}!${X}${rr("DOT")}`);
-    const rDBF=vSerie("(−) Variation du BFR (Modèle)",(i,X)=>`-(${rC}!${X}${rr("BFR")}-${i>0?`${rC}!${CL(i-1)}${rr("BFR")}`:"0"})`);
+    /* année 1 : le BFR de départ est celui de la situation d'ouverture (créances retenues −
+       dettes), pas zéro — sinon la constitution du BFR est comptée deux fois dans le flux */
+    const bfrPrec=(i,X)=>i>0?`${rC}!${CL(i-1)}${rr("BFR")}`:`(${rC}!${X}${rr("R_OUVCR")}-${rC}!${X}${rr("R_OUVDT")})`;
+    const rDBF=vSerie("(−) Variation du BFR (Modèle)",(i,X)=>`-(${rC}!${X}${rr("BFR")}-${bfrPrec(i,X)})`);
     const rCPX=vSerie("(−) Investissements — CAPEX (Modèle)",(i,X)=>`-${rC}!${X}${rr("CAPEX")}`);
     const rFCFF=vSerie("= Flux de trésorerie disponible (FCFF)",(i,X)=>`${X}${rNOP}+${X}${rDOT}+${X}${rDBF}+${X}${rCPX}`,NF,true);
-    const rPV=vSerie("FCFF actualisés (au WACC)",(i,X)=>`${X}${rFCFF}/(1+$C$${rWacc})^${i+1}`);
+    /* exposant d'actualisation : fin d'exercice (i+1) ou mi-année (i+0,5) selon l'hypothèse */
+    const EXP=i=>`(${i+1}-${rH}!${H.my}*0.5)`;
+    const rPV=vSerie("FCFF actualisés (au WACC)",(i,X)=>`${X}${rFCFF}/(1+$C$${rWacc})^${EXP(i)}`);
     wsV.addRow([]);
     vLab("Passage à la valeur des fonds propres");
     const rSum=wsV.rowCount+1; vF("Somme des FCFF actualisés",`SUM(C${rPV}:${CL(N-1)}${rPV})`,NF);
-    const rVT=wsV.rowCount+1; vF("Valeur terminale actualisée (Gordon g)",`(${CL(N-1)}${rFCFF}*(1+${rH}!${H.g})/(C${rWacc}-${rH}!${H.g}))/(1+C${rWacc})^${N}`,NF);
+    /* valeur terminale : multiple de sortie s'il est renseigné (actualisé en fin d'exercice N),
+       sinon Gordon (mi-année : perpétuité de flux mi-année, donc N−0,5) */
+    const rEbT=wsV.rowCount+1; vF("EBITDA de la dernière année du plan (Modèle)",`${rC}!${CL(N-1)}${rr("EBITDA")}`,NF);
+    const rVT=wsV.rowCount+1; vF("Valeur terminale actualisée (Gordon g, ou multiple de sortie)",
+      `IF(${rH}!${H.tvx}>0,(${rH}!${H.tvx}*C${rEbT})/(1+C${rWacc})^${N},`+
+      `IFERROR((${CL(N-1)}${rFCFF}*(1+${rH}!${H.g})/(C${rWacc}-${rH}!${H.g}))/(1+C${rWacc})^(${N}-${rH}!${H.my}*0.5),0))`,NF);
     const rEV=wsV.rowCount+1; vF("= Valeur d'entreprise (EV)",`C${rSum}+C${rVT}`,NF,true);
     /* dette nette & pont : formules vivantes (Modèle + Hypothèses), plus aucune valeur figée */
-    const rDN=wsV.rowCount+1; vF("(−) Dette nette fin de plan (dette − trésorerie, Modèle)",`-(${rC}!${CL(N-1)}${rr("DETTE")}-${rC}!${CL(N-1)}${rr("TRES")})`,NF);
+    /* dette nette = dettes financières + comptes courants d'associés − trésorerie nette : les CCA
+       sont de la dette pour l'acquéreur, l'application les compte ainsi */
+    const rDN=wsV.rowCount+1; vF("(−) Dette nette fin de plan (dette + CCA − trésorerie, Modèle)",
+      `-(${rC}!${CL(N-1)}${rr("DETTE")}+${rC}!${CL(N-1)}${rr("CCAS")}-${rC}!${CL(N-1)}${rr("TRES")})`,NF);
     const rBR=wsV.rowCount+1; vF("(+) Ajustements du pont EV → fonds propres (Hypothèses)",`${rH}!${H.bridge}/${DIV}`,NF);
     const rEq=wsV.rowCount+1; vF("Valeur des fonds propres (DCF)",`C${rEV}+C${rDN}+C${rBR}`,NF,true);
     wsV.addRow([]);
@@ -2449,8 +2471,12 @@ async function exporterExcelModele(sansFormule){
     styliserEntete(wsV.addRow([null,"Méthode","Bas","Central","Haut"]),1);
     /* fourchette DCF = coins de la grille de sensibilité (WACC ± amplitude, g ∓ amplitude), en formules vivantes */
     const AMP=`${rH}!${H.sensAmp}`, GG=`${rH}!${H.g}`, fRng=`C${rFCFF}:${CL(N-1)}${rFCFF}`;
+    const MY=`${rH}!${H.my}`, TVX=`${rH}!${H.tvx}`;
+    /* mêmes conventions que la valeur centrale : exposant mi-année et multiple de sortie éventuel */
     const dcfCoin=(sW,sG)=>{const W=`(C${rWacc}${sW}${AMP})`,G=`(${GG}${sG}${AMP})`;
-      return `SUMPRODUCT(${fRng}/(1+${W})^(COLUMN(${fRng})-2))+IF(${W}>${G},(${CL(N-1)}${rFCFF}*(1+${G})/(${W}-${G}))/(1+${W})^${N},0)+C${rDN}+C${rBR}`;};
+      return `SUMPRODUCT(${fRng}/(1+${W})^(COLUMN(${fRng})-2-${MY}*0.5))`+
+        `+IF(${TVX}>0,(${TVX}*C${rEbT})/(1+${W})^${N},IF(${W}>${G},(${CL(N-1)}${rFCFF}*(1+${G})/(${W}-${G}))/(1+${W})^(${N}-${MY}*0.5),0))`+
+        `+C${rDN}+C${rBR}`;};
     const dcfRow=wsV.rowCount+1;{const r=wsV.getRow(dcfRow);r.getCell(2).value="DCF (flux actualisés)";r.getCell(3).value={formula:dcfCoin("+","-")};r.getCell(4).value={formula:`C${rEq}`};r.getCell(5).value={formula:dcfCoin("-","+")};[3,4,5].forEach(c=>r.getCell(c).numFmt=NF);}
     const compRow=wsV.rowCount+1;{const r=wsV.getRow(compRow);r.getCell(2).value="Multiples boursiers (× EBITDA)";[[3,H.mcMin],[4,H.mc],[5,H.mcMax]].forEach(([c,hh])=>{r.getCell(c).value={formula:`${rH}!${hh}*C${rEbRef}+C${rDN}+C${rBR}`};r.getCell(c).numFmt=NF;});}
     const transRow=wsV.rowCount+1;{const r=wsV.getRow(transRow);r.getCell(2).value="Multiples de transactions (× EBITDA)";[[3,H.mtMin],[4,H.mt],[5,H.mtMax]].forEach(([c,hh])=>{r.getCell(c).value={formula:`${rH}!${hh}*C${rEbRef}+C${rDN}+C${rBR}`};r.getCell(c).numFmt=NF;});}
@@ -2473,11 +2499,14 @@ async function exporterExcelModele(sansFormule){
       const rw=wsV.rowCount+1, r=wsV.getRow(rw);
       r.getCell(2).value={formula:`$C$${rWacc}${dw}`};r.getCell(2).numFmt=PCT2;r.getCell(2).font={bold:true,color:{argb:"FF224289"}};
       OFFS.forEach((dx,k)=>{const Lk=CL(k), c=r.getCell(3+k);
-        c.value={formula:`SUMPRODUCT(${FRABS}/(1+$B${rw})^(COLUMN(${FRABS})-COLUMN($C$${rFCFF})+1))`
-          +`+IF($B${rw}>${Lk}$${rAx},($${CL(N-1)}$${rFCFF}*(1+${Lk}$${rAx})/($B${rw}-${Lk}$${rAx}))/(1+$B${rw})^${N},0)+$C$${rDN}+$C$${rBR}`};
+        c.value={formula:`SUMPRODUCT(${FRABS}/(1+$B${rw})^(COLUMN(${FRABS})-COLUMN($C$${rFCFF})+1-${MY}*0.5))`
+          +`+IF(${TVX}>0,(${TVX}*$C$${rEbT})/(1+$B${rw})^${N},`
+          +`IF($B${rw}>${Lk}$${rAx},($${CL(N-1)}$${rFCFF}*(1+${Lk}$${rAx})/($B${rw}-${Lk}$${rAx}))/(1+$B${rw})^(${N}-${MY}*0.5),0))`
+          +`+$C$${rDN}+$C$${rBR}`};
         c.numFmt=NF; if(j===2&&k===2){c.font={bold:true,color:{argb:"FF172554"}};c.fill=FOND_TOTAL;} });
     });
-    { wsV.addRow([]);const rNote=wsV.addRow([null,"L'amplitude (± points de WACC et de g) est une hypothèse ; la fourchette DCF « Bas / Haut » de la synthèse correspond aux coins de cette grille, la case centrale à la valeur DCF."]);
+    { wsV.addRow([]);const rNote=wsV.addRow([null,"L'amplitude (± points de WACC et de g) est une hypothèse ; la fourchette DCF « Bas / Haut » de la synthèse correspond aux coins de cette grille, la case centrale à la valeur DCF."
+        +" Si un multiple de sortie est renseigné dans les Hypothèses, la valeur terminale en dépend et l'axe des colonnes (g) n'a plus d'effet."]);
       rNote.getCell(2).font={italic:true,size:9,color:{argb:"FF808080"}}; }
     wsV.columns=[{width:3},{width:46},...Array.from({length:Math.max(N,5)},()=>({width:14}))];
 
