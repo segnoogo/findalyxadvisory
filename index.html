@@ -7513,22 +7513,23 @@ function vueModele(){
       +'<div class="hyp-g"><span>Trésorerie minimale avant distribution <span class="mut">· vide = sans contrainte</span></span><input class="sel ninm" value="'+(M.dividendes_seuilCash!=null?mAmt(M.dividendes_seuilCash):'')+'" oninput="mSep(this)" onchange="mDivSeuil(this.value)"><span class="suf">FCFA</span></div>';
     var su='<div class="card" style="background:#f6f8fc;margin-top:12px"><div class="sec-titre" style="margin-top:0">Sources & Emplois du montage</div>'
       +'<div class="mut" style="margin:-4px 0 10px">'+(Pf.dureeConstruction>0?('Construction sur '+Pf.dureeConstruction+' an(s) ; exploitation à partir de l\'année '+Pf.anneeExploit+'. Intérêts de construction (IDC) capitalisés dans la dette.'):'Pas de période de construction : investissement et exploitation dès l\'année 1.')+'</div>'
-      +'<div class="row" style="gap:24px;flex-wrap:wrap;align-items:flex-start">'
-        +'<div style="flex:1;min-width:230px"><div class="mut" style="font-weight:700;text-transform:uppercase;font-size:11px;letter-spacing:.5px;margin-bottom:4px">Emplois</div>'
+      +'<div class="row" style="gap:24px;flex-wrap:wrap;align-items:stretch">'
+        +'<div style="flex:1;min-width:230px;display:flex;flex-direction:column"><div class="mut" style="font-weight:700;text-transform:uppercase;font-size:11px;letter-spacing:.5px;margin-bottom:4px">Emplois</div>'
           +'<div class="hyp-l"><span>Investissements (jusqu\'à la mise en service)</span><b>'+fmt(Pf.capexFinance)+' '+u.suf+'</b></div>'
           +'<div class="hyp-l"><span>BFR de démarrage ('+Pf.moisBFR+' mois)</span><b>'+fmt(Pf.bfrDemarrage)+' '+u.suf+'</b></div>'
           +(Pf.idc>0.01?'<div class="hyp-l"><span>Intérêts de construction (IDC)</span><b>'+fmt(Pf.idc)+' '+u.suf+'</b></div>':'')
-          +'<div class="hyp-l" style="border-top:2px solid #224289;padding-top:6px"><span><b>Total emplois</b></span><b>'+fmt(Pf.emplois)+' '+u.suf+'</b></div></div>'
-        +'<div style="flex:1;min-width:230px"><div class="mut" style="font-weight:700;text-transform:uppercase;font-size:11px;letter-spacing:.5px;margin-bottom:4px">Ressources</div>'
+          +'<div class="hyp-l" style="margin-top:auto;border-top:2px solid #224289;padding-top:6px"><span><b>Total emplois</b></span><b>'+fmt(Pf.emplois)+' '+u.suf+'</b></div></div>'
+        +'<div style="flex:1;min-width:230px;display:flex;flex-direction:column"><div class="mut" style="font-weight:700;text-transform:uppercase;font-size:11px;letter-spacing:.5px;margin-bottom:4px">Ressources</div>'
           +'<div class="hyp-l"><span>Capital social'+(Pf.mode==="auto"?' ('+Math.round(Pf.partFP*100)+' %)':'')+'</span><b style="color:#16904E">'+fmt(Pf.capital)+' '+u.suf+'</b></div>'
           +(Pf.primes?'<div class="hyp-l"><span>Primes liées au capital</span><b style="color:#16904E">'+fmt(Pf.primes)+' '+u.suf+'</b></div>':'')
           +(Pf.cca?'<div class="hyp-l"><span>Comptes courants d\'associés (CCA'+(Pf.ccaTaux?', '+(Pf.ccaTaux*100).toFixed(1)+' %':', 0 %')+' · '+(Pf.ccaMode==='infine'?'in fine':Pf.ccaMode==='lineaire'?'linéaire':'maintenu')+')</span><b style="color:#8a5a00">'+fmt(Pf.cca)+' '+u.suf+'</b></div>':'')
           +(Pf.subvention?'<div class="hyp-l"><span>Subvention</span><b>'+fmt(Pf.subvention)+' '+u.suf+'</b></div>':'')
           +'<div class="hyp-l"><span>Dette'+(Pf.idc>0.01?' (dont IDC)':'')+'</span><b style="color:#224289">'+fmt(Pf.detteAvecIDC)+' '+u.suf+'</b></div>'
-          +'<div class="hyp-l" style="border-top:2px solid #224289;padding-top:6px"><span><b>Total ressources</b></span><b>'+fmt(Pf.sources)+' '+u.suf+'</b></div>'
-          +((!auto&&Math.abs(Pf.sources-Pf.emplois)>0.5)?'<div class="hyp-l" style="color:'+(Pf.sources<Pf.emplois?'#c0392b':'#8a5a00')+'"><span><b>'+(Pf.sources<Pf.emplois?'Besoin non couvert (part en découvert à défaut)':'Excédent de financement (trésorerie initiale)')+'</b></span><b>'+fmt(Math.abs(Pf.sources-Pf.emplois))+' '+u.suf+'</b></div>':'')
+          +'<div class="hyp-l" style="margin-top:auto;border-top:2px solid #224289;padding-top:6px"><span><b>Total ressources</b></span><b>'+fmt(Pf.sources)+' '+u.suf+'</b></div>'
           +'</div>'
-      +'</div></div>';
+      +'</div>'
+      +((!auto&&Math.abs(Pf.sources-Pf.emplois)>0.5)?'<div class="hyp-l" style="margin-top:8px;color:'+(Pf.sources<Pf.emplois?'#c0392b':'#8a5a00')+'"><span><b>'+(Pf.sources<Pf.emplois?'Besoin non couvert (part en découvert à défaut)':'Excédent de financement (trésorerie initiale)')+'</b></span><b>'+fmt(Math.abs(Pf.sources-Pf.emplois))+' '+u.suf+'</b></div>':'')
+      +'</div>';
     if(auto){
       corps='<div class="card"><div class="sec-titre" style="margin-top:0">Financement — automatique</div>'+modeSeg+consLigne
         +'<div class="hyp-g"><span>Part de fonds propres (gearing cible)</span><input class="sel" value="'+(Math.round((f.partFP!=null?f.partFP:0.30)*1000)/10)+'" onchange="mSet(\'financement.partFP\',(numFR(this.value)||0)/100)"><span class="suf">%</span></div>'
