@@ -7080,10 +7080,20 @@ async function exporterExcelModele(){
     const rKd=wsV.rowCount+1; vF("Coût de la dette après IS (kd)",`${rH}!${H.kd}*(1-${rH}!${H.is})`,PCT2);
     const rWacc=wsV.rowCount+1; vF("= WACC",`C${rKe}*(1-${rH}!${H.wd})+C${rKd}*${rH}!${H.wd}`,PCT2,true);
     wsV.addRow([]);
-    vLab("Flux de trésorerie disponibles (FCFF) & actualisation");
+    vLab("Construction des flux de trésorerie disponibles (FCFF)");
     const eFCFF=wsV.addRow([null,"",...fyp]);styliserEntete(eFCFF,1);eFCFF.getCell(2).value={formula:`${rH}!${H.unite}`};
-    const rFCFF=wsV.rowCount+1;{const r=wsV.getRow(rFCFF);r.getCell(2).value="FCFF";for(let i=0;i<N;i++){const c=r.getCell(3+i);c.value={formula:`${rC}!${CL(i)}${rr("FCFF")}`};c.numFmt=NF;}}
-    const rPV=wsV.rowCount+1;{const r=wsV.getRow(rPV);r.getCell(2).value="FCFF actualisés";for(let i=0;i<N;i++){const c=r.getCell(3+i);c.value={formula:`${CL(i)}${rFCFF}/(1+C${rWacc})^${i+1}`};c.numFmt=NF;}}
+    /* ligne par année : chaque composante importée du Modèle, cascade calculée ICI */
+    const vSerie=(lib,ff,fmt,tot)=>{const rn=wsV.rowCount+1;const r=wsV.getRow(rn);r.getCell(2).value=lib;
+      for(let i=0;i<N;i++){const c=r.getCell(3+i);c.value={formula:ff(i,CL(i))};c.numFmt=fmt||NF;}
+      if(tot){r.font={bold:true,color:{argb:"FF172554"}};for(let c2=2;c2<3+N;c2++)r.getCell(c2).fill=FOND_TOTAL;}return rn;};
+    const rEBI=vSerie("EBIT (Modèle)",(i,X)=>`${rC}!${X}${rr("EBIT")}`);
+    const rIMP=vSerie("(−) Impôt théorique sur l'EBIT (taux d'IS des Hypothèses)",(i,X)=>`-MAX(0,${X}${rEBI})*${rH}!${H.is}`);
+    const rNOP=vSerie("= NOPAT (résultat d'exploitation après impôt)",(i,X)=>`${X}${rEBI}+${X}${rIMP}`);
+    const rDOT=vSerie("(+) Dotations aux amortissements (Modèle)",(i,X)=>`${rC}!${X}${rr("DOT")}`);
+    const rDBF=vSerie("(−) Variation du BFR (Modèle)",(i,X)=>`-(${rC}!${X}${rr("BFR")}-${i>0?`${rC}!${CL(i-1)}${rr("BFR")}`:"0"})`);
+    const rCPX=vSerie("(−) Investissements — CAPEX (Modèle)",(i,X)=>`-${rC}!${X}${rr("CAPEX")}`);
+    const rFCFF=vSerie("= Flux de trésorerie disponible (FCFF)",(i,X)=>`${X}${rNOP}+${X}${rDOT}+${X}${rDBF}+${X}${rCPX}`,NF,true);
+    const rPV=vSerie("FCFF actualisés (au WACC)",(i,X)=>`${X}${rFCFF}/(1+$C$${rWacc})^${i+1}`);
     wsV.addRow([]);
     vLab("Passage à la valeur des fonds propres");
     const rSum=wsV.rowCount+1; vF("Somme des FCFF actualisés",`SUM(C${rPV}:${CL(N-1)}${rPV})`,NF);
@@ -7110,7 +7120,26 @@ async function exporterExcelModele(){
       const r=wsV.getRow(rRet);r.getCell(2).value="Valeur retenue (moyenne pondérée — poids en Hypothèses)";
       r.getCell(4).value={formula:`IFERROR((D${dcfRow}*${rH}!${H.wDcf}+D${compRow}*${rH}!${H.wComp}+D${transRow}*${rH}!${H.wTrans}+D${anrRow}*${rH}!${H.wAnr})/${wsumF},0)`};
       r.getCell(4).numFmt=NF;r.font={bold:true,color:{argb:"FF172554"}};for(let c=2;c<=5;c++)r.getCell(c).fill=FOND_TOTAL;}
-    wsV.columns=[{width:3},{width:44},{width:15},{width:15},{width:15}];
+    /* ---- sensibilité : valeur des fonds propres selon WACC (lignes) × croissance g (colonnes) ---- */
+    wsV.addRow([]);
+    vLab("Sensibilité — valeur des fonds propres (WACC en ligne × croissance g en colonne)");
+    const OFFS=[`-${rH}!${H.sensAmp}`,`-${rH}!${H.sensAmp}/2`,`+0`,`+${rH}!${H.sensAmp}/2`,`+${rH}!${H.sensAmp}`];
+    const rAx=wsV.rowCount+1;
+    { const r=wsV.getRow(rAx);r.getCell(2).value="WACC \\ g";
+      OFFS.forEach((dx,k)=>{const c=r.getCell(3+k);c.value={formula:`${rH}!${H.g}${dx}`};c.numFmt=PCT2;});
+      for(let c2=2;c2<=7;c2++){const cc=r.getCell(c2);cc.fill={type:"pattern",pattern:"solid",fgColor:{argb:"FF213768"}};cc.font={bold:true,color:{argb:"FFFFFFFF"},size:10};} }
+    const FRABS=`$C$${rFCFF}:$${CL(N-1)}$${rFCFF}`;
+    OFFS.forEach((dw,j)=>{
+      const rw=wsV.rowCount+1, r=wsV.getRow(rw);
+      r.getCell(2).value={formula:`$C$${rWacc}${dw}`};r.getCell(2).numFmt=PCT2;r.getCell(2).font={bold:true,color:{argb:"FF224289"}};
+      OFFS.forEach((dx,k)=>{const Lk=CL(k), c=r.getCell(3+k);
+        c.value={formula:`SUMPRODUCT(${FRABS}/(1+$B${rw})^(COLUMN(${FRABS})-COLUMN($C$${rFCFF})+1))`
+          +`+IF($B${rw}>${Lk}$${rAx},($${CL(N-1)}$${rFCFF}*(1+${Lk}$${rAx})/($B${rw}-${Lk}$${rAx}))/(1+$B${rw})^${N},0)+$C$${rDN}+$C$${rBR}`};
+        c.numFmt=NF; if(j===2&&k===2){c.font={bold:true,color:{argb:"FF172554"}};c.fill=FOND_TOTAL;} });
+    });
+    { wsV.addRow([]);const rNote=wsV.addRow([null,"L'amplitude (± points de WACC et de g) est une hypothèse ; la fourchette DCF « Bas / Haut » de la synthèse correspond aux coins de cette grille, la case centrale à la valeur DCF."]);
+      rNote.getCell(2).font={italic:true,size:9,color:{argb:"FF808080"}}; }
+    wsV.columns=[{width:3},{width:46},...Array.from({length:Math.max(N,5)},()=>({width:14}))];
 
     /* ================= ACCUEIL (navigation) — rempli maintenant, feuille déjà en 1er ================= */
     wsA.getCell("B2").value=DOSSIER.societe;wsA.getCell("B2").font={bold:true,size:18,color:{argb:"FF172554"}};
