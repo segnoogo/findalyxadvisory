@@ -8,6 +8,7 @@ let charts=[];
 
 /* ---------- persistance (localStorage) ---------- */
 const ACTIF_KEY="fx_conseil_actif";
+const DEMO_KEY="fx_conseil_demo";   /* « l'exemple a déjà été proposé » : ne pas le recréer après suppression */
 function chargerDossiers(){try{return JSON.parse(localStorage.getItem("fx_conseil_dossiers")||"[]");}catch(e){return [];}}
 function sauverDossiers(l){
   try{localStorage.setItem("fx_conseil_dossiers",JSON.stringify(l));return true;}
@@ -377,7 +378,8 @@ function vueAccueil(){
   const l=chargerDossiers();
   const cartes=l.map(d=>`
     <div class="card doss">
-      <div><b>${esc(d.societe)}</b><div class="mut">${d.sansHistorique?"Business plan — projet":(d.balances.length+" balance(s)"+(d.balances.length?" — FY"+Math.min(...d.balances.map(b=>b.annee))+" à FY"+Math.max(...d.balances.map(b=>b.annee)):""))}</div></div>
+      <div><b>${esc(d.societe)}</b>${d.demo?' <span class="chip" style="background:#FFF4E5;color:#8a5a00">Exemple</span>':""}
+      <div class="mut">${d.demo?"Dossier de démonstration — valeurs fictives, modifiable et supprimable":(d.sansHistorique?"Business plan — projet":(d.balances.length+" balance(s)"+(d.balances.length?" — FY"+Math.min(...d.balances.map(b=>b.annee))+" à FY"+Math.max(...d.balances.map(b=>b.annee)):"")))}</div></div>
       <div><button class="btn primary sm" onclick="ouvrirDossier('${d.id}')">Ouvrir</button>
       <button class="btn sm" onclick="renommerDossier('${d.id}')">Renommer</button>
       <button class="btn sm" onclick="supprimerDossier('${d.id}')">Supprimer</button></div>
@@ -410,7 +412,8 @@ function vueAccueil(){
   const barre=`<div class="card" style="display:flex;align-items:center;gap:10px">
     <b>Mes sociétés</b><span class="chip">${nb}</span>
     <button class="btn sm" onclick="ACC_LISTE=!ACC_LISTE;rendre()">${ouverte?"Replier la liste":"Afficher la liste"}</button>
-    <button class="btn sm" style="margin-left:auto" onclick="creerModelePrompt()">+ Projet</button>
+    ${l.some(d=>d.demo)?"":'<button class="btn sm" style="margin-left:auto" onclick="creerDemo()" title="Recréer le dossier de démonstration">Dossier d\'exemple</button>'}
+    <button class="btn sm"${l.some(d=>d.demo)?' style="margin-left:auto"':""} onclick="creerModelePrompt()">+ Projet</button>
     <button class="btn sm primary" onclick="ouvrirWizard()">+ Nouvelle société</button>
   </div>`;
   const creation=`<div class="card">
@@ -442,6 +445,17 @@ async function creerModele(nom){
   DOSSIER={id:id,societe:nom,secteur:"Général",balances:[],overrides:{},sansHistorique:true,modele:modeleParDefaut()};
   recalculer();sauverDossier();localStorage.setItem(ACTIF_KEY,DOSSIER.id);SOUS_MODELE="rev";VUE="modele";shell();
 }
+/* dossier d'exemple : créé sans passer par le quota de licence (il n'est pas une société du client) */
+function creerDemo(silencieux){
+  const d=dossierDemo();
+  if(chargerDossiers().some(x=>x.id===d.id)){ouvrirDossier(d.id);return;}
+  DOSSIER=d;
+  recalculer();sauverDossier();
+  localStorage.setItem(ACTIF_KEY,d.id);
+  try{localStorage.setItem(DEMO_KEY,"1");}catch(e){}
+  SOUS_MODELE="rev";VUE="modele";
+  if(!silencieux){shell();toast("Dossier d'exemple ouvert — modifiez-le librement ou supprimez-le depuis l'accueil.");}
+}
 async function creerDossier(){
   const nom=document.getElementById("nouvNom").value.trim();
   if(!nom){toast("Entrez un nom de société");return;}
@@ -467,8 +481,10 @@ function ouvrirDossier(id,garderVue){
   shell();
 }
 function supprimerDossier(id){
-  if(!confirm("Supprimer ce dossier ?"))return;
-  try{licRetirerSociete(id);}catch(e){}
+  const dd=chargerDossiers().find(x=>x.id===id);
+  if(!confirm(dd&&dd.demo?"Supprimer le dossier d'exemple ? Vous pourrez le recréer depuis l'accueil.":"Supprimer ce dossier ?"))return;
+  if(dd&&dd.demo){try{localStorage.setItem(DEMO_KEY,"1");}catch(e){}}   /* ne pas le recréer au prochain démarrage */
+  else try{licRetirerSociete(id);}catch(e){}
   sauverDossiers(chargerDossiers().filter(d=>d.id!==id));
   if(DOSSIER&&DOSSIER.id===id){DOSSIER=null;ETATS=null;localStorage.removeItem(ACTIF_KEY);}
   shell();
@@ -2402,6 +2418,9 @@ function demarrerApp(){
     const d=chargerDossiers().find(x=>x.id===id);
     if(d){DOSSIER=d;recalculer();}
   }
+  /* premier lancement (aucun dossier, exemple jamais créé) : ouvrir le dossier d'exemple
+     pour que l'outil soit navigable immédiatement. Supprimable ; il ne revient pas ensuite. */
+  if(!DOSSIER&&!chargerDossiers().length&&!localStorage.getItem(DEMO_KEY))creerDemo(true);
   shell();
 }
 licDemarrer();

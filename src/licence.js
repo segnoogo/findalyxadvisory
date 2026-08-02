@@ -228,14 +228,16 @@ async function licAjouterSociete(id,libelle){
     return {ok:true};                 /* autre erreur serveur : ne pas bloquer le travail */
   }
   /* hors-ligne : contrôle local de secours */
-  if(LIC_ETAT&&LIC_ETAT.maxSoc>0&&chargerDossiers().length>=LIC_ETAT.maxSoc)
-    return {ok:false,used:chargerDossiers().length,max:LIC_ETAT.maxSoc};
+  const nSoc=chargerDossiers().filter(d=>!d.demo).length;   /* l'exemple ne compte pas */
+  if(LIC_ETAT&&LIC_ETAT.maxSoc>0&&nSoc>=LIC_ETAT.maxSoc)
+    return {ok:false,used:nSoc,max:LIC_ETAT.maxSoc};
   return {ok:true};
 }
 function licRetirerSociete(id){licOpSociete("remove",{societe_id:id});}
 function licSyncSocietes(){
   try{
-    const list=chargerDossiers().map(d=>({id:d.id,libelle:d.societe}));
+    /* le dossier d'exemple n'est pas une société du client : hors quota */
+    const list=chargerDossiers().filter(d=>!d.demo).map(d=>({id:d.id,libelle:d.societe}));
     licOpSociete("sync",{list}).then(r=>{
       if(r.net&&r.data&&r.data.ok&&LIC_ETAT){LIC_ETAT.usedSoc=r.data.used;LIC_ETAT.maxSoc=r.data.max;}
     });

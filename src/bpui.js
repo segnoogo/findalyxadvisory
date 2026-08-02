@@ -96,6 +96,83 @@ function modeleParDefaut(){
       prudent:{lab:"Prudent",dCA:-0.10,dMarge:-0.05,dJours:0.10}}};
 }
 function modeleScenariosDefaut(){return {central:{lab:"Central",dCA:0,dMarge:0,dJours:0},optimiste:{lab:"Optimiste",dCA:0.10,dMarge:0.05,dJours:-0.10},prudent:{lab:"Prudent",dCA:-0.10,dMarge:-0.05,dJours:0.10}};}
+/* ============================================================
+   DOSSIER D'EXEMPLE — créé au premier lancement pour que l'outil
+   soit navigable sans rien saisir. Supprimable comme un dossier
+   normal (il ne consomme aucune société de la licence).
+   Il montre volontairement TOUTES les mécaniques du modèle :
+   inducteurs de volume, coût piloté par la capacité (référence
+   d'effectif ÷ places ⌈arrondi⌉), coût en % du CA, charges,
+   personnel par poste, CAPEX à durées distinctes, montage
+   capital + primes + CCA avec source d'équilibrage, emprunt à
+   différé, dividendes plafonnés par la trésorerie.
+   ============================================================ */
+function modeleDemo(){
+  var y=2026; try{y=new Date().getFullYear();}catch(e){}
+  var niveau=function(id,nom,eff,frais,net){
+    return {id:id,name:nom,tpl:"ecole",
+      rows:[{op:'x',name:"Élèves inscrits",mode:"yearly",vals:eff,val:eff[0],unit:"élèves",g:0},
+            {op:'x',name:"Part nette après remises accordées",val:net,unit:"%",g:0}],
+      prix:{val:frais,unit:"FCFA",g:3}};
+  };
+  var ens=function(nom,ref,heures,tarif){
+    return {name:nom,m:"ind",scope:"all",
+      rows:[{op:'x',name:"Élèves du niveau",refLigne:ref},
+            {op:'d',name:"Élèves par classe",val:30,unit:"élèves",g:0,ceil:true},
+            {op:'x',name:"Heures de cours par classe et par an",val:heures,unit:"h/an",g:0}],
+      prix:{val:tarif,unit:"FCFA/h",g:3}};
+  };
+  return {nb:5,anneeDepart:y,tva:0.18,is_taux:0.30,imf_taux:0.005,inflation:0.03,reportDef_horizon:3,
+    decouvert_taux:0.12,dureeConstruction:0,_seq:3,
+    dividendes_payout:0.30,dividendes_seuilCash:15000000,
+    revenus:[
+      niveau("L1","Primaire",[120,150,185,220,260],350000,92),
+      niveau("L2","Collège",[90,115,140,170,200],450000,90),
+      niveau("L3","Lycée",[60,80,100,120,140],550000,90)],
+    coutsDirects:[
+      ens("Enseignants — primaire","L1",900,4000),
+      ens("Enseignants — collège","L2",1000,5000),
+      ens("Enseignants — lycée","L3",1100,6000),
+      {name:"Fournitures et supports pédagogiques",m:"pct",scope:"all",pct:3,val:0}],
+    autresProd:{val:6000000,g:5},
+    chargesFixes:[
+      {name:"Loyer des locaux",montant:18000000,g:0},
+      {name:"Électricité, eau et internet",montant:6000000,g:4},
+      {name:"Communication et recrutement d'élèves",montant:4000000,g:3},
+      {name:"Entretien, nettoyage et gardiennage",montant:3000000,g:3},
+      {name:"Assurances et honoraires",montant:1500000,g:3},
+      {name:"Autres charges de fonctionnement",montant:2000000,g:3}],
+    personnel:[
+      {poste:"Direction générale",effectif:1,salaireMensuel:600000,g:3},
+      {poste:"Administration et scolarité",effectif:3,salaireMensuel:250000,g:3},
+      {poste:"Surveillance et entretien",effectif:4,salaireMensuel:120000,g:3}],
+    capex:[
+      {name:"Aménagement des bâtiments",montant:40000000,duree:10,annee:1},
+      {name:"Mobilier scolaire",montant:15000000,duree:10,annee:1},
+      {name:"Matériel informatique",montant:8000000,duree:3,annee:1},
+      {name:"Bus scolaire",montant:25000000,duree:5,annee:2}],
+    financement:{mode:"manuel",partFP:0.50,moisBFR:2,
+      capital:35000000,primes:15000000,apports:0,plug:"cca",
+      ccaTaux:0,ccaMode:"maintenu",ccaDuree:5,subvention:0,
+      emprunt:{montant:20000000,taux:0.09,duree:7,grace:1}},
+    bfr:{dso:45,dio:0,dpo:30},
+    valo:modeleValoDefaut(),
+    scenario:"central",scenarios:modeleScenariosDefaut()};
+}
+function dossierDemo(){
+  return {id:"demo-exemple",societe:"Institut Horizon (exemple)",secteur:"Services & conseil",
+    unite:"M",balances:[],overrides:{},sansHistorique:true,demo:true,
+    infos:{secteur:"Enseignement privé — primaire, collège, lycée",
+      formeJuridique:"SARL (exemple)",creation:String((function(){try{return new Date().getFullYear()-6;}catch(e){return 2020;}})()),
+      effectif:"270 élèves à l'ouverture du plan · 8 permanents · enseignants vacataires",
+      description:"Dossier d'exemple fourni avec Findalyx Advisory pour découvrir l'outil : établissement scolaire privé de trois cycles, locaux loués, classes de 30 élèves. Toutes les valeurs sont fictives — modifiez-les, ou supprimez ce dossier depuis l'accueil.",
+      services:"Scolarités des trois cycles ; produits annexes (cantine, location de salles).",
+      marche:"Familles urbaines ; recrutement par bouche-à-oreille et campagnes locales.",
+      dirigeant:"Direction générale (exemple)",actionnariat:"Fondateurs 100 % (exemple)",
+      adresse:"Exemple — zone urbaine",
+      contexteMission:"Exemple de business plan à 5 ans et de valorisation : les coûts d'enseignement sont pilotés par la capacité (élèves ÷ 30 par classe, arrondi à la classe entière), le montage combine capital, primes d'émission et compte courant d'associés équilibrant le besoin."},
+    modele:modeleDemo()};
+}
 function assurerModele(){
   if(!DOSSIER.modele)DOSSIER.modele=modeleParDefaut();
   var M=DOSSIER.modele;
