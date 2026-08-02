@@ -553,7 +553,9 @@ function projeterModele(M,scenario){
     ouverture:{treso:ouvTreso,creancesBrut:ouvCreBrut,tauxRecouv:ouvTauxRec,creances:ouvCre,dettes:ouvDet,
       dureeRecouv:ouvDureeRec,dureeDettes:ouvDureeDet,net:ouvNet,actif:!!(ouvTreso||ouvCreBrut),passif:!!ouvDet},
     dette:detteBase,detteAvecIDC:detteBase+idcTotal,
-    sources:capital+primes+cca0+subv+detteBase+idcTotal,emplois:capexFinance+bfrDem+idcTotal,taux:dTaux,duree:dDuree};
+    /* la trésorerie déjà en caisse est une RESSOURCE du montage (sinon le tableau Sources & Emplois
+       affiche un besoin non couvert fantôme alors que le besoin net est bien financé) */
+    sources:capital+primes+cca0+subv+detteBase+idcTotal+ouvTreso,emplois:capexFinance+bfrDem+idcTotal,taux:dTaux,duree:dDuree};
   P.pl.AUTRES_PRODUITS=P.pl.AUTRES_PROD;P.pl.PERSONNEL=P.pl.CHARGES_PERSONNEL;
   P.pl.AUTRES_OPEX=P.pl.OPEX_TOTAL;P.pl.DOTATIONS=P.pl.DA;P.pl.ACHATS=P.pl.COUTS_DIRECTS;
   P.bs.TRESO_NETTE=P.bs.TRESO;

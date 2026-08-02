@@ -2773,7 +2773,9 @@ function projeterModele(M,scenario){
     ouverture:{treso:ouvTreso,creancesBrut:ouvCreBrut,tauxRecouv:ouvTauxRec,creances:ouvCre,dettes:ouvDet,
       dureeRecouv:ouvDureeRec,dureeDettes:ouvDureeDet,net:ouvNet,actif:!!(ouvTreso||ouvCreBrut),passif:!!ouvDet},
     dette:detteBase,detteAvecIDC:detteBase+idcTotal,
-    sources:capital+primes+cca0+subv+detteBase+idcTotal,emplois:capexFinance+bfrDem+idcTotal,taux:dTaux,duree:dDuree};
+    /* la trésorerie déjà en caisse est une RESSOURCE du montage (sinon le tableau Sources & Emplois
+       affiche un besoin non couvert fantôme alors que le besoin net est bien financé) */
+    sources:capital+primes+cca0+subv+detteBase+idcTotal+ouvTreso,emplois:capexFinance+bfrDem+idcTotal,taux:dTaux,duree:dDuree};
   P.pl.AUTRES_PRODUITS=P.pl.AUTRES_PROD;P.pl.PERSONNEL=P.pl.CHARGES_PERSONNEL;
   P.pl.AUTRES_OPEX=P.pl.OPEX_TOTAL;P.pl.DOTATIONS=P.pl.DA;P.pl.ACHATS=P.pl.COUTS_DIRECTS;
   P.bs.TRESO_NETTE=P.bs.TRESO;
@@ -7127,6 +7129,7 @@ async function exporterExcelModele(){
     const rRes1=wsSU.rowCount;
     suF("Primes liées au capital",`${rH}!${H.primes}/${DIV}`);
     suF("Comptes courants d'associés (CCA)",`${rH}!${H.cca0}/${DIV}`);
+    suF("Trésorerie d'ouverture (déjà en caisse)",`${rH}!${H.ouvTreso}/${DIV}`);
     suF("Subvention",`${rH}!${H.subv}/${DIV}`);
     suF("Dette"+(Pf.idc>0.01?" (dont IDC, instantané)":""),Pf.idc>0.01?`${Math.round((Pf.detteAvecIDC||0)*1000)}/${DIV}`:`${rH}!${H.dette}/${DIV}`);
     suF("Total ressources",`SUM(C${rRes1}:C${wsSU.rowCount})`,true);
@@ -7138,7 +7141,8 @@ async function exporterExcelModele(){
       if(cible){
         const autres=[H.capital,H.primes,H.cca0,H.dette].filter(c=>c!==cible).map(c=>`${rH}!${c}`).join("-");
         const cc=wsH.getCell(+cible.match(/\d+/)[0],3);
-        cc.value={formula:`MAX(0,${q(nSU)}!C${rEmp}*${DIV}-${rH}!${H.subv}-${autres.length?autres:"0"})`};
+        /* besoin net = emplois − subvention − trésorerie d'ouverture − autres sources */
+        cc.value={formula:`MAX(0,${q(nSU)}!C${rEmp}*${DIV}-${rH}!${H.subv}-${rH}!${H.ouvTreso}-${autres.length?autres:"0"})`};
         cc.fill={type:"pattern",pattern:"solid",fgColor:{argb:"FFEFEFEF"}};cc.font={italic:true,color:{argb:"FF6B7280"}};
       }
     }
@@ -7760,6 +7764,7 @@ function vueModele(){
           +'<div class="hyp-l"><span>Capital social'+(Pf.mode==="auto"?' ('+Math.round(Pf.partFP*100)+' %)':'')+'</span><b style="color:#16904E">'+fmt(Pf.capital)+' '+u.suf+'</b></div>'
           +(Pf.primes?'<div class="hyp-l"><span>Primes liées au capital</span><b style="color:#16904E">'+fmt(Pf.primes)+' '+u.suf+'</b></div>':'')
           +(Pf.cca?'<div class="hyp-l"><span>Comptes courants d\'associés (CCA'+(Pf.ccaTaux?', '+(Pf.ccaTaux*100).toFixed(1)+' %':', 0 %')+' · '+(Pf.ccaMode==='infine'?'in fine':Pf.ccaMode==='lineaire'?'linéaire':'maintenu')+')</span><b style="color:#8a5a00">'+fmt(Pf.cca)+' '+u.suf+'</b></div>':'')
+          +((Pf.ouverture&&Pf.ouverture.treso)?'<div class="hyp-l"><span>Trésorerie d\'ouverture <span class="mut">· déjà en caisse</span></span><b style="color:#16904E">'+fmt(Pf.ouverture.treso)+' '+u.suf+'</b></div>':'')
           +(Pf.subvention?'<div class="hyp-l"><span>Subvention</span><b>'+fmt(Pf.subvention)+' '+u.suf+'</b></div>':'')
           +'<div class="hyp-l"><span>Dette'+(Pf.idc>0.01?' (dont IDC)':'')+'</span><b style="color:#224289">'+fmt(Pf.detteAvecIDC)+' '+u.suf+'</b></div>'
           +'<div class="hyp-l" style="margin-top:auto;border-top:2px solid #224289;padding-top:6px"><span><b>Total ressources</b></span><b>'+fmt(Pf.sources)+' '+u.suf+'</b></div>'
@@ -7801,7 +7806,7 @@ function vueModele(){
         +'<div class="hyp-g"><span>Subvention</span><input class="sel ninm" value="'+mAmt(f.subvention||0)+'" oninput="mSep(this)" onchange="mSet(\'financement.subvention\',this.value,1)"><span class="suf"></span></div>'
         +'<div class="hyp-g"><span>Emprunt — montant</span>'+(champFin("dette",Pf.dette)||'<input class="sel ninm" value="'+mAmt(e.montant||0)+'" oninput="mSep(this)" onchange="mSet(\'financement.emprunt.montant\',this.value,1)">')+'<span class="suf"></span></div>'
         +empBloc+ouvBloc+su
-        +'<div class="mut" style="margin-top:8px">Le financement est tiré en année 1 ; en cas de construction, les intérêts courent et sont capitalisés dans la dette (IDC). Le CCA est une dette financière (quasi-fonds propres) : inclus dans la dette nette de la valorisation, reclassable dans le pont. Aucun bilan d\'ouverture.</div></div>';
+        +'<div class="mut" style="margin-top:8px">Le financement est tiré en année 1 ; en cas de construction, les intérêts courent et sont capitalisés dans la dette (IDC). Le CCA est une dette financière (quasi-fonds propres) : inclus dans la dette nette de la valorisation, reclassable dans le pont. La trésorerie d\'ouverture finance une partie du démarrage ; les <b>créances et dettes d\'ouverture ne figurent pas dans ce montage</b> — elles vivent dans le bilan et la trésorerie du plan (encaissement / règlement étalés), pas dans le besoin initial.</div></div>';
     }
   } else if(SOUS_MODELE==="bfr"){
     var b=M.bfr;

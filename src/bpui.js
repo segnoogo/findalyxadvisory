@@ -495,6 +495,7 @@ function vueModele(){
           +'<div class="hyp-l"><span>Capital social'+(Pf.mode==="auto"?' ('+Math.round(Pf.partFP*100)+' %)':'')+'</span><b style="color:#16904E">'+fmt(Pf.capital)+' '+u.suf+'</b></div>'
           +(Pf.primes?'<div class="hyp-l"><span>Primes liées au capital</span><b style="color:#16904E">'+fmt(Pf.primes)+' '+u.suf+'</b></div>':'')
           +(Pf.cca?'<div class="hyp-l"><span>Comptes courants d\'associés (CCA'+(Pf.ccaTaux?', '+(Pf.ccaTaux*100).toFixed(1)+' %':', 0 %')+' · '+(Pf.ccaMode==='infine'?'in fine':Pf.ccaMode==='lineaire'?'linéaire':'maintenu')+')</span><b style="color:#8a5a00">'+fmt(Pf.cca)+' '+u.suf+'</b></div>':'')
+          +((Pf.ouverture&&Pf.ouverture.treso)?'<div class="hyp-l"><span>Trésorerie d\'ouverture <span class="mut">· déjà en caisse</span></span><b style="color:#16904E">'+fmt(Pf.ouverture.treso)+' '+u.suf+'</b></div>':'')
           +(Pf.subvention?'<div class="hyp-l"><span>Subvention</span><b>'+fmt(Pf.subvention)+' '+u.suf+'</b></div>':'')
           +'<div class="hyp-l"><span>Dette'+(Pf.idc>0.01?' (dont IDC)':'')+'</span><b style="color:#224289">'+fmt(Pf.detteAvecIDC)+' '+u.suf+'</b></div>'
           +'<div class="hyp-l" style="margin-top:auto;border-top:2px solid #224289;padding-top:6px"><span><b>Total ressources</b></span><b>'+fmt(Pf.sources)+' '+u.suf+'</b></div>'
@@ -536,7 +537,7 @@ function vueModele(){
         +'<div class="hyp-g"><span>Subvention</span><input class="sel ninm" value="'+mAmt(f.subvention||0)+'" oninput="mSep(this)" onchange="mSet(\'financement.subvention\',this.value,1)"><span class="suf"></span></div>'
         +'<div class="hyp-g"><span>Emprunt — montant</span>'+(champFin("dette",Pf.dette)||'<input class="sel ninm" value="'+mAmt(e.montant||0)+'" oninput="mSep(this)" onchange="mSet(\'financement.emprunt.montant\',this.value,1)">')+'<span class="suf"></span></div>'
         +empBloc+ouvBloc+su
-        +'<div class="mut" style="margin-top:8px">Le financement est tiré en année 1 ; en cas de construction, les intérêts courent et sont capitalisés dans la dette (IDC). Le CCA est une dette financière (quasi-fonds propres) : inclus dans la dette nette de la valorisation, reclassable dans le pont. Aucun bilan d\'ouverture.</div></div>';
+        +'<div class="mut" style="margin-top:8px">Le financement est tiré en année 1 ; en cas de construction, les intérêts courent et sont capitalisés dans la dette (IDC). Le CCA est une dette financière (quasi-fonds propres) : inclus dans la dette nette de la valorisation, reclassable dans le pont. La trésorerie d\'ouverture finance une partie du démarrage ; les <b>créances et dettes d\'ouverture ne figurent pas dans ce montage</b> — elles vivent dans le bilan et la trésorerie du plan (encaissement / règlement étalés), pas dans le besoin initial.</div></div>';
     }
   } else if(SOUS_MODELE==="bfr"){
     var b=M.bfr;

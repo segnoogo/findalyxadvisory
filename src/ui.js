@@ -2323,6 +2323,7 @@ async function exporterExcelModele(){
     const rRes1=wsSU.rowCount;
     suF("Primes liées au capital",`${rH}!${H.primes}/${DIV}`);
     suF("Comptes courants d'associés (CCA)",`${rH}!${H.cca0}/${DIV}`);
+    suF("Trésorerie d'ouverture (déjà en caisse)",`${rH}!${H.ouvTreso}/${DIV}`);
     suF("Subvention",`${rH}!${H.subv}/${DIV}`);
     suF("Dette"+(Pf.idc>0.01?" (dont IDC, instantané)":""),Pf.idc>0.01?`${Math.round((Pf.detteAvecIDC||0)*1000)}/${DIV}`:`${rH}!${H.dette}/${DIV}`);
     suF("Total ressources",`SUM(C${rRes1}:C${wsSU.rowCount})`,true);
@@ -2334,7 +2335,8 @@ async function exporterExcelModele(){
       if(cible){
         const autres=[H.capital,H.primes,H.cca0,H.dette].filter(c=>c!==cible).map(c=>`${rH}!${c}`).join("-");
         const cc=wsH.getCell(+cible.match(/\d+/)[0],3);
-        cc.value={formula:`MAX(0,${q(nSU)}!C${rEmp}*${DIV}-${rH}!${H.subv}-${autres.length?autres:"0"})`};
+        /* besoin net = emplois − subvention − trésorerie d'ouverture − autres sources */
+        cc.value={formula:`MAX(0,${q(nSU)}!C${rEmp}*${DIV}-${rH}!${H.subv}-${rH}!${H.ouvTreso}-${autres.length?autres:"0"})`};
         cc.fill={type:"pattern",pattern:"solid",fgColor:{argb:"FFEFEFEF"}};cc.font={italic:true,color:{argb:"FF6B7280"}};
       }
     }
