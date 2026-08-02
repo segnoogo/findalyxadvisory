@@ -7393,21 +7393,26 @@ function mCarteCout(cl,ci){
         +revs.map(function(L){return '<option value="'+L.id+'"'+(r.refLigne===L.id?' selected':'')+'>Réf. effectif — '+esc(L.name||'Ligne')+'</option>';}).join('')+'</select>';
       var ceilBtn='<button class="btn sm '+(r.ceil?'primary':'')+'" title="Arrondi supérieur du produit courant (ex. groupes de classes)" onclick="mCoutIndCeil('+ci+','+ri+')" style="min-width:34px;font-weight:700">⌈⌉</button>';
       if(r.refLigne){var Lref=null;revs.forEach(function(L){if(L.id===r.refLigne)Lref=L;});
-        vals='<div class="mind-vals"><span class="mut" style="padding:4px 0">= effectif physique de « '+esc((Lref&&Lref.name)||'?')+' » (an 1 : '+Math.round(Lref?volPhysique(Lref,0):0)+') — suit les Revenus et le scénario</span></div>';}
+        var rcells='';for(var kr=0;kr<N;kr++){rcells+='<span class="mind-yv"><label>An '+(kr+1)+'</label><input class="nin ninm" value="'+Math.round(Lref?volPhysique(Lref,kr):0)+'" disabled style="background:#f2f4f8;color:#5a6472"></span>';}
+        vals='<div class="mind-vals">'+rcells+'</div><div class="mut" style="padding:2px 0 0 44px">= effectif de « '+esc((Lref&&Lref.name)||'?')+' » (lecture seule — se modifie dans Revenus ; le scénario s\'applique en plus)</div>';}
       else if(r.mode==='yearly'){var cells='';for(var k=0;k<N;k++){var yv=valSerie(r.vals,k);cells+='<span class="mind-yv"><label>An '+(k+1)+'</label><input class="nin ninm" value="'+mAmt(yv)+'" oninput="mSep(this)" onchange="mCoutIndYv('+ci+','+ri+','+k+',this.value)"></span>';}vals='<div class="mind-vals">'+cells+'</div>';}
       else vals='<div class="mind-vals"><span class="mind-f"><label>Valeur an 1</label><input class="nin ninm" value="'+mAmt(r.val)+'" oninput="mSep(this)" onchange="mCoutInd('+ci+','+ri+',\'val\',this.value)"></span><span class="mind-f"><label>Croissance %/an</label><input class="nin" value="'+(r.g||0)+'" onchange="mCoutInd('+ci+','+ri+',\'g\',this.value)"></span></div>';
+      var apresCeil='';
+      if(r.ceil){var sub=(cl.rows||[]).slice(0,ri+1),cs='';for(var kc=0;kc<N;kc++){cs+=(kc?' · ':'')+Math.round(volInducteurs(sub,kc,{revenus:revs,fCA:1}));}
+        apresCeil='<div class="mut" style="padding:2px 0 0 44px">= après arrondi supérieur : <b>'+cs+'</b></div>';}
       return '<div class="mind"><div class="mind-top"><button class="btn sm" title="× ou ÷" onclick="mCoutIndOp('+ci+','+ri+')" style="min-width:34px;font-weight:700">'+(r.op==='d'?'÷':'×')+'</button>'
         +'<input class="sel" style="flex:1;min-width:130px" placeholder="Nom de l\'inducteur" value="'+esc(r.name||'')+'" onchange="mCoutInd('+ci+','+ri+',\'name\',this.value)">'
         +refSel+ceilBtn
         +(r.refLigne?'':'<input class="nin" style="width:78px" placeholder="unité" value="'+esc(r.unit||'')+'" onchange="mCoutInd('+ci+','+ri+',\'unit\',this.value)">'
         +'<span class="segvue"><button class="'+(r.mode==='yearly'?'':'on')+'" onclick="mCoutIndMode('+ci+','+ri+',\'grow\')">Croissance</button><button class="'+(r.mode==='yearly'?'on':'')+'" onclick="mCoutIndMode('+ci+','+ri+',\'yearly\')">Par année</button></span>')
-        +'<button class="btn sm" title="Retirer" onclick="mDelCoutInd('+ci+','+ri+')">✕</button></div>'+vals+'</div>';
+        +'<button class="btn sm" title="Retirer" onclick="mDelCoutInd('+ci+','+ri+')">✕</button></div>'+vals+apresCeil+'</div>';
     }).join('');
     var q=volInducteurs(cl.rows,0,{revenus:revs,fCA:1}), taux=(cl.prix&&cl.prix.val)||0, cout=q*taux;
+    var qS='';for(var kq=0;kq<N;kq++){qS+=(kq?' · ':'')+Math.round(volInducteurs(cl.rows,kq,{revenus:revs,fCA:1})).toLocaleString("fr-FR").replace(/[  ]/g," ");}
     corps='<div class="mut" style="text-transform:uppercase;letter-spacing:.5px;font-size:11px;font-weight:700;margin-bottom:8px">Inducteurs de quantité (× ou ÷ · unité % = ratio)</div>'
     +rows
     +'<button class="btn sm" style="margin-top:2px" onclick="mAddCoutInd('+ci+')">+ inducteur</button>'
-    +'<div class="mind-price"><span class="x">= Quantité an 1 : <b>'+Math.round(q).toLocaleString("fr-FR").replace(/[  ]/g," ")+'</b></span></div>'
+    +'<div class="mind-price"><span class="x">= Quantité par année : <b>'+qS+'</b></span></div>'
     +'<div class="mind-price"><span class="x">×</span> <span class="mut">Taux unitaire an 1 (FCFA)</span> <input class="nin ninm" value="'+mAmt(taux)+'" oninput="mSep(this)" onchange="mCoutTaux('+ci+',\'val\',this.value)"><input class="nin" style="width:70px" value="'+esc((cl.prix&&cl.prix.unit)||'')+'" onchange="mCoutTaux('+ci+',\'unit\',this.value)">'
     +'<span class="mut">croissance</span> <input class="nin" style="width:60px" value="'+((cl.prix&&cl.prix.g)||0)+'" onchange="mCoutTaux('+ci+',\'g\',this.value)"> %'
     +'<span style="margin-left:auto;font-weight:700;color:#c0392b">Coût an 1 : '+fmt(cout/1000)+' '+uni().suf+'</span></div>';
