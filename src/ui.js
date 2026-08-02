@@ -1469,7 +1469,7 @@ function vueRatios(){
 function dessinerGraphs(){
   if(!ETATS||typeof Chart==="undefined") return;
   const A=ETATS.annees,v=ETATS.v;
-  const labels=A.map(a=>"FY"+String(a).slice(-2));
+  const labels=A.map(a=>libFY(a));
   const NAVY="#172554",ORANGE="#FA6706",BLEU="#4a6fb5",GRIS="#9ca3af",VERT="#16904E";
   const opts={responsive:true,plugins:{legend:{position:"bottom",labels:{boxWidth:12,font:{size:11}}}}};
   const mk=(id,cfg)=>{const el=document.getElementById(id);if(el)charts.push(new Chart(el,cfg));};
@@ -1560,7 +1560,7 @@ function finaliserClasseur(wb){
 function construireAccueilClasseur(ws,wb){
   ws.views=[{showGridLines:false}];
   const u=uni();
-  const fy=ETATS.annees.map(a=>"FY"+String(a).slice(-2));
+  const fy=ETATS.annees.map(a=>libFY(a));
   const dateGen=new Date().toLocaleDateString("fr-FR",{day:"numeric",month:"long",year:"numeric"});
   let lt=6;
   if(DOSSIER.logo){
@@ -1732,9 +1732,9 @@ async function exporterExcelModele(){
     const u=(uni(),{f:1,dec:0,lib:"KFCFA",suf:"K"}),UF=u.f,NF=NUMFMT,PCT2="0.00%",PCT="0.0%";
     const QF='#,##0;(#,##0);"-"',RF="0.0%";   /* QF = montants/quantités/prix : format comptable (milliers espacés, négatifs entre parenthèses, zéro = tiret) ; RF = ratio en % */
     const mnt=x=>(x==null)?0:(u.dec?Math.round(x*UF*10)/10:Math.round(x*UF));   /* FCFA→unité, en valeur d'amorçage des cellules jaunes */
-    const N=P.annees.length, fyp=P.annees.map(a=>"FY"+String(a).slice(-2)+"p");
+    const N=P.annees.length, fyp=P.annees.map(a=>libFY(a,true));
     const ncPh=(P.financement&&P.financement.dureeConstruction)||0;                          /* années de construction (en-têtes) */
-    const fypPh=P.annees.map((a,i)=>"FY"+String(a).slice(-2)+"p"+(i<ncPh?" (constr.)":""));  /* en-tête présentation : phase marquée */
+    const fypPh=P.annees.map((a,i)=>libFY(a,true)+(i<ncPh?" (constr.)":""));  /* en-tête présentation : phase marquée */
     const CL=i=>String.fromCharCode(67+i);              /* colonne de l'année i (0-based) : C, D, … */
     /* scénario : plus de facteur incorporé ici — le bloc « SCÉNARIO » des Hypothèses expose fCA/fCout/fJours, appliqués dans le Modèle */
     const BLEU={color:{argb:"FF0000FF"}};   /* convention : saisies en bleu, calculs en noir, renvois en vert */
@@ -1749,6 +1749,7 @@ async function exporterExcelModele(){
     /* ================= HYPOTHÈSES (jaune = modifiable) ================= */
     const wsH=wb.addWorksheet(nH);
     titreLiasse(wsH,"Hypothèses du modèle — valeurs saisies en bleu (modifiables), calculs en noir — scénario "+((M.scenarios&&M.scenario&&M.scenarios[M.scenario]&&M.scenarios[M.scenario].lab)||"Central")+" intégré");
+    if(planCheval()){const rC0=wsH.addRow([null,MENTION_CHEVAL]);rC0.getCell(2).font={italic:true,size:9,color:{argb:"FF808080"}};wsH.addRow([]);}
     const GC=CL(N);   /* colonne « Croissance %/an » (juste après les N colonnes d'années) */
     styliserEntete(wsH.addRow([null,"Hypothèse",...fyp,"Croiss. %/an"]),2);
     wsH.views=[{state:"frozen",xSplit:2,ySplit:wsH.rowCount}];   /* titre + années figés, libellés figés */
@@ -2255,7 +2256,8 @@ async function exporterExcelModele(){
     plDefs.push(["Impôt sur les sociétés","IS"]);
     plDefs.push(["Résultat net","RN",1]);
     feuille(nP,"Compte de résultat prévisionnel détaillé",plDefs,
-      "Chaque ligne de revenus, de coûts et chaque charge est dépliée. Cellules calculées à partir des Hypothèses (saisies en bleu) via le Modèle ; renvois d'hypothèses en vert.");
+      "Chaque ligne de revenus, de coûts et chaque charge est dépliée. Cellules calculées à partir des Hypothèses (saisies en bleu) via le Modèle ; renvois d'hypothèses en vert."
+      +(planCheval()?" "+MENTION_CHEVAL:""));
     /* ---- BILAN DÉTAILLÉ (présentation actif net) ---- */
     const bsDefs=[
       ["Actif immobilisé",null],

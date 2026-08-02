@@ -6,6 +6,16 @@
    Montants internes en K FCFA.
    ============================================================ */
 
+/* ---------- libellés de périodes ----------
+   Exercice civil (défaut) : « FY26 » / « FY26p » (p = projeté).
+   Exercice à cheval (année académique — écoles, saisons agricoles…) : « 2026/27 », le millésime
+   stocké étant celui de l'OUVERTURE de l'exercice.
+   Rappel : le droit comptable OHADA impose l'année civile pour les états STATUTAIRES ; le libellé
+   à cheval ne concerne que le prévisionnel de gestion, d'où la mention reprise dans les livrables. */
+function planCheval(){try{return !!(typeof DOSSIER!=="undefined"&&DOSSIER&&DOSSIER.modele&&DOSSIER.modele.exerciceCheval);}catch(e){return false;}}
+function libFY(a,proj){return planCheval()?(a+"/"+String(a+1).slice(-2)):("FY"+String(a).slice(-2)+(proj?"p":""));}
+var MENTION_CHEVAL="Exercices présentés en années académiques : le millésime indique l'année d'ouverture (2026/27 = octobre 2026 à juillet 2027). L'exercice légal de la société étant l'année civile, les états financiers statutaires présenteront un décalage de phasage — chaque année civile recouvre la fin d'un exercice académique et le début du suivant.";
+
 /* ---------- hypothèses par défaut, dérivées de l'historique ---------- */
 function hypothesesBP(etats, lignesPerso){
   const A=etats.annees, v=etats.v, n=A.length, a1=A[n-1], a0=n>1?A[n-2]:a1;

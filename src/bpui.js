@@ -549,6 +549,10 @@ function vueModele(){
     corps='<div class="card"><div class="sec-titre" style="margin-top:0">Paramètres du modèle</div>'
       +'<div class="hyp-g"><span>Nom de la société</span><input class="sel" value="'+esc(DOSSIER.societe||"")+'" onchange="mRenommer(this.value)"><span class="suf"></span></div>'
       +'<div class="hyp-g"><span>Année de départ</span><input class="sel" value="'+(M.anneeDepart||2025)+'" onchange="mSet(\'anneeDepart\',this.value,1)"><span class="suf"></span></div>'
+      +'<div class="hyp-l"><span>Type d\'exercice <span class="mut">· libellé des périodes</span></span><span class="segvue">'
+        +'<button class="'+(M.exerciceCheval?"":"on")+'" onclick="mSet(\'exerciceCheval\',false)">Année civile (FY26)</button>'
+        +'<button class="'+(M.exerciceCheval?"on":"")+'" onclick="mSet(\'exerciceCheval\',true)">À cheval (2026/27)</button></span></div>'
+      +(M.exerciceCheval?'<div class="mut" style="margin:-2px 0 10px;font-style:italic">'+MENTION_CHEVAL+'</div>':'')
       +'<div class="hyp-g"><span>Horizon</span><input class="sel" value="'+(M.nb||5)+'" onchange="mSet(\'nb\',this.value,1)"><span class="suf">années</span></div>'
       +'<div class="hyp-g"><span>Durée de construction <span class="mut">· 0 = dès l\'an 1</span></span><input class="sel" value="'+(M.dureeConstruction||0)+'" onchange="mSet(\'dureeConstruction\',this.value,1)"><span class="suf">années</span></div>'
       +'<div class="hyp-g"><span>TVA</span><input class="sel" value="'+((M.tva||0)*100)+'" onchange="mSet(\'tva\',(numFR(this.value)||0)/100)"><span class="suf">%</span></div>'
@@ -586,8 +590,8 @@ function vueModeleAnalyse(P){
   var rowScen=function(lib,f){return '<tr><td>'+lib+'</td>'+cols.map(function(c){return '<td class="num"'+(c.key===M.scenario?' style="font-weight:700"':'')+'>'+fmt(f(c))+'</td>';}).join("")+'</tr>';};
   var tabScen='<div class="card" style="padding:0;margin-top:14px"><div class="bande">'+esc(DOSSIER.societe.toUpperCase())+' — Comparaison des scénarios</div>'
     +'<div class="tscroll"><table class="tb etat"><tr><th>'+u.lib+'</th>'+cols.map(function(c){return '<th class="num">'+c.lab+(c.key===M.scenario?" ★":"")+'</th>';}).join("")+'</tr>'
-    +rowScen("Chiffre d'affaires (FY"+String(aF).slice(-2)+"p)",function(c){return c.caF;})
-    +rowScen("EBITDA (FY"+String(aF).slice(-2)+"p)",function(c){return c.ebF;})
+    +rowScen("Chiffre d'affaires ("+libFY(aF,true)+")",function(c){return c.caF;})
+    +rowScen("EBITDA ("+libFY(aF,true)+")",function(c){return c.ebF;})
     +rowScen("Résultat net cumulé sur l'horizon",function(c){return c.rnCum;})
     +rowScen("Trésorerie nette finale",function(c){return c.trF;})
     +rowScen("Valeur des fonds propres (retenue)",function(c){return c.eq;})
@@ -658,8 +662,8 @@ function tableBP(P,defs,titre){
   const A0=ETATS.annees,a1=A0[A0.length-1],AP=P.annees,v=ETATS.v;
   const mm=(typeof modeleMode==="function"&&modeleMode());   /* pas de colonne « historique » en mode modèle */
   const nc=(mm&&P.financement&&P.financement.dureeConstruction)||0;   /* années de construction (badge dans l'en-tête) */
-  const th=(mm?"":`<th class="num" style="opacity:.75">FY${String(a1).slice(-2)}</th>`)
-    +AP.map((a,i)=>`<th class="num">FY${String(a).slice(-2)}p${i<nc?'<div style="font-size:9px;font-weight:700;color:#b45608;letter-spacing:.02em">construction</div>':''}</th>`).join("");
+  const th=(mm?"":`<th class="num" style="opacity:.75">${libFY(a1)}</th>`)
+    +AP.map((a,i)=>`<th class="num">${libFY(a,true)}${i<nc?'<div style="font-size:9px;font-weight:700;color:#b45608;letter-spacing:.02em">construction</div>':''}</th>`).join("");
   const lignes=defs.map(d=>{
     if(d.sec!==undefined) return `<tr class="sec"><td colspan="${AP.length+(mm?1:2)}">${d.sec}</td></tr>`;
     if(d.type==="pct"){
@@ -683,7 +687,7 @@ function vueBP(){
   const tabs=[["hyp","Hypothèses"],["pl","P&L prévisionnel"],["bs","Bilan prévisionnel"],["tft","Flux de trésorerie"],["dette","Dette"],["analyse","Analyse & covenants"]]
     .map(([id,lab])=>`<button class="btn ${SOUS_BP===id?"primary":""}" onclick="SOUS_BP='${id}';rendre()">${lab}</button>`).join(" ");
   const kpis=`<div class="kpis">
-    ${kpiCard("CA fin de plan (FY"+String(aF).slice(-2)+"p)",fmt(P.pl.CA[aF])+" "+uni().suf,"",fdelta(v.CA[a1],P.pl.CA[aF]),"chart","#224289")}
+    ${kpiCard("CA fin de plan ("+libFY(aF,true)+")",fmt(P.pl.CA[aF])+" "+uni().suf,"",fdelta(v.CA[a1],P.pl.CA[aF]),"chart","#224289")}
     ${kpiCard("EBITDA fin de plan",fmt(P.pl.EBITDA[aF])+" "+uni().suf,(P.pl.CA[aF]?Math.round(P.pl.EBITDA[aF]/P.pl.CA[aF]*100):0)+"% du CA","","coins","#FA6706")}
     ${kpiCard("Résultat net cumulé",fmt(AP.reduce((s,a)=>s+P.pl.RN[a],0))+" "+uni().suf,"sur "+AP.length+" ans","","file","#172554")}
     ${kpiCard("Trésorerie fin de plan",fmt(P.bs.TRESO[aF])+" "+uni().suf,"",P.bs.TRESO[aF]<0?'<span class="d down">négative</span>':'<span class="d up">positive</span>',"wallet","#16904E")}
@@ -712,7 +716,7 @@ function vueBPHyp(H){
     const titres={caCroiss:"Croissance du CA par année",capex:"Investissements (CAPEX) par année",
       nouveauxEmprunts:"Nouveaux emprunts par année"};
     return `<div class="hyp-l" style="align-items:flex-start"><span>${titres[k]}</span>
-    <span class="serie">${AP.map(i=>`<span class="an"><em>FY${String(a1s+1+i).slice(-2)}p</em>${argent
+    <span class="serie">${AP.map(i=>`<span class="an"><em>${libFY(a1s+1+i,true)}</em>${argent
       ?`<input type="text" inputmode="decimal" class="nin large" value="${Math.round(vals[i]*uni().f*100)/100}" step="any" onchange="hBPa('${k}',${i},this.value,${uni().f})">`
       :`<input type="text" inputmode="decimal" class="nin" value="${+(vals[i]*100).toFixed(1)}" step="0.5" onchange="hBPa('${k}',${i},this.value,100)">`}</span>`).join("")}
     <span class="an"><em>&nbsp;</em><span class="mut" style="line-height:30px">${argent?uni().lib:"%"}</span></span></span></div>`;
@@ -755,7 +759,7 @@ function vueBPHyp(H){
   </div>
   </div>
   <div class="card"><div class="sec-titre" style="margin-top:0">Frais généraux — ligne par ligne</div>
-    <div class="mut" style="margin-bottom:8px">Par défaut chaque ligne suit le taux d'inflation sur sa base ; vous pouvez la passer en % du chiffre d'affaires ou lui donner une croissance propre. Base FY${String(ETATS.annees[ETATS.annees.length-1]).slice(-2)} (dernière colonne).</div>
+    <div class="mut" style="margin-bottom:8px">Par défaut chaque ligne suit le taux d'inflation sur sa base ; vous pouvez la passer en % du chiffre d'affaires ou lui donner une croissance propre. Base ${libFY(ETATS.annees[ETATS.annees.length-1])} (dernière colonne).</div>
     <table class="tb"><tr><th>Ligne</th><th>Mode</th><th class="num">Valeur</th><th class="num">Base réelle</th></tr>${opexRows}</table>
   </div>
   <div class="card"><div class="sec-titre" style="margin-top:0">Financement et distribution</div>
@@ -781,7 +785,7 @@ const BP_SERVICES_EXT=["SOUS_TRAITANCE","LOCATIONS","ENTRETIEN","ASSURANCES","PU
 function detailBPServices(){
   const H=assurerBP(),P=projeterBP(ETATS,H),v=ETATS.v;
   const a1=ETATS.annees[ETATS.annees.length-1],AP=P.annees,OD=P.pl.OPEX_DETAIL||{};
-  const th=`<th class="num">FY${String(a1).slice(-2)}</th>`+AP.map(a=>`<th class="num">FY${String(a).slice(-2)}p</th>`).join("");
+  const th=`<th class="num">${libFY(a1)}</th>`+AP.map(a=>`<th class="num">${libFY(a,true)}</th>`).join("");
   const lignes=BP_SERVICES_EXT.filter(c=>OD[c]).map(c=>`<tr><td>${esc(OD[c].lib)}</td>
     <td class="num" style="opacity:.75">${fmt((v[c]&&v[c][a1])||0)}</td>
     ${AP.map(a=>`<td class="num">${fmt(OD[c].vals[a])}</td>`).join("")}</tr>`).join("");
@@ -909,7 +913,7 @@ function vueBPTft(P){
   return `<div class="card" style="padding:0">
     <div class="bande">${esc(DOSSIER.societe.toUpperCase())} — TFT prévisionnel (modèle officiel) · scénario ${P.scenario}</div>
     <div class="tscroll"><table class="tb etat"><tr><th>${uni().lib}</th>
-    ${AP.map(a=>`<th class="num">FY${String(a).slice(-2)}p</th>`).join("")}</tr>${lignes}</table></div></div>`;
+    ${AP.map(a=>`<th class="num">${libFY(a,true)}</th>`).join("")}</tr>${lignes}</table></div></div>`;
 }
 function vueBPDette(P){
   const AP=P.annees;
@@ -920,7 +924,7 @@ function vueBPDette(P){
   return `<div class="card" style="padding:0">
     <div class="bande">${esc(DOSSIER.societe.toUpperCase())} — Tableau de la dette financière</div>
     <div class="tscroll"><table class="tb etat"><tr><th>${uni().lib}</th>
-    ${AP.map(a=>`<th class="num">FY${String(a).slice(-2)}p</th>`).join("")}</tr>${lignes}</table></div></div>
+    ${AP.map(a=>`<th class="num">${libFY(a,true)}</th>`).join("")}</tr>${lignes}</table></div></div>
   <div class="mut" style="margin-top:8px">Dette existante amortie sur sa durée résiduelle ; chaque nouvel emprunt est amorti
   linéairement sur sa durée à partir de l'année suivant son tirage. Les dividendes versés apparaissent dans le TFT.</div>`;
 }
@@ -929,7 +933,7 @@ function vueBPDette(P){
 /* Seuil de rentabilité + covenants — dépend UNIQUEMENT de la projection P (réutilisable modèle/historique) */
 function analyseSeuilCov(P){
   const AP=P.annees,u=uni();
-  const th=`<th>${u.lib}</th>${AP.map(a=>`<th class="num">FY${String(a).slice(-2)}p</th>`).join("")}`;
+  const th=`<th>${u.lib}</th>${AP.map(a=>`<th class="num">${libFY(a,true)}</th>`).join("")}`;
   const x1=x=>(x===null||!isFinite(x))?"n.s.":(Math.round(x*100)/100).toLocaleString("fr-FR",{minimumFractionDigits:0,maximumFractionDigits:2})+"×";
   const pc=x=>(x===null||!isFinite(x))?"n.s.":Math.round(x*100)+" %";
   const jr=x=>(x===null||!isFinite(x))?"n.s.":Math.round(x)+" j";
@@ -977,7 +981,7 @@ function analyseSeuilCov(P){
 }
 function vueBPAnalyse(P){
   const AP=P.annees,H=assurerBP(),u=uni(),aF=AP[AP.length-1];
-  const th=`<th>${u.lib}</th>${AP.map(a=>`<th class="num">FY${String(a).slice(-2)}p</th>`).join("")}`;
+  const th=`<th>${u.lib}</th>${AP.map(a=>`<th class="num">${libFY(a,true)}</th>`).join("")}`;
   const x1=x=>(x===null||!isFinite(x))?"n.s.":(Math.round(x*100)/100).toLocaleString("fr-FR",{minimumFractionDigits:0,maximumFractionDigits:2})+"×";
   const pc=x=>(x===null||!isFinite(x))?"n.s.":Math.round(x*100)+" %";
   const jr=x=>(x===null||!isFinite(x))?"n.s.":Math.round(x)+" j";
@@ -1060,8 +1064,8 @@ function vueBPAnalyse(P){
   const tabScen=`<div class="card" style="padding:0;margin-top:14px">
     <div class="bande">${esc(DOSSIER.societe.toUpperCase())} — Comparaison des scénarios</div>
     <div class="tscroll"><table class="tb etat"><tr><th>${u.lib}</th>${colsScen.map(c=>`<th class="num">${c.lab}</th>`).join("")}</tr>
-    ${rowScen("Chiffre d'affaires (FY"+String(aF).slice(-2)+"p)",c=>c.caF)}
-    ${rowScen("EBITDA (FY"+String(aF).slice(-2)+"p)",c=>c.ebF)}
+    ${rowScen("Chiffre d'affaires ("+libFY(aF,true)+")",c=>c.caF)}
+    ${rowScen("EBITDA ("+libFY(aF,true)+")",c=>c.ebF)}
     ${rowScen("Résultat net cumulé sur l'horizon",c=>c.rnCum)}
     ${rowScen("Trésorerie nette finale",c=>c.trF)}
     ${rowScen("Valeur des fonds propres (retenue)",c=>c.eq)}
@@ -1163,7 +1167,7 @@ function vueValoCorps(H,P,V){
   const fcffT=`<div class="card" style="padding:0">
     <div class="bande">Construction des flux de trésorerie disponibles (FCFF) · scénario ${P.scenario}</div>
     <div class="tscroll"><table class="tb etat"><tr><th>${u.lib}</th>
-      ${AP.map(a=>`<th class="num">FY${String(a).slice(-2)}p</th>`).join("")}</tr>
+      ${AP.map(a=>`<th class="num">${libFY(a,true)}</th>`).join("")}</tr>
     ${lF.map(([k,lib])=>`<tr class="${k==="fcff"||k==="nopat"?"total":""}"><td>${lib}</td>
       ${AP.map(a=>`<td class="num">${fmt(V.detailFcff[a][k])}</td>`).join("")}</tr>`).join("")}
     <tr><td>Facteur d'actualisation</td>${AP.map((a,i)=>`<td class="num pctl">${(1/Math.pow(1+V.wacc,i+1)).toFixed(3)}</td>`).join("")}</tr>

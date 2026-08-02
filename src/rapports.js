@@ -215,7 +215,7 @@ function rpContacts(pptx, cabinet, mention, page){
 /* ---------- utilitaires de contenu ---------- */
 function rpLignesFin(vals, codes, annees, libs, cfg){
   const n=annees.length;
-  const fy=annees.map(a=>"FY"+String(a).slice(-2));
+  const fy=annees.map(a=>libFY(a));
   const deltas=annees.slice(1).map((a,i)=>"Δ"+String(annees[i]).slice(-2)+"-"+String(a).slice(-2));
   const entetes=[rpLib(),...fy,...deltas,...(n>2?["CAGR"]:[])];
   const colsDelta=new Set(Array.from({length:entetes.length-1-n},(_,k)=>1+n+k));
@@ -254,7 +254,7 @@ const RP_LIBS={CA:"Chiffre d'affaires",COUTS_DIRECTS:"Coûts directs",MARGE_BRUT
 function rpBase(){
   const A=ETATS.annees,v=ETATS.v;
   const a1=A[A.length-1],a0=A[0],ca1=v.CA[a1];
-  const fy=A.map(a=>"FY"+String(a).slice(-2));
+  const fy=A.map(a=>libFY(a));
   const dateTxt=new Date().toLocaleDateString("fr-FR",{month:"long",year:"numeric"});
   return {A,v,a1,a0,ca1,fy,dateTxt,societe:DOSSIER.societe,cabinet:cabinetExport()||"Findalyx Advisory"};
 }
@@ -603,7 +603,7 @@ function construireDD(pptx){
       ["ZG","Trésorerie nette à la clôture","sous_total"]];
     const lignes=defs.map(([c,lib])=>[lib,...A.slice(1).map(a=>c?rpFmt(ETATS.tft[a][c]):"")]);
     rpTable(sl,0.55,1.65,6.9,B.societe.toUpperCase()+" - TFT",
-      [rpLib(),...A.slice(1).map(a=>"FY"+String(a).slice(-2))],lignes,defs.map(d=>d[2]),
+      [rpLib(),...A.slice(1).map(a=>libFY(a))],lignes,defs.map(d=>d[2]),
       new Set(),[3.2,...Array(A.length-1).fill(1.15)],8.5,
       "Source : reconstruction depuis les balances");
     rpCadreComment(sl,7.6,1.65,5.2,5.2);
@@ -668,7 +668,7 @@ function construireBP(pptx,opts){
   const B=rpBase();
   const {A,v,a1,fy}=B;
   const ap=proj.annees;
-  const fyp=ap.map(a=>"FY"+String(a).slice(-2)+"p");
+  const fyp=ap.map(a=>libFY(a,true));
   const mention=opts.mention||(B.societe+" - Business plan "+ap[0]+"-"+ap[ap.length-1]+" - "+B.dateTxt+" - Confidentiel");
   const S=opts.secBase||0; let page=opts.page||1;
   if(!opts.combine){
@@ -744,8 +744,22 @@ function construireBP(pptx,opts){
     gH("Investissement & financement",[
       ["Durée de construction",(Pf.dureeConstruction||0)+" an(s)"],
       ["Investissements (jusqu'à la mise en service)",rpFmt(Pf.capexFinance)+" "+rpLib()],
-      ["Financement — fonds propres / dette",Math.round(Pf.partFP*100)+" % / "+Math.round((1-Pf.partFP)*100)+" %"],
+      ["Financement — capital social",rpFmt(Pf.capital)+" "+rpLib()],
+      ["Financement — primes liées au capital",rpFmt(Pf.primes||0)+" "+rpLib()],
+      ["Financement — comptes courants d'associés",rpFmt(Pf.cca||0)+" "+rpLib()+((Pf.cca&&Pf.ccaTaux)?(" à "+pcH(Pf.ccaTaux)):"")],
+      ["Financement — dette bancaire",rpFmt(Pf.dette)+" "+rpLib()],
       ["Intérêts de construction capitalisés (IDC)",rpFmt(Pf.idc)+" "+rpLib()]]);
+    /* situation d'ouverture : réserve explicite dans le rapport remis à l'acquéreur */
+    { const O=Pf.ouverture||{};
+      if(O.actif||O.passif) gH("Situation d'ouverture — déclarée, non auditée et non exhaustive",[
+        ["Trésorerie disponible",rpFmt(O.treso||0)+" "+rpLib()],
+        ["Créances antérieures retenues",rpFmt(O.creances||0)+" "+rpLib()+((O.creancesBrut>O.creances)?(" (sur "+rpFmt(O.creancesBrut)+" facturés, part recouvrable "+pcH(O.tauxRecouv)+")"):"")],
+        ["Dettes d'ouverture (fournisseurs, fiscales et sociales)",rpFmt(O.dettes||0)+" "+rpLib()],
+        ["Situation nette apportée",rpFmt(O.net||0)+" "+rpLib()],
+        ["Réserve","Éléments déclarés par la direction, non audités ; l'écart éventuel relève d'une garantie d'actif et de passif ou d'un ajustement de prix au closing"+((O.actif&&!O.passif)?" — actif renseigné sans passif : situation asymétrique à justifier":"")]]);
+    }
+    if(planCheval()) gH("Périodicité",[["Exercices présentés","années académiques (millésime = année d'ouverture)"],
+      ["Réserve",MENTION_CHEVAL]]);
     gH("Coût du capital",[
       ["WACC",val?pcH(val.wacc):"n.s."],
       ["Croissance à l'infini (g)",pcH((hyp.valo&&hyp.valo.g)||0.03)]]);
@@ -914,7 +928,7 @@ function construireValo(pptx,opts){
   const {A,v,a1,fy}=B;
   const Vh=hyp.valo;
   const ap=proj.annees;
-  const fyp=ap.map(a=>"FY"+String(a).slice(-2)+"p");
+  const fyp=ap.map(a=>libFY(a,true));
   const mention=opts.mention||(B.societe+" - Évaluation financière au 31/12/"+a1+" - Confidentiel");
   const S=opts.secBase||0; let page=opts.page||1;
   /* méthodes retenues = les plus utilisées : DCF, comparables, transactions, actif net */
