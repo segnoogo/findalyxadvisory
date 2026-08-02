@@ -728,15 +728,28 @@ function construireBP(pptx,opts){
   rpEnTete(sl,B.societe,"Hypothèses");
   rpTitre(sl,"Hypothèses opérationnelles et financières");
   rpAssertion(sl,mm?"Le modèle est piloté par des inducteurs d'activité (volumes × prix) ; toutes les hypothèses sont modifiables dans l'application.":"Les valeurs par défaut sont dérivées de l'historique "+fy[0]+" – "+fy[fy.length-1]+".");
-  const lignesH=[],stylesH=[];
+  const lignesH=[],stylesH=[],notesH=[];
   const pcH=x=>(x*100).toFixed(1).replace(".0","")+" %";
   const gH=(t,items)=>{lignesH.push([t,""]);stylesH.push("sous_total");
     items.forEach(([l,x])=>{lignesH.push([l,x]);stylesH.push("detail");});};
   if(mm){
     const Pf=proj.financement, b=hyp.bfr||{};
-    gH("Activité (pilotée par inducteurs)",(hyp.revenus||[]).map(L=>[L.name||"Ligne de revenus","volume × prix (inducteurs)"]));
-    const descCout=cl=>{const m=cl.m||"ind";return (m==="pct")?((cl.pct||0)+" % du CA "+((cl.scope&&cl.scope!=="all")?"(d'une ligne)":"(total)")):(m==="unit"?"coût unitaire × volume d'une ligne":"inducteurs (quantité × taux)");};
-    if((hyp.coutsDirects||[]).length) gH("Coûts directs",(hyp.coutsDirects||[]).map(cl=>[cl.name||"Coût direct",descCout(cl)]));
+    /* volumes et prix RÉELS plutôt que « volume × prix » : le lecteur doit voir les hypothèses,
+       pas la mécanique. Ex. « 22 → 80 élèves · 230 000 F ». */
+    const nb0=x=>Math.round(x).toLocaleString("fr-FR").replace(/ | /g," ");
+    const volAn=(L,i)=>{try{return volInducteurs((L.rows||[]).filter(r=>String(r.unit||"").indexOf("%")<0&&!r.refLigne),i,{revenus:hyp.revenus,fCA:1});}catch(e){return 0;}};
+    const uniteL=L=>{const r=(L.rows||[]).find(r=>String(r.unit||"").indexOf("%")<0&&r.unit);return r?(" "+r.unit):"";};
+    const descRev=L=>{const N=(hyp.nb||5)-1, v0=volAn(L,0), vN=volAn(L,N);
+      const p=(L.prix&&+L.prix.val)||0, g=(L.prix&&+L.prix.g)||0;
+      return (v0?(nb0(v0)+(vN&&Math.abs(vN-v0)>0.5?(" → "+nb0(vN)):"")+uniteL(L)+" · "):"")+nb0(p)+" F"+(g?(" +"+g+" %/an"):"");};
+    gH("Activité — volumes et prix unitaires",(hyp.revenus||[]).map(L=>[L.name||"Ligne de revenus",descRev(L)]));
+    const descCout=cl=>{const m=cl.m||"ind";
+      if(m==="pct")return (cl.pct||0)+" % du CA "+((cl.scope&&cl.scope!=="all")?"(d'une ligne)":"(total)");
+      if(m==="unit")return nb0((+cl.val||0))+" F par unité de volume";
+      const q=(function(){try{return volInducteurs(cl.rows,0,{revenus:hyp.revenus,fCA:1});}catch(e){return 0;}})();
+      const t=(cl.prix&&+cl.prix.val)||0;
+      return (q?(nb0(q)+" × "):"")+nb0(t)+" F"+((cl.prix&&cl.prix.unit)?(" "+cl.prix.unit.replace(/^FCFA\/?/,"/ ")):"");};
+    if((hyp.coutsDirects||[]).length) gH("Coûts directs — quantités et taux",(hyp.coutsDirects||[]).map(cl=>[cl.name||"Coût direct",descCout(cl)]));
     gH("Coûts, charges & BFR",[
       ["Inflation des coûts unitaires",pcH(hyp.inflation||0.03)],
       ["Délais clients / stocks / fournisseurs",Math.round(b.dso||0)+" / "+Math.round(b.dio||0)+" / "+Math.round(b.dpo||0)+" j"],
@@ -749,17 +762,21 @@ function construireBP(pptx,opts){
       ["Financement — comptes courants d'associés",rpFmt(Pf.cca||0)+" "+rpLib()+((Pf.cca&&Pf.ccaTaux)?(" à "+pcH(Pf.ccaTaux)):"")],
       ["Financement — dette bancaire",rpFmt(Pf.dette)+" "+rpLib()],
       ["Intérêts de construction capitalisés (IDC)",rpFmt(Pf.idc)+" "+rpLib()]]);
-    /* situation d'ouverture : réserve explicite dans le rapport remis à l'acquéreur */
+    /* situation d'ouverture : chiffres dans le tableau, réserves en note sous le tableau
+       (un texte long dans une cellule s'enroule et fait déborder la diapositive) */
     { const O=Pf.ouverture||{};
-      if(O.actif||O.passif) gH("Situation d'ouverture — déclarée, non auditée et non exhaustive",[
+      if(O.actif||O.passif){ gH("Situation d'ouverture (déclarée, non auditée)",[
         ["Trésorerie disponible",rpFmt(O.treso||0)+" "+rpLib()],
-        ["Créances antérieures retenues",rpFmt(O.creances||0)+" "+rpLib()+((O.creancesBrut>O.creances)?(" (sur "+rpFmt(O.creancesBrut)+" facturés, part recouvrable "+pcH(O.tauxRecouv)+")"):"")],
-        ["Dettes d'ouverture (fournisseurs, fiscales et sociales)",rpFmt(O.dettes||0)+" "+rpLib()],
-        ["Situation nette apportée",rpFmt(O.net||0)+" "+rpLib()],
-        ["Réserve","Éléments déclarés par la direction, non audités ; l'écart éventuel relève d'une garantie d'actif et de passif ou d'un ajustement de prix au closing"+((O.actif&&!O.passif)?" — actif renseigné sans passif : situation asymétrique à justifier":"")]]);
+        ["Créances antérieures retenues",rpFmt(O.creances||0)+" "+rpLib()+((O.creancesBrut>O.creances)?(" / "+rpFmt(O.creancesBrut)+" facturés"):"")],
+        ["… part jugée recouvrable",pcH(O.tauxRecouv||1)],
+        ["Dettes d'ouverture (fournisseurs, fiscales, sociales)",rpFmt(O.dettes||0)+" "+rpLib()],
+        ["Situation nette apportée",rpFmt(O.net||0)+" "+rpLib()]]);
+        notesH.push("Situation d'ouverture : éléments déclarés par la direction, non audités et non exhaustifs ; l'écart éventuel relève d'une garantie d'actif et de passif ou d'un ajustement de prix au closing."
+          +((O.actif&&!O.passif)?" Un actif d'ouverture est renseigné sans aucun passif : situation asymétrique, à justifier auprès de l'acquéreur.":""));
+      }
     }
-    if(planCheval()) gH("Périodicité",[["Exercices présentés","années académiques (millésime = année d'ouverture)"],
-      ["Réserve",MENTION_CHEVAL]]);
+    if(planCheval()){ gH("Périodicité",[["Exercices présentés","années académiques"],["Millésime affiché","année d'ouverture de l'exercice"]]);
+      notesH.push(MENTION_CHEVAL); }
     gH("Coût du capital",[
       ["WACC",val?pcH(val.wacc):"n.s."],
       ["Croissance à l'infini (g)",pcH((hyp.valo&&hyp.valo.g)||0.03)]]);
@@ -782,10 +799,39 @@ function construireBP(pptx,opts){
     ["WACC",pcH(val.wacc)],
     ["Croissance à l'infini (g)",pcH(hyp.valo.g)]]);
   }
-  rpTable(sl,0.55,1.6,7.6,B.societe.toUpperCase()+" - Hypothèses",["Hypothèse","Valeur"],
-    lignesH,stylesH,new Set(),[5.2,1.4],8);
-  rpCadreComment(sl,8.35,1.6,4.45,5.25);
-  rpPied(sl,mention,++page);
+  /* PAGINATION : le tableau des hypothèses dépasse la hauteur utile dès ~21 lignes
+     (rowH 0,24" à partir de y=1,6"). On le découpe en pages, sans jamais laisser un
+     en-tête de groupe orphelin en bas de page. */
+  /* hauteur utile : de y=1,6" au pied (~6,95") pour des lignes de 0,24" → 22 lignes rendues.
+     Une valeur longue s'enroule : on compte son nombre de lignes réelles (~26 car. par ligne
+     dans une colonne de 1,4"), et on ne laisse jamais un en-tête de groupe seul en bas de page. */
+  const MAXL=21, hauteur=([lib,val])=>Math.max(1,Math.ceil(String(val||"").length/30),Math.ceil(String(lib||"").length/64));
+  const hTot=lignesH.reduce((s,lg)=>s+hauteur(lg),0);
+  /* pages équilibrées : hauteur cible = total ÷ nombre de pages nécessaires, plafonnée par MAXL
+     (évite une dernière page presque vide), et jamais d'en-tête de groupe orphelin en fin de page */
+  const cible=Math.min(MAXL,Math.ceil(hTot/Math.max(1,Math.ceil(hTot/MAXL)))+1);
+  const pages=[];
+  { let cur={l:[],s:[]}, h=0;
+    for(let i=0;i<lignesH.length;i++){
+      const hl=hauteur(lignesH[i]);
+      const orphelin=(stylesH[i]==="sous_total"&&h+hl>=cible);
+      if(cur.l.length&&(h+hl>cible||orphelin)){pages.push(cur);cur={l:[],s:[]};h=0;}
+      cur.l.push(lignesH[i]);cur.s.push(stylesH[i]);h+=hl;
+    }
+    if(cur.l.length)pages.push(cur);
+  }
+  pages.forEach((pg,pi)=>{
+    if(pi>0){ sl=pptx.addSlide(); rpEnTete(sl,B.societe,"Hypothèses");
+      rpTitre(sl,"Hypothèses opérationnelles et financières (suite)"); }
+    rpTable(sl,0.55,1.6,7.6,B.societe.toUpperCase()+" - Hypothèses"+(pages.length>1?(" ("+(pi+1)+"/"+pages.length+")"):""),
+      ["Hypothèse","Valeur"],pg.l,pg.s,new Set(),[5.2,1.4],8);
+    /* réserves méthodologiques : sous le cadre de commentaires, sur la dernière page */
+    if(pi===pages.length-1&&notesH.length)
+      sl.addText(notesH.join(" "),{x:8.35,y:6.05,w:4.45,h:0.85,fontSize:7.5,italic:true,
+        color:RP.G_CLAIR,fontFace:"Arial",valign:"top"});
+    rpCadreComment(sl,8.35,1.6,4.45,(pi===pages.length-1&&notesH.length)?4.3:5.25);
+    rpPied(sl,mention,++page);
+  });
   /* projections */
   rpSection(pptx,S+4,"Projections financières",["Compte de résultat","Bilan et trésorerie"],mention,++page);
   sl=pptx.addSlide();
