@@ -147,7 +147,28 @@ Après toute modification d'un export (`ui.js`, `bpxl.js`, `etatsxl.js`,
   affichés positifs. Négatifs entre parenthèses à l'affichage.
 - **Langue** : le domaine est en français (noms de fonctions, variables, commentaires).
 
-### 7.1 Tableaux des rapports PowerPoint (`rpTable`)
+### 7.1 Grammaire des rapports PowerPoint
+
+Conventions reprises des pitchbooks de banques d'affaires et des decks de conseil
+(cf. `docs/benchmark-presentation.md`) :
+
+- **Titre-message** (`rpTitreMsg(sl,sujet,message)`) : le titre porte la **conclusion** de la
+  page, calculée depuis les chiffres du dossier ; le sujet devient un surtitre discret. On doit
+  pouvoir lire la suite des titres et comprendre le dossier sans ouvrir un tableau. La fonction
+  renvoie l'ordonnée où le contenu peut commencer — **toujours** l'utiliser pour poser le premier
+  tableau, sinon un message sur deux lignes recouvre le bandeau du tableau.
+- **Sommaire paginé** (`rpSommaire`) : l'ordre des diapositives de PptxGenJS n'est pas modifiable
+  après création. Le rapport est donc construit **deux fois** : une passe à blanc qui relève la
+  page de chaque section (`RP_SOM`), puis la passe réelle qui compose le sommaire en page 2
+  (`RP_SOM_FIX`). Les compteurs de page réservent la page 2 dès le départ.
+- **Football field** (`rpFootball`) : synthèse de valorisation — une barre flottante min–max par
+  méthode sur un axe commun, losange sur la valeur centrale, zone de recoupement, repère de la
+  valeur retenue. C'est la page que le lecteur regarde en premier.
+- **Teaser** (`construireTeaser`) : 1 page + résumé financier, diffusable **avant** tout NDA,
+  avec option de nom de code (`DOSSIER.teaser = {anonyme, code}`). Aucune valorisation. Tous les
+  textes repris de la fiche d'identité sont bornés (`rpCoupe`) : un teaser ne déborde jamais.
+
+### 7.2 Tableaux des rapports PowerPoint (`rpTable`)
 
 Tous les tableaux du rapport passent par `rpTable(...)` : la mise en forme est **centralisée**,
 il n'y a pas de style posé à la main dans les diapositives. Règles :

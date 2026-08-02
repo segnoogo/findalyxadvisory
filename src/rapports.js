@@ -45,7 +45,31 @@ function rpEnTete(sl, societe, section){
 }
 function rpTitre(sl,txt){sl.addText(txt,{x:0.55,y:0.92,w:12.2,h:0.45,fontSize:17,
   bold:true,color:RP.NAVY,fontFace:"Arial"});}
+/* TITRE-MESSAGE (« action title ») : convention des banques d'affaires et des cabinets de
+   conseil — le titre porte la CONCLUSION de la page, pas son sujet ; le sujet devient un
+   surtitre discret. On doit pouvoir lire la suite des titres et comprendre le dossier sans
+   ouvrir un seul tableau. Renvoie l'ordonnée où le contenu peut commencer.
+   `msg` vide ⇒ on retombe sur un titre de sujet classique (rétro-compatible). */
+function rpTitreMsg(sl,sujet,msg){
+  if(!msg){rpTitre(sl,sujet);return 1.6;}
+  sl.addText(String(sujet).toUpperCase(),{x:0.55,y:0.83,w:12.2,h:0.2,fontSize:8.5,bold:true,
+    color:RP.BLEU,charSpacing:1.5,fontFace:"Arial"});
+  const nl=String(msg).length>95?2:1;
+  sl.addText(msg,{x:0.55,y:1.02,w:12.2,h:nl>1?0.62:0.4,fontSize:nl>1?14:15.5,bold:true,
+    color:RP.NAVY,fontFace:"Arial",valign:"top"});
+  return nl>1?1.72:1.55;
+}
 function rpAssertion(sl,txt){}  /* accroche auto retirée (Salif) — l'analyste écrit dans le cadre Commentaires */
+/* --- fabrique de messages : formulations courtes, tirées des chiffres du dossier --- */
+function rpMsgFmt(x){return rpFmt(x)+" "+rpLib();}
+const rpAn=(a)=>(typeof libFY==="function")?libFY(a,true):String(a);
+/* première année où une série devient (et reste) positive ; null sinon */
+function rpBascule(annees,f){
+  for(let i=0;i<annees.length;i++){
+    if(f(annees[i])>0&&annees.slice(i).every(a=>f(a)>0)) return annees[i];
+  }
+  return null;
+}
 function rpPied(sl,mention,page){
   sl.addShape("rect",{x:0.55,y:7.02,w:12.23,h:0.015,fill:{color:RP.FILET}});
   {const _lg=logoCab();sl.addImage(_lg?{data:_lg.data,x:0.55,y:7.09,h:0.24,w:0.24*_lg.ratio}:{data:LOGO_FINDALYX_CLAIR,x:0.55,y:7.09,h:0.24,w:0.24*4.45});}
@@ -71,7 +95,36 @@ function rpGarde(pptx, societe, titreR, sousTitre, dateTxt, cabinet){
   sl.addText("Projet de rapport — support de discussion  ·  Préparé par "+cabinet,
     {x:0.7,y:6.8,w:11.9,h:0.3,fontSize:10.5,color:"9FB0D6",fontFace:"Arial"});
 }
+/* SOMMAIRE paginé, comme au début de tout pitchbook.
+   Les pages des sections ne sont connues qu'une fois le rapport construit, et l'ordre des
+   diapositives de PptxGenJS n'est pas modifiable après coup (les relations pointent sur le
+   fichier créé). Le rapport est donc construit DEUX fois : une passe à blanc qui relève la page
+   de chaque section (RP_SOM), puis la passe réelle qui compose le sommaire en page 2 (RP_SOM_FIX).
+   Les compteurs de page réservent la page 2 dès le départ : la pagination est juste dans les
+   deux passes. */
+let RP_SOM=null, RP_SOM_FIX=null, RP_MENTION="";
+function rpSommaire(pptx,societe,sections,mention){
+  if(!sections||sections.length<2) return null;
+  const sl=pptx.addSlide();
+  rpEnTete(sl,societe,"Sommaire");
+  rpTitre(sl,"Sommaire");
+  const n=sections.length, hL=Math.max(0.5,Math.min(0.72,(6.3-1.7)/n));
+  let y=1.7;
+  sections.forEach(s=>{
+    sl.addText(String(s.numero).padStart(2,"0"),{x:0.6,y:y,w:0.8,h:hL,valign:"middle",
+      fontSize:14,bold:true,color:RP.ORANGE,fontFace:"Arial"});
+    sl.addText(s.titre,{x:1.5,y:y,w:9.3,h:hL,valign:"middle",fontSize:13.5,bold:true,
+      color:RP.NAVY,fontFace:"Arial"});
+    sl.addText(String(s.page),{x:11.0,y:y,w:1.78,h:hL,align:"right",valign:"middle",
+      fontSize:12,color:RP.G_TXT,fontFace:"Arial"});
+    sl.addShape("rect",{x:0.6,y:y+hL-0.02,w:12.18,h:0.008,fill:{color:RP.FILET}});
+    y+=hL;
+  });
+  rpPied(sl,mention,2);
+  return sl;
+}
 function rpSection(pptx, numero, titreS, sousSections, mention, page){
+  if(RP_SOM) RP_SOM.push({numero:numero,titre:titreS,page:page});
   const sl=pptx.addSlide();
   sl.addShape("rect",{x:0.55,y:0.42,w:12.23,h:0.02,fill:{color:RP.NAVY}});
   sl.addText(String(numero).padStart(2,"0"),{x:0.55,y:1.5,w:3.2,h:1.6,fontSize:92,
@@ -568,14 +621,70 @@ function rpBarresH(sl,x,y,w,h,titre,labels,values,opts){
     sl.addText(rpFmtE(values[i],e),{x:px+bw+0.06,y:cy,w:1.0,h:rh,valign:"middle",fontSize:9,bold:true,color:RP.NAVY,fontFace:"Arial"}); });
 }
 
+/* FOOTBALL FIELD — standard des banques d'affaires pour synthétiser une valorisation :
+   une barre flottante min–max par méthode sur un AXE COMMUN, la zone où les méthodes se
+   recoupent (l'information la plus utile de la page) et la valeur retenue en repère vertical.
+   Remplace un histogramme de valeurs centrales, qui ne montre ni fourchette ni recoupement. */
+function rpFootball(sl,x,y,w,h,titre,methodes,retenue,note){
+  const M=(methodes||[]).filter(m=>m&&isFinite(m.min)&&isFinite(m.max));
+  if(!M.length) return y+h;
+  const e=rpEch(M.reduce((t,m)=>t.concat([m.min,m.max]),[retenue]));
+  rpTitreG(sl,rpTitreEch(titre,e),x,y,w);
+  const lw=Math.min(2.3,w*0.28), py=y+0.36, pw=w-lw-0.2, px=x+lw;
+  const hAxe=0.34, ph=Math.max(0.6,h-0.36-hAxe), rh=ph/M.length;
+  let lo=Math.min.apply(null,M.map(m=>m.min).concat([retenue])),
+      hi=Math.max.apply(null,M.map(m=>m.max).concat([retenue]));
+  if(!(hi>lo)){hi=lo+Math.max(1,Math.abs(lo)*0.2);}
+  const marge=(hi-lo)*0.12; lo-=marge; hi+=marge;
+  const sx=v=>px+(Math.min(hi,Math.max(lo,v))-lo)/(hi-lo)*pw;
+  /* zone de recoupement des fourchettes */
+  const ovLo=Math.max.apply(null,M.map(m=>m.min)), ovHi=Math.min.apply(null,M.map(m=>m.max));
+  if(M.length>1&&ovHi>ovLo)
+    sl.addShape("rect",{x:sx(ovLo),y:py-0.04,w:Math.max(0.03,sx(ovHi)-sx(ovLo)),h:ph+0.08,
+      fill:{color:"EEF3FA"},line:{color:"DCE6F4",width:0.5}});
+  const COUL=["172554","224289","2E5AAC","5B7FC7","8FAADC"];
+  M.forEach((m,i)=>{
+    const cy=py+i*rh, bh=Math.min(0.3,rh*0.52), by=cy+(rh-bh)/2;
+    sl.addText(m.lib,{x:x,y:cy,w:lw-0.1,h:rh,valign:"middle",fontSize:8.5,color:RP.G_TITRE,fontFace:"Arial"});
+    const x1=sx(m.min),x2=sx(m.max), plat=(x2-x1)<0.06;
+    sl.addShape("rect",{x:x1,y:by,w:Math.max(0.05,x2-x1),h:bh,fill:{color:COUL[i%COUL.length]}});
+    /* valeur centrale : losange, repère habituel des football fields (un simple trait blanc
+       coupe la barre en deux et se lit comme deux fourchettes distinctes) */
+    if(!plat&&isFinite(m.central)&&m.central>m.min&&m.central<m.max)
+      sl.addShape("diamond",{x:sx(m.central)-0.06,y:by+bh/2-0.06,w:0.12,h:0.12,
+        fill:{color:RP.BLANC},line:{color:COUL[i%COUL.length],width:0.75}});
+    const et={fontSize:7.5,color:RP.G_TXT,fontFace:"Arial",valign:"middle"};
+    if(!plat) sl.addText(rpFmtE(m.min,e),Object.assign({x:x1-0.72,y:by,w:0.68,h:bh,align:"right"},et));
+    sl.addText(rpFmtE(m.max,e),Object.assign({x:x2+0.06,y:by,w:0.72,h:bh,align:"left"},et));
+  });
+  /* valeur retenue : repère vertical + étiquette */
+  if(isFinite(retenue)){
+    const rx=sx(retenue);
+    sl.addShape("line",{x:rx,y:py-0.1,w:0,h:ph+0.14,line:{color:RP.ORANGE,width:1.25,dashType:"dash"}});
+    sl.addText("Retenue "+rpFmtE(retenue,e),{x:Math.min(rx+0.05,x+w-1.5),y:py-0.34,w:1.5,h:0.22,
+      fontSize:7.5,bold:true,color:RP.ORANGE,fontFace:"Arial"});
+  }
+  /* axe commun */
+  const ay=py+ph+0.04;
+  sl.addShape("rect",{x:px,y:ay,w:pw,h:0.01,fill:{color:RP.FILET}});
+  for(let k=0;k<=4;k++){const v=lo+(hi-lo)*k/4;
+    sl.addShape("rect",{x:px+pw*k/4,y:ay,w:0.008,h:0.05,fill:{color:RP.FILET}});
+    sl.addText(rpFmtE(v,e),{x:px+pw*k/4-0.4,y:ay+0.06,w:0.8,h:0.2,align:"center",
+      fontSize:7.5,color:RP.G_CLAIR,fontFace:"Arial"});}
+  if(note) sl.addText(note,{x:x,y:ay+0.28,w:w,h:0.3,fontSize:7.5,italic:true,color:RP.G_CLAIR,
+    fontFace:"Arial",valign:"top"});
+  return ay+(note?0.6:0.3);
+}
+
 /* ---------- RAPPORT DD ---------- */
 function construireDD(pptx){
   const B=rpBase();
   const {A,v,a1,a0,ca1,fy}=B;
-  const mention=B.societe+" - Due diligence financière - "+B.dateTxt+" - Confidentiel";
-  let page=1;
+  const mention=B.societe+" - Due diligence financière - "+B.dateTxt+" - Confidentiel"; RP_MENTION=mention;
+  let page=2;   /* page 2 réservée au sommaire */
   rpGarde(pptx,B.societe,"Due diligence financière — Rapport provisoire",
     "Exercices "+fy[0]+" – "+fy[fy.length-1]+"  |  Montants en "+rpLib()+"",B.dateTxt,B.cabinet);
+  if(RP_SOM_FIX) rpSommaire(pptx,B.societe,RP_SOM_FIX,mention);
   rpPreambule(pptx,B,mention,++page);
   /* exec summary */
   rpSection(pptx,1,"Executive summary",["Synthèse des constats et chiffres clés"],mention,++page);
@@ -781,8 +890,9 @@ function construireBP(pptx,opts){
   const tvaR=(hyp&&hyp.tvaExonere)?0:((hyp&&hyp.tva!=null)?+hyp.tva:0.18);
   const rhFit=n=>Math.min(0.24,4.95/(n+1));           /* hauteur de ligne : tient sous le pied de page */
   /* état + bloc de ratios accolé : hauteur de ligne commune aux deux tableaux (colonnes calées),
-     calculée pour que l'ensemble — en-têtes, intervalle et note comprises — tienne sur la page */
-  const rhDuo=n=>Math.min(0.24,4.5/Math.max(1,n));
+     calculée pour que l'ensemble — en-têtes, intervalle et note comprises — tienne sur la page
+     à partir de l'ordonnée réellement disponible sous le titre-message */
+  const rhDuo=(n,yTop)=>Math.min(0.24,Math.max(0.12,(6.45-(yTop||1.6)-0.5)/Math.max(1,n)));
   const trAct=a=>(proj.bs.TRESO_ACTIVE[a]!==undefined?proj.bs.TRESO_ACTIVE[a]:Math.max(0,proj.bs.TRESO[a]));
   const actifT=a=>proj.bs.IMMO_NET[a]+proj.bs.STOCKS[a]+proj.bs.CLIENTS[a]+proj.bs.AUTRES_CREANCES[a]+trAct(a);
   const cov=a=>{
@@ -799,11 +909,12 @@ function construireBP(pptx,opts){
     return {dscr:(service>0.5&&cfads>0)?cfads/service:null, lev:(lev!=null&&Math.abs(lev)<=20)?lev:null,
       gear:proj.bs.CP[a]>0?detteFin/proj.bs.CP[a]:null, couv:proj.pl.FRAIS_FIN[a]<0&&ebMat?proj.pl.EBITDA[a]/-proj.pl.FRAIS_FIN[a]:null,
       liq:paCirc>0?acCirc/paCirc:null};};
-  const mention=opts.mention||(B.societe+" - Business plan "+ap[0]+"-"+ap[ap.length-1]+" - "+B.dateTxt+" - Confidentiel");
-  const S=opts.secBase||0; let page=opts.page||1;
+  const mention=opts.mention||(B.societe+" - Business plan "+ap[0]+"-"+ap[ap.length-1]+" - "+B.dateTxt+" - Confidentiel"); RP_MENTION=mention;
+  const S=opts.secBase||0; let page=opts.page||(opts.combine?1:2);   /* hors rapport combiné : page 2 = sommaire */
   if(!opts.combine){
     rpGarde(pptx,B.societe,"Rapport provisoire de Business Plan "+ap[0]+" – "+ap[ap.length-1],
       (mm?"Business plan — projet  |  Montants en "+rpLib():"Historique "+fy[0]+" – "+fy[fy.length-1]+"  |  Montants en "+rpLib()),B.dateTxt,B.cabinet);
+    if(RP_SOM_FIX) rpSommaire(pptx,B.societe,RP_SOM_FIX,mention);
     rpPreambule(pptx,B,mention,++page,
       "Le présent rapport présente le business plan de "+B.societe+" sur la période "+ap[0]+" à "+ap[ap.length-1]+", "+(mm?"construit à partir d'un modèle piloté par inducteurs (sans historique comptable)":"construit à partir de l'historique "+fy[0]+"–"+fy[fy.length-1])+". Il constitue un support de discussion préalable aux échanges avec le management.",
       (mm?"Les projections sont établies à partir d'inducteurs d'activité (volumes × prix), de coûts, de charges, d'investissements et d'un montage de financement paramétrés dans l'application. Le bilan prévisionnel est bouclé par la trésorerie ; toutes les hypothèses sont modifiables.":"Les projections sont établies à partir des balances historiques et d'hypothèses paramétrées dans l'application (croissance du CA, marges, BFR, investissements, financement). Le bilan prévisionnel est bouclé par la trésorerie ; toutes les hypothèses sont modifiables."));
@@ -811,7 +922,14 @@ function construireBP(pptx,opts){
   rpSection(pptx,S+1,"Note de synthèse",["Résumé exécutif et trajectoire"],mention,++page);
   let sl=pptx.addSlide();
   rpEnTete(sl,B.societe,"Note de synthèse");
-  rpTitre(sl,"Résumé exécutif");
+  /* titres-messages : la conclusion de la page dans le titre (convention des banques
+     d'affaires) — la suite des titres doit se lire comme le raisonnement du dossier */
+  const caD=proj.pl.CA[ap[0]], caF=proj.pl.CA[ap[ap.length-1]], ebF=proj.pl.EBITDA[ap[ap.length-1]];
+  const tcamCA=(caD>0&&caF>0&&ap.length>1)?Math.pow(caF/caD,1/(ap.length-1))-1:null;
+  const mgEbF=caF?ebF/caF:null;
+  rpTitreMsg(sl,"Résumé exécutif","Le plan porte le chiffre d'affaires à "+rpMsgFmt(caF)
+    +(tcamCA!==null?(" ("+rpPct(tcamCA)+" par an)"):"")+" et l'EBITDA à "+rpMsgFmt(ebF)
+    +(mgEbF!==null?(", soit "+Math.round(mgEbF*100)+" % du chiffre d'affaires"):"")+" en "+fyp[fyp.length-1]+".");
   rpAssertion(sl,"Avec les hypothèses retenues, le chiffre d'affaires atteint "+
     rpFmt(proj.pl.CA[ap[ap.length-1]])+" "+rpLib()+" en "+fyp[fyp.length-1]+
     " et le résultat net "+rpFmt(proj.pl.RN[ap[ap.length-1]])+" "+rpLib()+".");
@@ -861,8 +979,11 @@ function construireBP(pptx,opts){
   rpSection(pptx,S+3,"Hypothèses",["Hypothèses opérationnelles et financières"],mention,++page);
   sl=pptx.addSlide();
   rpEnTete(sl,B.societe,"Hypothèses");
-  rpTitre(sl,"Hypothèses opérationnelles et financières");
-  rpAssertion(sl,mm?"Le modèle est piloté par des inducteurs d'activité (volumes × prix) ; toutes les hypothèses sont modifiables dans l'application.":"Les valeurs par défaut sont dérivées de l'historique "+fy[0]+" – "+fy[fy.length-1]+".");
+  rpTitreMsg(sl,"Hypothèses opérationnelles et financières",
+    mm?("Le plan est construit à partir de "+((hyp.revenus||[]).length||1)+" ligne"+(((hyp.revenus||[]).length||1)>1?"s":"")+" de revenus (volumes × prix), d'une inflation de "
+        +Math.round((hyp.inflation||0.03)*100)+" % et d'un financement de "+rpMsgFmt(proj.financement.sources)+".")
+      :("Les hypothèses sont calées sur l'historique "+fy[0]+" – "+fy[fy.length-1]+" : croissance du chiffre d'affaires de "
+        +rpPct(hyp.caCroiss[0])+" la première année et coûts directs à "+Math.round(hyp.coutsDirects_pct*100)+" % du chiffre d'affaires."));
   const lignesH=[],stylesH=[],notesH=[];
   const pcH=x=>(x*100).toFixed(1).replace(".0","").replace(".",",")+" %";   /* décimale française */
   const gH=(t,items)=>{lignesH.push([t,""]);stylesH.push("groupe");
@@ -976,9 +1097,13 @@ function construireBP(pptx,opts){
   rpSection(pptx,S+4,"Projections financières",["Compte de résultat","Bilan et trésorerie"],mention,++page);
   sl=pptx.addSlide();
   rpEnTete(sl,B.societe,"Projections financières");
-  rpTitre(sl,"Compte de résultat prévisionnel");
-  rpAssertion(sl,mm?("L'EBITDA atteint "+rpFmt(proj.pl.EBITDA[ap[ap.length-1]])+" "+rpLib()+" en "+fyp[fyp.length-1]+"."):("L'EBITDA évolue de "+rpFmt(v.EBITDA[a1])+" "+rpLib()+" en "+fy[fy.length-1]+
-    " à "+rpFmt(proj.pl.EBITDA[ap[ap.length-1]])+" "+rpLib()+" en "+fyp[fyp.length-1]+"."));
+  const bascEb=rpBascule(ap,a=>proj.pl.EBITDA[a]);
+  const yPL=rpTitreMsg(sl,"Compte de résultat prévisionnel",
+    (bascEb&&bascEb!==ap[0])
+      ?("L'EBITDA devient positif en "+libFY(bascEb,true)+" et atteint "+rpMsgFmt(ebF)
+        +(mgEbF!==null?(", soit "+Math.round(mgEbF*100)+" % du chiffre d'affaires"):"")+" en "+fyp[fyp.length-1]+".")
+      :("L'EBITDA progresse jusqu'à "+rpMsgFmt(ebF)
+        +(mgEbF!==null?(", soit "+Math.round(mgEbF*100)+" % du chiffre d'affaires"):"")+", en "+fyp[fyp.length-1]+"."));
   proj.pl.FRAIS_GENERAUX={}; ap.forEach(a=>{proj.pl.FRAIS_GENERAUX[a]=(proj.pl.OPEX_TOTAL[a]||0)+(proj.pl.CHARGES_PERSONNEL[a]||0);});
   const codesP=[["CA","Chiffre d'affaires","titre"],["ACHATS","Coûts directs","sous_total"],
     ["MARGE_BRUTE","Marge brute","sous_total"],["AUTRES_PRODUITS","Autres produits","detail"],
@@ -1009,8 +1134,8 @@ function construireBP(pptx,opts){
      sinon « Frais généraux et personnel / CA » passe sur deux lignes */
   const largP=[nCP>6?3.2:2.6,...Array(nCP).fill(nCP>6?0.92:1.05),...(tcP?[nCP>6?0.92:1.0]:[])];
   const setHP=mm?new Set():new Set(Array.from({length:A.length},(_,k)=>1+k));
-  const rhP=rhDuo(rpFiltrer(lignesBP,codesP.map(x=>x[2])).L.length+ratPL.length+2);
-  const finP=rpTable(sl,0.55,1.6,7.9,B.societe.toUpperCase()+" - P&L prévisionnel",
+  const rhP=rhDuo(rpFiltrer(lignesBP,codesP.map(x=>x[2])).L.length+ratPL.length+2,yPL);
+  const finP=rpTable(sl,0.55,yPL+0.1,7.9,B.societe.toUpperCase()+" - P&L prévisionnel",
     (mm?[rpLib(),...fyp]:[rpLib(),...fy,...fyp]).concat(tcP?["TCAM"]:[]),
     lignesBP.map(coupeP),codesP.map(x=>x[2]),setHP,largP,8,null,rhP,{compact:true});
   rpTable(sl,0.55,finP+0.14,7.9,null,
@@ -1020,13 +1145,16 @@ function construireBP(pptx,opts){
        :"Colonnes bleutées : historique reconstitué ; autres : projections.")
     +(tcP?" TCAM calculé lorsque les deux bornes du plan sont de même signe.":""),
     rhP,{enteteClair:true,compact:true});
-  rpCadreComment(sl,8.65,1.6,4.15,5.25);
+  rpCadreComment(sl,8.65,yPL+0.1,4.15,6.6-yPL);
   rpPied(sl,mention,++page);
   /* bilan & trésorerie prévisionnels */
   sl=pptx.addSlide();
   rpEnTete(sl,B.societe,"Projections financières");
-  rpTitre(sl,"Bilan et trésorerie prévisionnels");
-  rpAssertion(sl,mm?("La trésorerie nette atteint "+rpFmt(proj.bs.TRESO_NETTE[ap[ap.length-1]])+" "+rpLib()+" en "+fyp[fyp.length-1]+"."):("La trésorerie nette évolue de "+rpFmt(v.TRESORERIE_NETTE[a1])+" "+rpLib()+" ("+fy[fy.length-1]+") à "+rpFmt(proj.bs.TRESO_NETTE[ap[ap.length-1]])+" "+rpLib()+" ("+fyp[fyp.length-1]+")."));
+  const bascTr=rpBascule(ap,a=>proj.bs.TRESO_NETTE[a]);
+  const yBS=rpTitreMsg(sl,"Bilan et trésorerie prévisionnels",
+    "Les capitaux propres atteignent "+rpMsgFmt(proj.bs.CP[ap[ap.length-1]])+" en "+fyp[fyp.length-1]
+    +((bascTr&&bascTr!==ap[0])?(" et la trésorerie nette redevient positive en "+libFY(bascTr,true)+".")
+      :(bascTr?" ; la trésorerie nette reste positive sur tout l'horizon.":" ; la trésorerie nette reste négative sur l'horizon du plan.")));
   /* intertitres « Emplois / Ressources » : le lecteur voit d'un coup l'actif économique d'un côté,
      son financement de l'autre — sans quoi la liste des grandes masses paraît sans ordre */
   const bsD=[["Emplois — actif économique",null,"groupe"],
@@ -1058,8 +1186,8 @@ function construireBP(pptx,opts){
     ["Rentabilité des capitaux propres (ROE)",...ap.map(a=>pctR(rt(proj.pl.RN[a],proj.bs.CP[a])))]];
   const tcB=tcamUtile(bsP), coupeB=r=>tcB?r:r.slice(0,-1);
   const largB=[3.4,...ap.map(()=>0.86),...(tcB?[0.95]:[])];
-  const rhB=rhDuo(rpFiltrer(bsP,bsD.map(d=>d[2])).L.length+ratBS.length+2);
-  const finB=rpTable(sl,0.55,1.6,7.9,B.societe.toUpperCase()+" - Bilan prévisionnel (grandes masses)",
+  const rhB=rhDuo(rpFiltrer(bsP,bsD.map(d=>d[2])).L.length+ratBS.length+2,yBS);
+  const finB=rpTable(sl,0.55,yBS+0.1,7.9,B.societe.toUpperCase()+" - Bilan prévisionnel (grandes masses)",
     [rpLib(),...fyp].concat(tcB?["TCAM"]:[]),bsP.map(coupeB),bsD.map(d=>d[2]),
     new Set(),largB,8,null,rhB,{compact:true});
   rpTable(sl,0.55,finB+0.14,7.9,null,
@@ -1067,13 +1195,15 @@ function construireBP(pptx,opts){
     ratBS.map(r=>coupeB(r.concat(""))),ratBS.map(()=>"pct"),new Set(),largB,8,
     "Source : projections Findalyx Advisory. Les lignes nulles sur toute la période ne sont pas reprises.",
     rhB,{enteteClair:true,compact:true});
-  rpCadreComment(sl,8.65,1.6,4.15,5.25);
+  rpCadreComment(sl,8.65,yBS+0.1,4.15,6.6-yBS);
   rpPied(sl,mention,++page);
   /* TFT prévisionnel */
   sl=pptx.addSlide();
   rpEnTete(sl,B.societe,"Projections financières");
-  rpTitre(sl,"Tableau des flux de trésorerie prévisionnel");
-  rpAssertion(sl,"La trésorerie de clôture atteint "+rpFmt(proj.tft[ap[ap.length-1]].CLOTURE)+" "+rpLib()+" en "+fyp[fyp.length-1]+".");
+  const bascOp=rpBascule(ap,a=>proj.tft[a].ZB);
+  const yTF=rpTitreMsg(sl,"Tableau des flux de trésorerie prévisionnel",
+    ((bascOp&&bascOp!==ap[0])?("Les flux d'exploitation deviennent positifs en "+libFY(bascOp,true)+" ; l"):"L")
+    +"a trésorerie de clôture atteint "+rpMsgFmt(proj.tft[ap[ap.length-1]].CLOTURE)+" en "+fyp[fyp.length-1]+".");
   /* Trois blocs (exploitation / investissement / financement) comme dans l'application : un flux
      de financement ne doit pas apparaître sans ses composantes — l'augmentation de capital, la
      subvention et les comptes courants manquaient, le sous-total semblait sorti de nulle part. */
@@ -1115,8 +1245,8 @@ function construireBP(pptx,opts){
   const stTF=tftD.map(d=>d[2]);
   const tcT=tcamUtile(tftL), coupeT=r=>tcT?r:r.slice(0,-1);
   const largT=[3.4,...ap.map(()=>0.86),...(tcT?[0.95]:[])];
-  const rhT=rhDuo(rpFiltrer(tftL,stTF).L.length+ratTF.length+2);
-  const finT=rpTable(sl,0.55,1.6,7.9,B.societe.toUpperCase()+" - TFT prévisionnel",
+  const rhT=rhDuo(rpFiltrer(tftL,stTF).L.length+ratTF.length+2,yTF);
+  const finT=rpTable(sl,0.55,yTF+0.1,7.9,B.societe.toUpperCase()+" - TFT prévisionnel",
     [rpLib(),...fyp].concat(tcT?["TCAM"]:[]),tftL.map(coupeT),stTF,
     new Set(),largT,8,null,rhT,{compact:true});
   rpTable(sl,0.55,finT+0.14,7.9,null,
@@ -1124,14 +1254,13 @@ function construireBP(pptx,opts){
     ratTF.map(r=>coupeT(r.concat(""))),ratTF.map(()=>"pct"),new Set(),largT,8,
     "Source : projections Findalyx Advisory (bilan bouclé par la trésorerie). Les lignes nulles sur toute la période ne sont pas reprises.",
     rhT,{enteteClair:true,compact:true});
-  rpCadreComment(sl,8.65,1.6,4.15,5.25);
+  rpCadreComment(sl,8.65,yTF+0.1,4.15,6.6-yTF);
   rpPied(sl,mention,++page);
   /* ---------- 5. Analyse & covenants ---------- */
   rpSection(pptx,S+5,"Analyse & covenants",["Seuil de rentabilité","Ratios prévisionnels et covenants bancaires"],mention,++page);
   /* seuil de rentabilité (point mort d'exploitation, EBIT = 0) — mêmes formules que l'application */
   sl=pptx.addSlide();
   rpEnTete(sl,B.societe,"Analyse & covenants");
-  rpTitre(sl,"Seuil de rentabilité (point mort d'exploitation)");
   const sr=a=>{const ca=proj.pl.CA[a],taux=ca?proj.pl.MARGE_BRUTE[a]/ca:0;
     const fixes=-((proj.pl.AUTRES_PROD[a]||0)+(proj.pl.OPEX_TOTAL[a]||0)+(proj.pl.CHARGES_PERSONNEL[a]||0)+(proj.pl.DA[a]||0));
     const seuil=taux?fixes/taux:0;
@@ -1144,9 +1273,14 @@ function construireBP(pptx,opts){
     ["Point mort (jours de CA)",...ap.map(a=>jrR(sr(a).pm))],
     ["Marge de sécurité",...ap.map(a=>pctR(sr(a).marge))],
     ["Levier opérationnel",...ap.map(a=>mltR(sr(a).levier))]];
+  const anPM=ap.filter(a=>sr(a).marge>0)[0];
+  const yPM=rpTitreMsg(sl,"Seuil de rentabilité (point mort d'exploitation)",
+    anPM?("Le point mort est franchi en "+libFY(anPM,true)+", avec une marge de sécurité de "
+          +Math.round(sr(ap[ap.length-1]).marge*100)+" % en fin de plan.")
+        :"Le seuil de rentabilité n'est pas atteint sur l'horizon du plan : le chiffre d'affaires reste inférieur au CA critique.");
   /* tableau sur toute la largeur utile, cadre de commentaires juste dessous : un tableau court
      posé à gauche laissait une bande blanche au milieu de la page */
-  const finS=rpTable(sl,0.55,1.7,12.23,B.societe.toUpperCase()+" - Seuil de rentabilité",
+  const finS=rpTable(sl,0.55,yPM+0.2,12.23,B.societe.toUpperCase()+" - Seuil de rentabilité",
     [rpLib(),...fyp],srRows,["titre","detail","detail","sous_total","detail","detail","detail"],
     new Set(),[4.6,...ap.map(()=>1.2)],9,
     "Point mort où le résultat d'exploitation s'annule : coûts directs = charges variables ; frais généraux, personnel et dotations = charges fixes.");
@@ -1155,14 +1289,20 @@ function construireBP(pptx,opts){
   /* ratios prévisionnels & covenants bancaires — mêmes formules que l'application */
   sl=pptx.addSlide();
   rpEnTete(sl,B.societe,"Analyse & covenants");
-  rpTitre(sl,"Ratios prévisionnels et covenants bancaires");
+  const detteMax=Math.max.apply(null,ap.map(a=>proj.bs.DETTE[a]+(proj.bs.LIGNE_CT[a]||0)));
+  const levs=ap.map(a=>cov(a).lev).filter(x=>x!=null), dscrs=ap.map(a=>cov(a).dscr).filter(x=>x!=null);
+  const yCv=rpTitreMsg(sl,"Ratios prévisionnels et covenants bancaires",
+    detteMax<0.5
+      ?"Le plan ne mobilise aucune dette bancaire : les covenants usuels ne sont pas testés, la liquidité générale reste le seul indicateur suivi."
+      :("Sur l'horizon, le levier culmine à "+mltR(Math.max.apply(null,levs.concat([0])))
+        +(dscrs.length?(" et le DSCR ressort au minimum à "+mltR(Math.min.apply(null,dscrs))):"")+"."));
   const covRows=[
     ["DSCR — couverture du service de la dette","≥ 1,2×",...ap.map(a=>mltR(cov(a).dscr))],
     ["Dette nette / EBITDA","≤ 3,5×",...ap.map(a=>mltR(cov(a).lev))],
     ["Gearing (dette fin. / capitaux propres)","≤ 1,5×",...ap.map(a=>mltR(cov(a).gear))],
     ["Couverture des intérêts (EBITDA / frais fin.)","≥ 3×",...ap.map(a=>mltR(cov(a).couv))],
     ["Liquidité générale","≥ 1×",...ap.map(a=>mltR(cov(a).liq))]];
-  const finC=rpTable(sl,0.55,1.7,12.23,B.societe.toUpperCase()+" - Ratios prévisionnels et covenants bancaires",
+  const finC=rpTable(sl,0.55,yCv+0.2,12.23,B.societe.toUpperCase()+" - Ratios prévisionnels et covenants bancaires",
     ["Covenant","Norme usuelle",...fyp],covRows,covRows.map(()=>"detail"),
     new Set([1]),[5.0,1.5,...ap.map(()=>1.05)],9,
     "CFADS = EBITDA − impôt − variation du BFR ; service de la dette = remboursements + intérêts (dette et découvert). Normes = seuils bancaires usuels, à comparer aux valeurs projetées.");
@@ -1188,8 +1328,8 @@ function construireValo(pptx,opts){
   const Vh=hyp.valo;
   const ap=proj.annees;
   const fyp=ap.map(a=>libFY(a,true));
-  const mention=opts.mention||(B.societe+" - Évaluation financière au 31/12/"+a1+" - Confidentiel");
-  const S=opts.secBase||0; let page=opts.page||1;
+  const mention=opts.mention||(B.societe+" - Évaluation financière au 31/12/"+a1+" - Confidentiel"); RP_MENTION=mention;
+  const S=opts.secBase||0; let page=opts.page||(opts.combine?1:2);   /* hors rapport combiné : page 2 = sommaire */
   /* méthodes retenues = les plus utilisées : DCF, comparables, transactions, actif net */
   const ORD=["dcf","comp","trans","anr"], COURT={dcf:"DCF",comp:"Comparables",trans:"Transactions",anr:"Actif net"};
   const mKey={}; (val.methodes||[]).forEach(m=>{mKey[m.id]=m;});
@@ -1200,6 +1340,7 @@ function construireValo(pptx,opts){
   if(!opts.combine){
     rpGarde(pptx,B.societe,mm?"Rapport provisoire d'évaluation financière":"Rapport provisoire d'évaluation financière au 31/12/"+a1,
       (mm?"Business plan — projet  |  Montants en "+rpLib():"Historique "+fy[0]+" – "+fy[fy.length-1]+"  |  Montants en "+rpLib()),B.dateTxt,B.cabinet);
+    if(RP_SOM_FIX) rpSommaire(pptx,B.societe,RP_SOM_FIX,mention);
     rpPreambule(pptx,B,mention,++page,
       "Le présent rapport présente l'évaluation financière des fonds propres de "+B.societe+(mm?"":" au 31/12/"+a1)+", à partir des projections issues du business plan. Il constitue un support de discussion préalable aux échanges avec le management.",
       "L'évaluation combine l'actualisation des flux de trésorerie disponibles (DCF, valeur terminale de "+tvTxt+"), les multiples de marché (comparables et transactions) et l'actif net. Les flux et le coût du capital sont paramétrés dans l'application et modifiables.");
@@ -1210,16 +1351,21 @@ function construireValo(pptx,opts){
      résumé du plan (opts.sansSection), pour un rapport réellement fusionné. */
   let sl;
   if(!opts.sansSynthese){
-  if(!opts.sansSection){
-    rpSection(pptx,S+1,"Note de synthèse",["Synthèse multi-méthodes"],mention,++page);
-    sl=pptx.addSlide();
-    rpEnTete(sl,B.societe,"Note de synthèse");
-    rpTitre(sl,"Synthèse d'évaluation des fonds propres au 31/12/"+a1);
-  } else {
-    sl=pptx.addSlide();
-    rpEnTete(sl,B.societe,"Note de synthèse");
-    rpTitre(sl,"Synthèse de valeur — fonds propres");
-  }
+  if(!opts.sansSection) rpSection(pptx,S+1,"Note de synthèse",["Synthèse multi-méthodes"],mention,++page);
+  sl=pptx.addSlide();
+  rpEnTete(sl,B.societe,"Note de synthèse");
+  { const ret=(val.methodes||[]).filter(m=>m.applicable!==false);
+    const nEc=(val.methodes||[]).length-ret.length;
+    /* fourchette = bornes des méthodes RETENUES (celles du football field), pas la fourchette
+       pondérée qui se réduit à un point dès qu'une seule méthode est applicable */
+    const bMin=ret.length?Math.min.apply(null,ret.map(m=>m.min)):val.fourchette.min;
+    const bMax=ret.length?Math.max.apply(null,ret.map(m=>m.max)):val.fourchette.max;
+    rpTitreMsg(sl,opts.sansSection?"Synthèse de valeur — fonds propres":("Synthèse d'évaluation des fonds propres"+(mm?"":" au 31/12/"+a1)),
+      "La valeur des fonds propres ressort à "+rpMsgFmt(val.fourchette.retenue)+" ("
+      +rpFmt(bMin)+" – "+rpFmt(bMax)+"), "
+      +(ret.length>1?("sur la base de "+ret.length+" méthodes concordantes")
+        :("une seule méthode étant applicable"))
+      +(nEc?(" ; "+nEc+" méthode"+(nEc>1?"s écartées":" écartée")):"")+"."); }
   /* une méthode écartée par le moteur n'affiche pas de montant : « n.a. » et le motif */
   const carte=(m,def)=>(m&&m.applicable===false)?"n.a.":(rpFmt((m&&m.central)!==undefined?m.central:def)+" "+rpLib());
   const sousC=(m,txt)=>(m&&m.applicable===false)?(m.motif||"méthode écartée"):txt;
@@ -1238,15 +1384,19 @@ function construireValo(pptx,opts){
   const noteSynth="Source : valorisation multi-méthodes Findalyx Advisory."
     +(ecartees.length?" Écartée(s) de la valeur retenue : "+ecartees.map(m=>COURT[m.id]+" ("+(m.motif||"")+")").join(" · ")+" ; poids redistribué.":"");
   synth.push(["Valeur retenue (pondérée)",rpFmt(val.fourchette.min),rpFmt(val.fourchette.retenue),rpFmt(val.fourchette.max)]);
-  const finV=rpTable(sl,0.55,3.35,7.0,B.societe.toUpperCase()+" - Fourchettes de valeur par méthode",
+  const finV=rpTable(sl,0.55,3.35,6.6,B.societe.toUpperCase()+" - Fourchettes de valeur par méthode",
     [rpLib(),"Bas","Central","Haut"],synth,[...mCles.map(()=>"detail"),"total"],
     new Set([2]),[3.4,1.2,1.2,1.2],9.5,noteSynth,0.3);
-  const mFF=mCles.filter(m=>m.applicable!==false);
-  rpBarresH(sl,7.75,3.15,5.05,3.0,"Fourchette — valeur des fonds propres ("+rpLib()+")",
-    [...mFF.map(m=>COURT[m.id]),"Retenue"],
-    [...mFF.map(m=>m.central),val.fourchette.retenue],
-    {colors:["172554","2E5AAC","8FAADC","9E3A38","16904E"]});
-  rpCommentReste(sl,0.55,finV+0.16,7.0);
+  /* football field : la fourchette de CHAQUE méthode sur un axe commun, la zone de recoupement
+     et la valeur retenue en repère — c'est la page que le lecteur regarde en premier */
+  const mFF=mCles.filter(m=>m.applicable!==false).map(m=>({lib:COURT[m.id],min:m.min,central:m.central,max:m.max}));
+  { const ovL=mFF.length>1&&Math.min.apply(null,mFF.map(m=>m.max))>Math.max.apply(null,mFF.map(m=>m.min));
+    rpFootball(sl,7.35,3.09,5.43,2.9,"Fourchettes par méthode",mFF,val.fourchette.retenue,
+      (ovL?"Zone bleutée : plage sur laquelle toutes les méthodes retenues se recoupent. "
+        :(mFF.length>1?"Les méthodes retenues ne se recoupent pas sur une plage commune. "
+                      :"Une seule méthode applicable. "))
+      +"Losange : valeur centrale · trait orange : valeur retenue."); }
+  rpCommentReste(sl,0.55,finV+0.16,6.6);
   rpPied(sl,mention,++page);
   if(opts.synthSeule) return page;   /* rapport combiné : la suite est rendue plus loin */
   }
@@ -1255,7 +1405,9 @@ function construireValo(pptx,opts){
   rpSection(pptx,S+2,"Approche par les flux (DCF)",sousDcf,mention,++page);
   sl=pptx.addSlide();
   rpEnTete(sl,B.societe,"Approche par les flux (DCF)");
-  rpTitre(sl,"Coût du capital et actualisation des flux");
+  const yW0=rpTitreMsg(sl,"Coût du capital et actualisation des flux",
+    "Un coût du capital de "+rpPct(val.wacc)+" ramène les flux du plan et la valeur terminale à "
+    +rpMsgFmt(val.ev)+" de valeur d'entreprise, soit "+rpMsgFmt(val.equityDcf)+" de fonds propres.");
   const wacc=[
     ["Taux sans risque (rf)",pct1(Vh.rf)],
     ["Prime de marché × β ("+(Vh.beta||1).toFixed(2).replace(".",",")+")",pct1((Vh.beta||1)*Vh.primeMarche)],
@@ -1264,12 +1416,12 @@ function construireValo(pptx,opts){
     ["Coût de la dette après impôt (kd)",pct1(val.kd)],
     ["Poids de la dette dans le financement",pct1(Vh.poidsDette)],
     ["= Coût moyen pondéré du capital (WACC)",pct1(val.wacc)]];
-  const finW=rpTable(sl,0.55,1.65,5.7,B.societe.toUpperCase()+" - Coût du capital (build-up)",
+  const finW=rpTable(sl,0.55,yW0+0.3,5.7,B.societe.toUpperCase()+" - Coût du capital (build-up)",
     ["Composante","Taux"],wacc,wacc.map(r=>/^=/.test(r[0])?"total":"detail"),
     new Set(),[4.4,1.3],9,null,0.28);
   const fcf=[["FCFF",...ap.map(a=>rpFmt(val.fcff[a]))],
              ["FCFF actualisés",...ap.map(a=>rpFmt(val.pv[a]))]];
-  const finF=rpTable(sl,6.5,1.65,6.28,"Flux de trésorerie disponibles (FCFF)",
+  const finF=rpTable(sl,6.5,yW0+0.3,6.28,"Flux de trésorerie disponibles (FCFF)",
     [rpLib(),...fyp],fcf,["detail","sous_total"],new Set(),
     [1.8,...Array(ap.length).fill(0.9)],9,null,0.28);
   const brg=[["Somme des FCFF actualisés",rpFmt(val.sommePv)],
@@ -1288,12 +1440,17 @@ function construireValo(pptx,opts){
   {
     sl=pptx.addSlide();
     rpEnTete(sl,B.societe,"Approche par les flux (DCF)");
-    rpTitre(sl,"Sensibilité de la valeur des fonds propres");
+    let ySe0=1.6;
+    { const pl=(val.sensi||[]).reduce((t,l)=>t.concat(l.filter(x=>isFinite(x))),[]);
+      ySe0=rpTitreMsg(sl,"Sensibilité de la valeur des fonds propres",pl.length
+        ?("La valeur des fonds propres reste comprise entre "+rpFmt(Math.min.apply(null,pl))+" et "
+          +rpMsgFmt(Math.max.apply(null,pl))+" pour ±100 pb de WACC et "+(gordon?"±100 pb de croissance perpétuelle":"±1× de multiple de sortie")+".")
+        :""); }
     const axes=val.sensiAxes||{wacc:[-0.01,-0.005,0,0.005,0.01].map(d=>val.wacc+d),colType:"g",col:[-0.01,-0.005,0,0.005,0.01].map(d=>val.g+d)};
     const colLbl=x=>axes.colType==="multiple"?(Math.round(x*10)/10)+"×":pct1(x);
     const entS=[gordon?"WACC \\ g":"WACC \\ mult.",...axes.col.map(colLbl)];
     const rowsS=(val.sensi||[]).map((ligne,i)=>[pct1(axes.wacc[i]),...ligne.map(x=>rpFmt(x))]);
-    const finSe=rpTable(sl,0.55,1.75,12.23,B.societe.toUpperCase()+" - Valeur des fonds propres selon le WACC et "+(gordon?"la croissance perpétuelle g":"le multiple de sortie"),
+    const finSe=rpTable(sl,0.55,ySe0+0.35,12.23,B.societe.toUpperCase()+" - Valeur des fonds propres selon le WACC et "+(gordon?"la croissance perpétuelle g":"le multiple de sortie"),
       entS,rowsS,rowsS.map((r,i)=>i===2?"sous_total":"detail"),new Set([3]),
       [2.1,...axes.col.map(()=>1.2)],9.5,"Chaque cellule = valeur des fonds propres (EV actualisée − dette nette + ajustements du pont). Ligne et colonne centrales = hypothèses retenues.",0.3,{centre:true});
     rpCommentReste(sl,0.55,finSe+0.18,12.23);
@@ -1303,7 +1460,14 @@ function construireValo(pptx,opts){
   rpSection(pptx,S+3,"Approches de marché et patrimoniale",["Comparables, transactions et actif net"],mention,++page);
   sl=pptx.addSlide();
   rpEnTete(sl,B.societe,"Approches de marché et patrimoniale");
-  rpTitre(sl,"Multiples de marché et actif net");
+  let yMu0=1.6;
+  { const okM=(mKey.comp&&mKey.comp.applicable!==false), okA=(mKey.anr&&mKey.anr.applicable!==false);
+    yMu0=rpTitreMsg(sl,"Multiples de marché et actif net",okM
+      ?("Les multiples de marché situent les fonds propres entre "+rpFmt(mKey.comp.min)+" et "
+        +rpMsgFmt(mKey.trans?mKey.trans.max:mKey.comp.max)
+        +(okA?(", l'actif net réévalué à "+rpMsgFmt(mKey.anr.central)):"")+".")
+      :("Les approches analogiques ne sont pas applicables : "+((mKey.comp&&mKey.comp.motif)||"EBITDA de référence non significatif")
+        +(okA?(" ; l'actif net réévalué ressort à "+rpMsgFmt(mKey.anr.central)):", et l'actif net n'est pas documenté")+".")); }
   const mc=Vh.multiplesComparables, mt=Vh.multiplesTransactions;
   const na=m=>(m&&m.applicable===false)?"n.a.":null;
   const fm=(m,k)=>na(m)||rpFmt(m&&m[k]);
@@ -1314,7 +1478,7 @@ function construireValo(pptx,opts){
     ["→ fonds propres induits",fm(mKey.comp,"min"),fm(mKey.comp,"central"),fm(mKey.comp,"max")],
     ["Transactions — EV/EBITDA",xR(mt.min),xR(mt.central),xR(mt.max)],
     ["→ fonds propres induits",fm(mKey.trans,"min"),fm(mKey.trans,"central"),fm(mKey.trans,"max")]];
-  const finM=rpTable(sl,0.55,1.7,8.2,B.societe.toUpperCase()+" - Multiples d'EBITDA et fonds propres induits",
+  const finM=rpTable(sl,0.55,yMu0+0.3,8.2,B.societe.toUpperCase()+" - Multiples d'EBITDA et fonds propres induits",
     ["Paramètre","Bas","Central","Haut"],tMult,["titre","detail","sous_total","detail","sous_total"],
     new Set([2]),[3.9,1.2,1.2,1.2],9,
     "Fonds propres = multiple × EBITDA de référence − dette nette + ajustements du pont."
@@ -1327,7 +1491,7 @@ function construireValo(pptx,opts){
     [(val.dateValo==="ouverture"?"Situation nette d'ouverture":"Actif net comptable "+fy[fy.length-1]),rpFmt(anrB)],
     ["Retraitements de réévaluation",rpFmt(anrC-anrB)],
     ["= Actif net réévalué (ANR)",na(mKey.anr)||rpFmt(anrC)]];
-  const finA=rpTable(sl,8.98,1.7,3.8,"Approche patrimoniale (ANR)",
+  const finA=rpTable(sl,8.98,yMu0+0.3,3.8,"Approche patrimoniale (ANR)",
     [rpLib(),"Valeur"],tAnr,["detail","detail","sous_total"],new Set(),[2.6,1.2],9,
     (mKey.anr&&mKey.anr.applicable===false)?("Écartée de la valeur retenue : "+(mKey.anr.motif||"")+"."):null,0.3);
   rpCommentReste(sl,0.55,Math.max(finM,finA)+0.18,12.23);
@@ -1354,10 +1518,11 @@ function construireBPValo(pptx){
   const B=rpBase();
   const {a1,fy}=B;
   const ap=proj.annees;
-  const mention=B.societe+" - Business plan & évaluation financière - "+B.dateTxt+" - Confidentiel";
+  const mention=B.societe+" - Business plan & évaluation financière - "+B.dateTxt+" - Confidentiel"; RP_MENTION=mention;
   rpGarde(pptx,B.societe,"Business Plan & Évaluation financière",
     (mm?"Business plan — projet "+ap[0]+" – "+ap[ap.length-1]+"  |  Montants en "+rpLib():"Business plan "+ap[0]+" – "+ap[ap.length-1]+" · évaluation au 31/12/"+a1+"  |  Montants en "+rpLib()),B.dateTxt,B.cabinet);
-  let page=1;
+  if(RP_SOM_FIX) rpSommaire(pptx,B.societe,RP_SOM_FIX,mention);
+  let page=2;   /* page 2 : sommaire */
   rpPreambule(pptx,B,mention,++page,
     "Le présent document réunit le business plan de "+B.societe+" ("+ap[0]+" – "+ap[ap.length-1]+") et l'évaluation financière des fonds propres qui en découle. Il constitue un support de discussion préalable aux échanges avec le management, les investisseurs ou les partenaires financiers.",
     "La première partie présente les hypothèses et les projections (compte de résultat, bilan, trésorerie, seuil de rentabilité et covenants) ; la seconde en déduit la valeur des fonds propres par actualisation des flux (DCF), multiples de marché et actif net. Toutes les hypothèses sont paramétrées dans l'application et modifiables.");
@@ -1377,19 +1542,218 @@ function construireBPValo(pptx){
   rpContacts(pptx,B.cabinet,mention,++page);
 }
 
+/* =========================================================================
+   TEASER (blind profile) — premier document d'un processus de cession, diffusé AVANT
+   tout accord de confidentialité, donc court (1 à 2 pages) et, au choix, anonyme :
+   nom de code, secteur et géographie, description générale, points forts, chiffres clés,
+   modalités envisagées, contact. Pas de valorisation : le prix ne se négocie pas dans un
+   teaser. Sections retenues d'après la pratique de marché (CFI, IMAP, Axial).
+   ========================================================================= */
+function rpTeaserConf(){return (typeof DOSSIER!=="undefined"&&DOSSIER&&DOSSIER.teaser)||{};}
+function rpNomTeaser(){const T=rpTeaserConf();
+  return T.anonyme?(T.code||"Projet confidentiel")
+    :((typeof DOSSIER!=="undefined"&&DOSSIER&&DOSSIER.societe)||"");}
+/* anonymisation des textes saisis par l'analyste : le nom de la société (et son sigle) ne doit
+   pas subsister dans un document diffusé sous nom de code */
+const RP_FORMES="SAS|SASU|SARL|SUARL|SA|SNC|SCI|GIE|EURL|SPA|LTD";
+function rpAnonTxt(txt){
+  const T=rpTeaserConf(); if(!T.anonyme||!txt) return txt||"";
+  const soc=(typeof DOSSIER!=="undefined"&&DOSSIER&&DOSSIER.societe)||"";
+  if(!soc) return String(txt);
+  let s=String(txt);
+  /* le nom complet d'abord, puis chaque mot significatif. L'élision (« l'ESPIM ») et la forme
+     juridique accolée (« SAFE SAS ») doivent disparaître AVEC le nom, sinon il reste des
+     « l'la Société SAS » dans le document diffusé. */
+  const mots=[soc].concat(soc.split(/[\s(),.]+/).filter(m=>m.length>2
+    &&!new RegExp("^("+RP_FORMES+")$","i").test(m)));
+  mots.forEach(m=>{
+    const e=m.replace(/[.*+?^${}()|[\]\\]/g,"\\$&");
+    /* fin de motif : lookahead plutôt que \b — un nom qui se termine par une parenthèse
+       (« ESPIM (SAFE SAS) ») n'a pas de frontière de mot après lui. Pas de lookbehind :
+       tous les navigateurs cibles ne le supportent pas. */
+    s=s.replace(new RegExp("\\b(?:l['’]|d['’])?"+e+"(?:\\s+(?:"+RP_FORMES+"))?(?![\\wÀ-ÿ])","gi"),"la Société");
+  });
+  return s.replace(/(?:\bla Société\b[\s,()]*){2,}/gi,"la Société ")
+          .replace(/\s{2,}/g," ")
+          .replace(/(^|[.!?]\s+)la Société/g,"$1La Société").trim();
+}
+/* Un teaser tient sur une page : tout texte repris de la fiche d'identité doit être BORNÉ,
+   sinon il déborde sur le bloc suivant (une description libre peut faire 40 lignes). */
+function rpCoupe(txt,max){
+  const s=String(txt||"").replace(/\s+/g," ").trim();
+  if(s.length<=max) return s;
+  const c=s.slice(0,max);
+  return c.slice(0,Math.max(c.lastIndexOf(". ")+1,c.lastIndexOf(" ")))
+    .replace(/[,;:]$/,"")+(/\.$/.test(c.trim())?"":" …");
+}
+function rpTeaserBloc(sl,x,y,w,titre){
+  sl.addText(String(titre).toUpperCase(),{x:x,y:y,w:w,h:0.22,fontSize:8.5,bold:true,
+    color:RP.BLEU,charSpacing:1.5,fontFace:"Arial"});
+  return y+0.26;
+}
+function rpTeaserPuces(sl,x,y,w,items,h){
+  let yy=y;
+  items.forEach(t0=>{
+    const t=String(t0).replace(/\s*$/,"").replace(/([^.…!?])$/,"$1.");
+    sl.addShape("rect",{x:x+0.02,y:yy+0.09,w:0.07,h:0.07,fill:{color:RP.ORANGE}});
+    sl.addText(t,{x:x+0.2,y:yy,w:w-0.2,h:h,fontSize:9.5,color:"333333",fontFace:"Arial",valign:"top"});
+    yy+=h;
+  });
+  return yy;
+}
+function construireTeaser(pptx){
+  const {hyp,proj}=rpProj();
+  const mm=rpModele();
+  const B=rpBase();
+  const I=rpInfos(), T=rpTeaserConf(), anon=!!T.anonyme;
+  const nom=rpNomTeaser();
+  const ap=proj.annees, aF=ap[ap.length-1], a1p=ap[0];
+  const fyp=ap.map(a=>libFY(a,true));
+  const A=B.A, v=B.v, a1=B.a1;
+  const cab=(typeof chargerCabinet==="function")?chargerCabinet():{};
+  const mention=nom+" - Teaser confidentiel - "+B.dateTxt;
+  RP_MENTION=mention;
+  const caF=proj.pl.CA[aF], ebF=proj.pl.EBITDA[aF], mgF=caF?ebF/caF:null;
+  const ca1=proj.pl.CA[a1p], eb1=proj.pl.EBITDA[a1p];
+  const tcam=(ca1>0&&caF>0&&ap.length>1)?Math.pow(caF/ca1,1/(ap.length-1))-1:null;
+  const bascEb=rpBascule(ap,a=>proj.pl.EBITDA[a]);
+  const ville=String(I.adresse||"").split(",")[0].trim();       /* la ville, pas l'adresse postale */
+  const secteur=I.secteur||DOSSIER.secteur||"";
+  const geo=[secteur,ville].filter(Boolean).join("  ·  ");
+
+  /* ---------- page 1 : le one-pager. Ancrages FIXES : chaque bloc a son budget de hauteur,
+     les textes de la fiche d'identité sont bornés (rpCoupe) — un teaser qui déborde sur une
+     deuxième page n'est plus un teaser. ---------- */
+  let sl=pptx.addSlide();
+  sl.addShape("rect",{x:0,y:0,w:13.333,h:1.62,fill:{color:RP.NAVY}});
+  sl.addShape("rect",{x:0.55,y:0.42,w:1.7,h:0.045,fill:{color:RP.ORANGE}});
+  sl.addText("OPPORTUNITÉ D'INVESTISSEMENT"+(anon?" — PROFIL ANONYME":""),{x:0.55,y:0.2,w:8.6,h:0.24,
+    fontSize:8.5,bold:true,color:"9FB0D6",charSpacing:1.5,fontFace:"Arial"});
+  sl.addText(nom,{x:0.55,y:0.62,w:9.4,h:0.5,fontSize:26,bold:true,color:RP.BLANC,fontFace:"Arial"});
+  sl.addText(geo,{x:0.55,y:1.16,w:9.4,h:0.3,fontSize:11.5,color:"CADCFC",fontFace:"Arial"});
+  sl.addText("STRICTEMENT CONFIDENTIEL",{x:9.3,y:0.2,w:3.48,h:0.24,align:"right",
+    fontSize:8.5,bold:true,color:"7E90BF",charSpacing:1.5,fontFace:"Arial"});
+  {const _lg=logoCab();sl.addImage(_lg?{data:_lg.data,x:11.0,y:0.62,h:0.42,w:0.42*_lg.ratio}
+    :{data:LOGO_FINDALYX,x:11.0,y:0.62,h:0.42,w:0.42*4.45});}
+
+  /* colonne de gauche : présentation (5 lignes max) puis points forts (5 puces max) */
+  const xL=0.55, wL=7.15;
+  rpTeaserBloc(sl,xL,1.85,wL,"Présentation");
+  const desc=rpCoupe(rpAnonTxt([I.description,I.services].filter(Boolean).join(" "))
+    ||("Société du secteur "+(secteur||"—")+(ville?(", implantée à "+ville):"")+"."),430);
+  sl.addText(desc,{x:xL,y:2.11,w:wL,h:0.95,fontSize:10,color:"333333",fontFace:"Arial",valign:"top"});
+  rpTeaserBloc(sl,xL,3.16,wL,"Points forts");
+  const forts=[
+    (tcam!==null&&caF>ca1)?("Chiffre d'affaires porté de "+rpMsgFmt(ca1)+" à "+rpMsgFmt(caF)+" sur le plan d'affaires, soit "+rpPct(tcam)+" par an."):null,
+    (mgF!==null&&ebF>0)?("Marge d'EBITDA de "+rpPct(mgF)+" en "+fyp[fyp.length-1]
+      +(bascEb&&bascEb!==a1p?(", après un point d'inflexion atteint en "+libFY(bascEb,true)):"")+"."):null,
+    (proj.bs.TRESO_NETTE[aF]>0&&!proj.bs.DETTE[aF])?("Structure financière sans dette bancaire à terme, trésorerie de clôture de "+rpMsgFmt(proj.bs.TRESO_NETTE[aF])+"."):null,
+    I.effectif?rpCoupe("Organisation en place : "+rpAnonTxt(I.effectif),135):null,
+    I.marche?rpCoupe(rpAnonTxt(I.marche).split(". ")[0]+".",135):null,
+    I.creation?("Activité exercée depuis "+I.creation+"."):null
+  ].filter(Boolean).slice(0,5);
+  rpTeaserPuces(sl,xL,3.42,wL,forts,0.5);
+
+  /* colonne de droite : chiffres clés (valeurs courtes, une ligne par cellule) + trajectoire */
+  const xR=8.1, wR=4.68;
+  rpTeaserBloc(sl,xR,1.85,wR,"Chiffres clés");
+  const cles=[
+    ["Chiffre d'affaires "+fyp[fyp.length-1],rpMsgFmt(caF)],
+    ["EBITDA "+fyp[fyp.length-1],rpMsgFmt(ebF)+(mgF!==null?(" · "+rpPct(mgF)+" du CA"):"")],
+    (tcam!==null?["Croissance annuelle moyenne",rpPct(tcam)]:null),
+    ["Secteur",rpCoupe(secteur||"—",34)],
+    ["Implantation",rpCoupe([ville,I.pays].filter(Boolean).join(", ")||"—",34)],
+    ["Horizon du plan",fyp[0]+" – "+fyp[fyp.length-1]]
+  ].filter(Boolean);
+  rpTable(sl,xR,2.11,wR,null,["Indicateur","Valeur"],cles,
+    cles.map((r,i)=>i<2?"total":"detail"),new Set(),[2.4,2.2],9,null,0.3);
+  /* rpColonnes pose déjà sa propre légende : pas de second intitulé « Trajectoire » par-dessus */
+  rpColonnes(sl,xR,4.16,wR,1.85,"Trajectoire ("+rpLib()+")",fyp,[
+    {name:"CA",values:ap.map(a=>proj.pl.CA[a]),color:"172554"},
+    {name:"EBITDA",values:ap.map(a=>proj.pl.EBITDA[a]),color:"FA6706"}]);
+
+  /* bandeau bas : modalités, prochaines étapes */
+  const yB=6.12;
+  sl.addShape("rect",{x:0.55,y:yB-0.12,w:12.23,h:0.012,fill:{color:RP.FILET}});
+  const modal=rpCoupe(rpAnonTxt(I.contexteMission)||"Cession de titres — périmètre, calendrier et modalités à préciser avec les conseils du vendeur.",300);
+  sl.addText("MODALITÉS ENVISAGÉES",{x:0.55,y:yB,w:5.9,h:0.2,fontSize:8,bold:true,color:RP.BLEU,charSpacing:1.5,fontFace:"Arial"});
+  sl.addText(modal,{x:0.55,y:yB+0.22,w:5.9,h:0.62,fontSize:8.5,color:"333333",fontFace:"Arial",valign:"top"});
+  sl.addText("PROCHAINES ÉTAPES",{x:6.75,y:yB,w:6.03,h:0.2,fontSize:8,bold:true,color:RP.BLEU,charSpacing:1.5,fontFace:"Arial"});
+  sl.addText("Manifestation d'intérêt auprès de "+(B.cabinet||"Findalyx Advisory")
+    +(cab.analyste?(" — "+cab.analyste):"")+(cab.email?(" · "+cab.email):"")+(cab.telephone?(" · "+cab.telephone):"")
+    +". L'accès au mémorandum d'information et aux données détaillées est conditionné à la signature d'un accord de confidentialité (NDA).",
+    {x:6.75,y:yB+0.22,w:6.03,h:0.6,fontSize:9,color:"333333",fontFace:"Arial",valign:"top"});
+  rpPied(sl,mention,1);
+
+  /* ---------- page 2 : résumé financier ---------- */
+  sl=pptx.addSlide();
+  rpEnTete(sl,nom,"Teaser");
+  const y0=rpTitreMsg(sl,"Résumé financier",
+    "Le plan porte le chiffre d'affaires à "+rpMsgFmt(caF)+" et l'EBITDA à "+rpMsgFmt(ebF)
+    +(mgF!==null?(", soit "+rpPct(mgF)+" du chiffre d'affaires"):"")+" en "+fyp[fyp.length-1]+".");
+  const hist=(!mm&&A.length)?A:[];
+  const cols=hist.concat(ap);
+  const gv=(a,cle)=>{
+    if(hist.indexOf(a)>=0) return v[{CA:"CA",EBITDA:"EBITDA",RN:"RESULTAT_NET"}[cle]||cle][a];
+    return cle==="RN"?proj.pl.RN[a]:proj.pl[cle][a];
+  };
+  const lig=[
+    ["Chiffre d'affaires",...cols.map(a=>rpFmt(gv(a,"CA")))],
+    ["Croissance",...cols.map((a,k)=>k?(gv(cols[k-1],"CA")?rpPct(gv(a,"CA")/gv(cols[k-1],"CA")-1):"-"):"-")],
+    ["EBITDA",...cols.map(a=>rpFmt(gv(a,"EBITDA")))],
+    ["Marge d'EBITDA",...cols.map(a=>gv(a,"CA")?rpPct(gv(a,"EBITDA")/gv(a,"CA")):"-")],
+    ["Résultat net",...cols.map(a=>rpFmt(gv(a,"RN")))],
+    ["Trésorerie de clôture",...cols.map(a=>hist.indexOf(a)>=0?rpFmt(v.TRESORERIE_NETTE[a]):rpFmt(proj.bs.TRESO_NETTE[a]))]
+  ];
+  const finT=rpTable(sl,0.55,y0+0.28,12.23,nom.toUpperCase()+" - Résumé financier",
+    [rpLib()].concat(hist.map(a=>libFY(a)+" (réel)"),fyp.map(f=>f+"p")),lig,
+    ["total","pct","total","pct","detail","detail"],
+    hist.length?new Set(hist.map((a,k)=>1+k)):new Set(),
+    [3.4,...cols.map(()=>1.1)],9.5,
+    "p : prévisionnel — projections du plan d'affaires établies par la direction avec "+(B.cabinet||"Findalyx Advisory")
+    +(hist.length?" ; colonnes bleutées : données historiques.":"."),0.3);
+  /* marché / positionnement, si renseigné */
+  let yM=finT+0.3;
+  if(I.marche){
+    yM=rpTeaserBloc(sl,0.55,yM,7.2,"Marché et positionnement");
+    sl.addText(rpAnonTxt(I.marche),{x:0.55,y:yM,w:7.2,h:1.5,fontSize:9.5,color:"333333",fontFace:"Arial",valign:"top"});
+  }
+  const xC=I.marche?8.15:0.55, wC=I.marche?4.63:12.23;
+  let yC=rpTeaserBloc(sl,xC,finT+0.3,wC,"Avertissement");
+  sl.addText("Ce document est remis à titre strictement confidentiel et indicatif. Il ne constitue "
+    +"ni une offre, ni une sollicitation, ni un engagement de vente. Les informations et projections "
+    +"qu'il contient sont fournies par la direction et n'ont pas fait l'objet d'un audit indépendant : "
+    +"elles doivent être confirmées dans le cadre des travaux de revue préalable. Toute diffusion, "
+    +"reproduction ou communication à un tiers est interdite sans autorisation écrite.",
+    {x:xC,y:yC,w:wC,h:1.5,fontSize:8.5,italic:true,color:RP.G_TXT,fontFace:"Arial",valign:"top"});
+  rpPied(sl,mention,2);
+}
+
 /* ---------- point d'entrée ---------- */
 async function genererRapport(type){
   if(!ETATS && !(DOSSIER&&DOSSIER.sansHistorique)){toast("Importez d'abord des balances");return;}
   if(typeof PptxGenJS==="undefined"){toast("Bibliothèque PowerPoint non chargée (connexion requise)");return;}
   toast("Génération du rapport en cours…");
-  const pptx=new PptxGenJS();
-  pptx.defineLayout({name:"LARGE",width:13.333,height:7.5});
-  pptx.layout="LARGE";
-  if(type==="dd")construireDD(pptx);
-  else if(type==="bp")construireBP(pptx);
-  else if(type==="bpvalo")construireBPValo(pptx);
-  else construireValo(pptx);
-  const noms={dd:"Rapport_DD_",bp:"Rapport_BP_",valo:"Rapport_VALO_",bpvalo:"Rapport_BP_Valo_"};
-  await pptx.writeFile({fileName:noms[type]+DOSSIER.societe.replace(/\W+/g,"_")+".pptx"});
+  const nouveau=()=>{const p=new PptxGenJS();p.defineLayout({name:"LARGE",width:13.333,height:7.5});
+    p.layout="LARGE";return p;};
+  const construire=p=>{
+    if(type==="dd")construireDD(p);
+    else if(type==="bp")construireBP(p);
+    else if(type==="bpvalo")construireBPValo(p);
+    else if(type==="teaser")construireTeaser(p);
+    else construireValo(p);
+  };
+  /* passe à blanc : relève la page de chaque section pour composer un sommaire paginé
+     (aucun fichier n'est écrit ; seule la structure est parcourue) */
+  RP_SOM=null;RP_SOM_FIX=null;
+  if(type!=="teaser"){
+    try{ RP_SOM=[]; construire(nouveau()); RP_SOM_FIX=RP_SOM.slice(); }
+    catch(e){ RP_SOM_FIX=null; }
+    finally{ RP_SOM=null; }
+  }
+  const pptx=nouveau();
+  try{ construire(pptx); } finally { RP_SOM_FIX=null; }
+  const noms={dd:"Rapport_DD_",bp:"Rapport_BP_",valo:"Rapport_VALO_",bpvalo:"Rapport_BP_Valo_",teaser:"Teaser_"};
+  await pptx.writeFile({fileName:noms[type]+String(type==="teaser"?rpNomTeaser():DOSSIER.societe).replace(/\W+/g,"_")+".pptx"});
   toast("Rapport téléchargé");
 }

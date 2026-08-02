@@ -1531,6 +1531,32 @@ function dessinerGraphs(){
 
 /* --- projections & valorisation --- */
 let projChart=null;
+/* Réglages du teaser : nom de code et anonymat. Un teaser se diffuse AVANT tout accord de
+   confidentialité — d'où la pratique du nom de code (« blind profile »). */
+function teaserSet(champ,val){
+  DOSSIER.teaser=DOSSIER.teaser||{};
+  DOSSIER.teaser[champ]=val;
+  if(champ==="anonyme"&&val&&!DOSSIER.teaser.code)
+    DOSSIER.teaser.code="Projet "+(DOSSIER.societe||"Alpha").replace(/[^A-Za-zÀ-ÿ]+/g," ").trim().split(" ")[0];
+  sauverDossier();rendre();
+}
+function carteTeaser(){
+  const T=(DOSSIER&&DOSSIER.teaser)||{};
+  const nom=T.anonyme?(T.code||"Projet confidentiel"):(DOSSIER.societe||"");
+  return `<div class="card"><b>Teaser (1 page + résumé financier)</b>
+    <div class="mut">Premier document d'un processus de cession, diffusé <b>avant</b> tout accord de confidentialité :
+    présentation, points forts, chiffres clés, trajectoire, modalités envisagées et contact. Sans valorisation — le prix
+    ne se négocie pas dans un teaser.</div>
+    <div class="hyp-l" style="margin-top:8px"><span>Diffusion sous nom de code <span class="mut">· usage de marché (« blind profile »)</span></span>
+      <span class="segvue">
+      <button class="${T.anonyme?"":"on"}" onclick="teaserSet('anonyme',false)">Nominatif</button>
+      <button class="${T.anonyme?"on":""}" onclick="teaserSet('anonyme',true)">Anonyme</button></span></div>
+    ${T.anonyme?`<div class="hyp-g"><span>Nom de code</span><input class="sel" value="${esc(T.code||"")}"
+      onchange="teaserSet('code',this.value)"><span class="suf"></span></div>
+      <div class="mut" style="margin:-2px 0 8px;font-style:italic">Le nom de la société est retiré de l'en-tête, du pied de page et des textes repris de la fiche d'identité. Relisez les textes : un détail trop identifiant (client cité, implantation unique) suffit à lever l'anonymat.</div>`:""}
+    <div class="mut" style="margin-bottom:8px">Sera diffusé sous : <b>${esc(nom)}</b></div>
+    <button class="btn primary" onclick="genererRapport('teaser')">Générer</button></div>`;
+}
 function vueExports(){
   const carte=(titre,desc,action,bouton)=>`<div class="card"><b>${titre}</b>
     <div class="mut">${desc}</div>
@@ -1549,7 +1575,9 @@ function vueExports(){
     ${carte("Business plan","Résumé exécutif, hypothèses du modèle, P&amp;L / bilan / trésorerie prévisionnels, seuil de rentabilité et covenants.","genererRapport('bp')","Générer")}
     ${carte("Valorisation","Fourchette DCF et multiples, flux actualisés, build-up MEDAF (risque pays Damodaran), sensibilité.","genererRapport('valo')","Générer")}
     ${carte("Business plan + Valorisation","Document unique : le plan (hypothèses, projections, covenants) puis l'évaluation des fonds propres — l'usage courant pour un dossier bancaire ou investisseur.","genererRapport('bpvalo')","Générer")}
-    </div>`;
+    </div>
+    <div class="sec-titre">Mise en relation investisseurs</div>
+    <div class="grille-exp">${carteTeaser()}</div>`;
   }
   if(!ETATS) return '<div class="mut">Importez d\'abord des balances.</div>';
   return `<h1>Exports</h1>
@@ -1571,7 +1599,9 @@ function vueExports(){
     ${carte("Business plan","Résumé exécutif, hypothèses, P&amp;L prévisionnel 5 ans, trajectoire de trésorerie.","genererRapport('bp')","Générer")}
     ${carte("Valorisation","Fourchette DCF et multiples, flux actualisés, hypothèses de valorisation.","genererRapport('valo')","Générer")}
     ${carte("Business plan + Valorisation","Document unique : le plan (hypothèses, projections, covenants) puis l'évaluation des fonds propres — l'usage courant pour un dossier bancaire ou investisseur.","genererRapport('bpvalo')","Générer")}
-  </div>`;
+  </div>
+  <div class="sec-titre">Mise en relation investisseurs</div>
+  <div class="grille-exp">${carteTeaser()}</div>`;
 }
 function styliserEntete(row,texteCols){
   texteCols=texteCols||1;
