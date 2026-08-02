@@ -557,7 +557,17 @@ function vueModele(){
       +(M.exerciceCheval?'<div class="mut" style="margin:-2px 0 10px;font-style:italic">'+MENTION_CHEVAL+'</div>':'')
       +'<div class="hyp-g"><span>Horizon</span><input class="sel" value="'+(M.nb||5)+'" onchange="mSet(\'nb\',this.value,1)"><span class="suf">années</span></div>'
       +'<div class="hyp-g"><span>Durée de construction <span class="mut">· 0 = dès l\'an 1</span></span><input class="sel" value="'+(M.dureeConstruction||0)+'" onchange="mSet(\'dureeConstruction\',this.value,1)"><span class="suf">années</span></div>'
-      +'<div class="hyp-g"><span>TVA</span><input class="sel" value="'+((M.tva||0)*100)+'" onchange="mSet(\'tva\',(numFR(this.value)||0)/100)"><span class="suf">%</span></div>'
+      +'<div class="hyp-g"><span>TVA <span class="mut">· taux de droit commun</span></span><input class="sel" value="'+((M.tva||0)*100)+'" onchange="mSet(\'tva\',(numFR(this.value)||0)/100)"><span class="suf">%</span></div>'
+      /* activité exonérée : le CA est facturé HT (créances sans TVA) mais les achats restent TTC,
+         la TVA d'amont n'étant pas déductible — les charges doivent alors être saisies TTC */
+      +'<div class="hyp-l"><span>Chiffre d\'affaires exonéré de TVA <span class="mut">· enseignement, santé…</span></span>'
+        +'<span class="segvue">'
+        +'<button class="'+(M.tvaExonere?"":"on")+'" onclick="mSet(\'tvaExonere\',false)">Assujetti</button>'
+        +'<button class="'+(M.tvaExonere?"on":"")+'" onclick="mSet(\'tvaExonere\',true)">Exonéré</button></span></div>'
+      +'<div class="mut" style="margin:-2px 0 10px;font-style:italic">'
+        +(M.tvaExonere
+          ?'Ventes facturées HT : les créances clients ne portent pas de TVA. Les achats en portent toujours une et elle n\'est pas déductible — saisissez les coûts et charges <b>TTC</b>, la TVA d\'amont étant un coût définitif.'
+          :'Ventes facturées TTC : les créances clients incluent la TVA collectée, les dettes fournisseurs la TVA déductible.')+'</div>'
       +'<div class="hyp-g"><span>Impôt sur les sociétés</span><input class="sel" value="'+((M.is_taux||0)*100)+'" onchange="mSet(\'is_taux\',(numFR(this.value)||0)/100)"><span class="suf">%</span></div>'
       +'<div class="hyp-g"><span>Impôt minimum forfaitaire (% du CA)</span><input class="sel" value="'+((M.imf_taux||0)*100)+'" onchange="mSet(\'imf_taux\',(numFR(this.value)||0)/100)"><span class="suf">%</span></div>'
       +'<div class="hyp-g"><span>Inflation <span class="mut">· fait évoluer charges & coûts unitaires</span></span><input class="sel" value="'+((M.inflation||0)*100)+'" onchange="mSet(\'inflation\',(numFR(this.value)||0)/100)"><span class="suf">%</span></div></div>'

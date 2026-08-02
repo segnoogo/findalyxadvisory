@@ -139,6 +139,8 @@ function variantes(G){
       M.financement.ccaMode="lineaire";M.financement.ccaDuree=4;M.financement.ccaTaux=0.05;}),
     v("dividendes 40 %",function(d,M){M.dividendes_payout=0.4;M.dividendes_seuilCash=2000000;}),
     v("TVA 0 et IMF",function(d,M){M.tva=0;M.imf_taux=0.01;}),
+    v("CA exonéré de TVA",function(d,M){M.tva=0.19;M.tvaExonere=true;}),
+    v("CA assujetti à 19 %",function(d,M){M.tva=0.19;M.tvaExonere=false;}),
     v("séries annuelles",function(d,M){(M.revenus||[]).forEach(function(L){L.prix={mode:"yearly",vals:[300000,320000,340000,360000,380000]};});
       (M.chargesFixes||[]).forEach(function(c){c.mode="yearly";c.vals=[c.montant||1000000,1100000,1200000,1300000,1400000];});}),
     v("unité FCFA",function(d){d.unite="F";}),
@@ -357,10 +359,12 @@ function dossierHistorique(G){
   return {id:"hist",societe:"SOCIETE TEST SARL",secteur:"Services & conseil",unite:"K",
     balances:fx.balances.concat([b3]),overrides:{},infos:{}};
 }
-async function verifEtatsBP(app,G,ctx,dossier){
+async function verifEtatsBP(app,G,ctx,dossier,exonere){
   app.pose(dossier);
   const ET=G("ETATS"); if(!ET){pb(ctx,"ETATS non calculés : balances non ingérées");return;}
-  const H=G("assurerBP")(), P=G("projeterBP")(ET,H);
+  const H=G("assurerBP")();
+  if(exonere){H.tva=0.19;H.tvaExonere=true;}
+  const P=G("projeterBP")(ET,H);
   let VAL=null; try{VAL=G("valoriserBP")(ET,H,P);}catch(e){pb(ctx,"valoriserBP a échoué : "+e.message);}
   const uf=G("uni")().f, A=ET.annees, AP=P.annees, C0=3, soc=rx(dossier.societe);
   const S=f=>AP.map(f), SH=f=>A.map(f);
@@ -485,12 +489,15 @@ async function verifEtatsBP(app,G,ctx,dossier){
       (PB.length===avant?"":"  ("+(PB.length-avant)+")"));
   }
   if(!FICHIER){
-    const avant=PB.length, dh=dossierHistorique(G);
-    try{ await verifEtatsBP(app,G,"historique (3 exercices)",dh); }
-    catch(e){ pb("historique","exception : "+e.message); }
-    if(DUMP)return;
-    console.log((PB.length===avant?"  OK    ":"  ÉCART ")+"classeur états + BP · historique (3 exercices)"+
-      (PB.length===avant?"":"  ("+(PB.length-avant)+")"));
+    for(const cas of [{nom:"historique (3 exercices)",ex:false},{nom:"historique · CA exonéré de TVA",ex:true}]){
+      const avant=PB.length, dh=dossierHistorique(G);
+      if(cas.ex){dh.bp=null;}
+      try{ await verifEtatsBP(app,G,cas.nom,dh,cas.ex); }
+      catch(e){ pb(cas.nom,"exception : "+e.message); }
+      if(DUMP)return;
+      console.log((PB.length===avant?"  OK    ":"  ÉCART ")+"classeur états + BP · "+cas.nom+
+        (PB.length===avant?"":"  ("+(PB.length-avant)+")"));
+    }
   }
   console.log("\n"+nbLignes+" lignes comparées · "+nbOk+" valeurs conformes · "+PB.length+" écart(s)");
   if(NONCOUV.length){

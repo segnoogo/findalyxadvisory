@@ -27,11 +27,11 @@ function construireFeuillesBP(wb){
   const hy={caCroiss:5,cd:6,apMont:7,apCroiss:8,pers:9,infl:10,is:11,opex0:12};
   const hb=12+m;
   /* tva : créances et dettes d'exploitation exprimées en TTC, comme le moteur */
-  Object.assign(hy,{dso:hb,dio:hb+1,dpo:hb+2,tva:hb+3,ac:hb+4,ad:hb+5,dfs:hb+6,capex:hb+7,amort:hb+8,
-    tauxEx:hb+9,durEx:hb+10,empr:hb+11,tauxN:hb+12,durN:hb+13,pfin:hb+14,payout:hb+15,
-    rf:hb+17,pm:hb+18,beta:hb+19,ppays:hb+20,ptaille:hb+21,pilliq:hb+22,kd:hb+23,wd:hb+24,g:hb+25,mc:hb+26,mt:hb+27,adjE:hb+28,
-    exitM:hb+29,pdcf:hb+30,pcomp:hb+31,ptrans:hb+32,panr:hb+33,
-    seuil:hb+34,repdef:hb+35,decouvert:hb+36});
+  Object.assign(hy,{dso:hb,dio:hb+1,dpo:hb+2,tva:hb+3,tvaEx:hb+4,ac:hb+5,ad:hb+6,dfs:hb+7,capex:hb+8,amort:hb+9,
+    tauxEx:hb+10,durEx:hb+11,empr:hb+12,tauxN:hb+13,durN:hb+14,pfin:hb+15,payout:hb+16,
+    rf:hb+18,pm:hb+19,beta:hb+20,ppays:hb+21,ptaille:hb+22,pilliq:hb+23,kd:hb+24,wd:hb+25,g:hb+26,mc:hb+27,mt:hb+28,adjE:hb+29,
+    exitM:hb+30,pdcf:hb+31,pcomp:hb+32,ptrans:hb+33,panr:hb+34,
+    seuil:hb+35,repdef:hb+36,decouvert:hb+37});
   const rp={CA:5,CD:6,MB:7,PMB:8,AP_:9,SEC:10,opex0:11,TFG:11+m,PERS:12+m,EBITDA:13+m,
     PEB:14+m,DA:15+m,EBIT:16+m,PF:17+m,FF:18+m,RFIN:19+m,RAO:20+m,HAO:21+m,EBT:22+m,IS:23+m,RN:24+m,REPDEF:25+m};
   const rb={BRUT:5,AMC:6,IMN:7,STK:8,CLI:9,ACR:10,FRN:11,DFI:12,DSO:13,ADT:14,BFR:15,
@@ -76,7 +76,8 @@ function construireFeuillesBP(wb){
   hRow(hy.dso,"Délai clients — DSO (jours)");hVal(hy.dso,H.dso+sc.dJours,"0");
   hRow(hy.dio,"Rotation des stocks — DIO (jours)");hVal(hy.dio,H.dio,"0");
   hRow(hy.dpo,"Délai fournisseurs — DPO (jours)");hVal(hy.dpo,H.dpo,"0");
-  hRow(hy.tva,"TVA (créances et dettes exprimées en TTC)");hVal(hy.tva,(H.tva!=null?+H.tva:0.18),PCT2);
+  hRow(hy.tva,"TVA — taux de droit commun");hVal(hy.tva,(H.tva!=null?+H.tva:0.18),PCT2);
+  hRow(hy.tvaEx,"Chiffre d'affaires exonéré de TVA (1 = oui, 0 = assujetti)");hVal(hy.tvaEx,(H.tvaExonere?1:0),"0");
   hRow(hy.ac,"Autres créances hors exploitation (figées)");hVal(hy.ac,mnt(H.autresCreances_fixe),NF);
   hRow(hy.ad,"Autres dettes hors exploitation (figées)");hVal(hy.ad,mnt(H.autresDettes_fixe),NF);
   hRow(hy.dfs,"Dettes fiscales & sociales (% du CA)");hVal(hy.dfs,H.dettesFiscSoc_pct,PCT2);
@@ -250,7 +251,7 @@ function construireFeuillesBP(wb){
    {rn:rb.STK,lib:"Stocks",hist:a=>v.STOCKS[a],
     f:i=>`-${P(rp.CD,i)}*${h1(hy.dio)}/360`},
    {rn:rb.CLI,lib:"Créances clients",hist:a=>v.CLIENTS[a],
-    f:i=>`${P(rp.CA,i)}*(1+${h1(hy.tva)})*${h1(hy.dso)}/360`},
+    f:i=>`${P(rp.CA,i)}*(1+IF(${h1(hy.tvaEx)}=1,0,${h1(hy.tva)}))*${h1(hy.dso)}/360`},
    {rn:rb.ACR,lib:"Autres créances",hist:a=>v.AUTRES_CREANCES[a]+v.AVANCES_FRS[a]+v.HAO_ACTIF[a],
     f:i=>`${h1(hy.ac)}`},
    {rn:rb.FRN,lib:"Dettes fournisseurs",hist:a=>v.FOURNISSEURS[a],

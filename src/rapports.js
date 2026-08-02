@@ -714,7 +714,8 @@ function construireBP(pptx,opts){
   /* TCAM de la période affichée (même calcul que l'application) ; « n.s. » si la base n'est pas
      strictement positive — un taux de croissance depuis une perte n'a pas de sens */
   const tcamR=vals=>(typeof cagrCell==="function")?cagrCell(vals,rpPct):"";
-  const tvaR=(hyp&&hyp.tva!=null)?+hyp.tva:0.18;      /* TVA du modèle : les délais s'apprécient en TTC */
+  /* TVA du modèle : le DSO s'apprécie sur le CA facturé — HT si l'activité est exonérée */
+  const tvaR=(hyp&&hyp.tvaExonere)?0:((hyp&&hyp.tva!=null)?+hyp.tva:0.18);
   const rhFit=n=>Math.min(0.24,4.95/(n+1));           /* hauteur de ligne : tient sous le pied de page */
   const trAct=a=>(proj.bs.TRESO_ACTIVE[a]!==undefined?proj.bs.TRESO_ACTIVE[a]:Math.max(0,proj.bs.TRESO[a]));
   const actifT=a=>proj.bs.IMMO_NET[a]+proj.bs.STOCKS[a]+proj.bs.CLIENTS[a]+proj.bs.AUTRES_CREANCES[a]+trAct(a);

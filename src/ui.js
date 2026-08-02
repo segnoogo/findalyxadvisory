@@ -1850,7 +1850,9 @@ async function exporterExcelModele(sansFormule){
     H.nc=one("Durée de construction (années)",Nc,"0");
     H.is=one("Taux d'IS",M.is_taux!=null?M.is_taux:0.30,PCT2);
     H.imf=one("Impôt minimum forfaitaire (% du CA)",M.imf_taux||0,PCT2);
-    H.tva=one("TVA (créances & dettes en TTC)",(M.tva!=null?+M.tva:0.18),PCT2);
+    H.tva=one("TVA — taux de droit commun",(M.tva!=null?+M.tva:0.18),PCT2);
+    /* activité exonérée : ventes facturées HT (créances sans TVA), achats toujours TTC */
+    H.tvaEx=one("Chiffre d'affaires exonéré de TVA (1 = oui, 0 = assujetti)",(M.tvaExonere?1:0),"0");
     H.infl=one("Inflation des coûts unitaires",M.inflation||0.03,PCT2);
     H.dec=one("Taux du découvert (ligne court terme)",M.decouvert_taux||0.12,PCT2);
     sec("REVENUS — inducteurs de volume × prix, par produit");
@@ -2195,12 +2197,13 @@ async function exporterExcelModele(sansFormule){
 
     /* ---- BESOIN EN FONDS DE ROULEMENT ---- */
     sec2("BESOIN EN FONDS DE ROULEMENT");
-    row("R_TVA","Rappel — TVA (créances & dettes en TTC)",()=>`${rH}!${H.tva}`,PCT2);
+    row("R_TVA","Rappel — TVA (taux de droit commun)",()=>`${rH}!${H.tva}`,PCT2);
+    row("R_TVAEX","Rappel — CA exonéré de TVA (1 = oui)",()=>`${rH}!${H.tvaEx}`,"0");
     row("R_DSO","Rappel — délai clients DSO (jours)",()=>`${rH}!${H.dso}`,"0");
     row("R_DIO","Rappel — rotation des stocks DIO (jours)",()=>`${rH}!${H.dio}`,"0");
     row("R_DPO","Rappel — délai fournisseurs DPO (jours)",()=>`${rH}!${H.dpo}`,"0");
     row("R_FJ","Rappel — facteur scénario délais",()=>FJOURS,"0.000");
-    row("CLI","Créances clients (CA TTC × DSO)",(i,X)=>`${X}${rr("FO")}*${X}${rr("CA")}*(1+${X}${rr("R_TVA")})*(${X}${rr("R_DSO")}*${X}${rr("R_FJ")})/360`,NF);
+    row("CLI","Créances clients (CA facturé × DSO)",(i,X)=>`${X}${rr("FO")}*${X}${rr("CA")}*(1+IF(${X}${rr("R_TVAEX")}=1,0,${X}${rr("R_TVA")}))*(${X}${rr("R_DSO")}*${X}${rr("R_FJ")})/360`,NF);
     row("STK","Stocks (coûts directs × DIO)",(i,X)=>`${X}${rr("FO")}*(-${X}${rr("CD")})*(${X}${rr("R_DIO")}*${X}${rr("R_FJ")})/360`,NF);
     row("FRN","Dettes fournisseurs (hors personnel, TTC × DPO)",(i,X)=>`-${X}${rr("FO")}*(-${X}${rr("CD")}-${X}${rr("FGT")}+${X}${rr("PERS")})*(1+${X}${rr("R_TVA")})*(${X}${rr("R_DPO")}*${X}${rr("R_FJ")})/360`,NF);
     /* situation d'ouverture : résidus encore au bilan (encaissement / règlement étalés) */

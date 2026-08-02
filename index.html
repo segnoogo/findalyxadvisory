@@ -2290,8 +2290,8 @@ function hypothesesBP(etats, lignesPerso){
     amort_taux:born(brut>0?dotHist/brut:0.1,0.02,0.4,0.10),
     /* BFR en jours. DSO/DPO exprimés en jours de CA/achats TTC (TVA 18 %), cohérents avec
        les ratios affichés et l'ancien moteur ; DIO en jours de coûts HT (stocks au coût). */
-    convTTC:true, tva:0.18,
-    dso:born(v.CLIENTS[a1]/(ca1*1.18)*360,0,360,45),
+    convTTC:true, tva:0.18, tvaExonere:false,
+    dso:born(v.CLIENTS[a1]/(ca1*1.18)*360,0,360,45),   /* CA supposé taxable ici ; si l'activité est exonérée, cocher l'option recalcule le DSO en jours de CA HT */
     dio:born(cd?v.STOCKS[a1]/Math.abs(cd)*360:0,0,360,30),
     dpo:born((cd+op)?-v.FOURNISSEURS[a1]/(Math.abs(cd+op)*1.18)*360:0,0,360,30),
     /* dettes fiscales & sociales = exploitation → projetées en % du CA (croissent avec l'activité) */
@@ -2436,7 +2436,10 @@ function projeterBP(etats,H,scenario){
     if(ebt<0)deficits.push({montant:-ebt,resteAns:horizonDef});
     /* --- BFR --- */
     const ttc=1+((H.tva!=null&&isFinite(+H.tva))?+H.tva:0.18);        /* TVA paramétrable (défaut 18 %) */
-    const clients=caP*ttc*(H.dso+sc.dJours)/360;                     /* DSO en jours de CA TTC */
+    /* CA exonéré : facturé HT (créances sans TVA) ; les achats restent TTC, la TVA d'amont
+       n'étant pas déductible pour une activité exonérée */
+    const ttcCA=H.tvaExonere?1:ttc;
+    const clients=caP*ttcCA*(H.dso+sc.dJours)/360;                   /* DSO en jours de CA facturé */
     const stocks=Math.abs(cd)*H.dio/360;                             /* DIO en jours de coûts HT (stocks au coût) */
     const fournisseurs=-(Math.abs(cd)+Math.abs(opexTot))*ttc*H.dpo/360;   /* DPO en jours d'achats TTC */
     const dettesFiscSoc=-caP*H.dettesFiscSoc_pct;   /* exploitation : croît avec le CA */
@@ -2566,7 +2569,12 @@ function projeterModele(M,scenario){
   P.pl.CDIND_DETAIL={};   /* coûts directs pilotés par inducteurs (indépendants des lignes de revenus : ex. vacataires = classes × heures × taux horaire) */
   ["IMMO_BRUT","AMORT_CUM","IMMO_NET","STOCKS","CLIENTS","AUTRES_CREANCES","FOURNISSEURS","DETTES_FISC_SOC","AUTRES_DETTES","BFR","CP","DETTE","CCA","PROVISIONS","TRESO","LIGNE_CT","TRESO_ACTIVE"].forEach(function(c){P.bs[c]={};});
   var infl=M.inflation||0.03, bfrH=M.bfr||{dso:30,dio:45,dpo:30};
-  var tva=(M.tva!=null?+M.tva:0.18);   /* TVA paramétrable : créances TTC & dettes fournisseurs TTC (plus de 1,18 en dur) */
+  var tva=(M.tva!=null?+M.tva:0.18);   /* taux de TVA de droit commun */
+  /* Activité EXONÉRÉE (enseignement, santé…) : le chiffre d'affaires est facturé HT, donc les
+     créances clients ne portent pas de TVA. Les ACHATS en portent toujours une, et elle n'est
+     pas déductible : les dettes fournisseurs restent TTC et la TVA d'amont est un coût — les
+     charges doivent alors être saisies TTC. */
+  var tvaCA=(M.tvaExonere?0:tva);
   var isTx=(M.is_taux!=null?M.is_taux:0.30);
   /* Les montants du modèle sont SAISIS EN FCFA (prix unitaires, charges, CAPEX, financement).
      La base interne de l'app est le KFCFA (uni().f : F=1000, K=1, M=1/1000, fmt = valeur×f).
@@ -2733,7 +2741,7 @@ function projeterModele(M,scenario){
     /* clients & fournisseurs en TTC (TVA paramétrable) ; stocks HT ; le PERSONNEL (salaires, sans TVA)
        relève des dettes sociales, pas des dettes fournisseurs → hors base fournisseurs. fJours (scénario
        délais) appliqué symétriquement au DSO / DIO / DPO. */
-    var clients=isOp?ca*(1+tva)*((bfrH.dso||0)*fJours)/360:0;
+    var clients=isOp?ca*(1+tvaCA)*((bfrH.dso||0)*fJours)/360:0;
     var stocks=isOp?Math.abs(cd)*((bfrH.dio||0)*fJours)/360:0;
     var fournisseurs=isOp?-(Math.abs(cd)+Math.abs(opexTot))*(1+tva)*((bfrH.dpo||0)*fJours)/360:0;
     /* résidus de la situation d'ouverture : créances antérieures encore à recouvrer et dettes
@@ -4255,7 +4263,8 @@ function construireBP(pptx,opts){
   /* TCAM de la période affichée (même calcul que l'application) ; « n.s. » si la base n'est pas
      strictement positive — un taux de croissance depuis une perte n'a pas de sens */
   const tcamR=vals=>(typeof cagrCell==="function")?cagrCell(vals,rpPct):"";
-  const tvaR=(hyp&&hyp.tva!=null)?+hyp.tva:0.18;      /* TVA du modèle : les délais s'apprécient en TTC */
+  /* TVA du modèle : le DSO s'apprécie sur le CA facturé — HT si l'activité est exonérée */
+  const tvaR=(hyp&&hyp.tvaExonere)?0:((hyp&&hyp.tva!=null)?+hyp.tva:0.18);
   const rhFit=n=>Math.min(0.24,4.95/(n+1));           /* hauteur de ligne : tient sous le pied de page */
   const trAct=a=>(proj.bs.TRESO_ACTIVE[a]!==undefined?proj.bs.TRESO_ACTIVE[a]:Math.max(0,proj.bs.TRESO[a]));
   const actifT=a=>proj.bs.IMMO_NET[a]+proj.bs.STOCKS[a]+proj.bs.CLIENTS[a]+proj.bs.AUTRES_CREANCES[a]+trAct(a);
@@ -7175,7 +7184,9 @@ async function exporterExcelModele(sansFormule){
     H.nc=one("Durée de construction (années)",Nc,"0");
     H.is=one("Taux d'IS",M.is_taux!=null?M.is_taux:0.30,PCT2);
     H.imf=one("Impôt minimum forfaitaire (% du CA)",M.imf_taux||0,PCT2);
-    H.tva=one("TVA (créances & dettes en TTC)",(M.tva!=null?+M.tva:0.18),PCT2);
+    H.tva=one("TVA — taux de droit commun",(M.tva!=null?+M.tva:0.18),PCT2);
+    /* activité exonérée : ventes facturées HT (créances sans TVA), achats toujours TTC */
+    H.tvaEx=one("Chiffre d'affaires exonéré de TVA (1 = oui, 0 = assujetti)",(M.tvaExonere?1:0),"0");
     H.infl=one("Inflation des coûts unitaires",M.inflation||0.03,PCT2);
     H.dec=one("Taux du découvert (ligne court terme)",M.decouvert_taux||0.12,PCT2);
     sec("REVENUS — inducteurs de volume × prix, par produit");
@@ -7520,12 +7531,13 @@ async function exporterExcelModele(sansFormule){
 
     /* ---- BESOIN EN FONDS DE ROULEMENT ---- */
     sec2("BESOIN EN FONDS DE ROULEMENT");
-    row("R_TVA","Rappel — TVA (créances & dettes en TTC)",()=>`${rH}!${H.tva}`,PCT2);
+    row("R_TVA","Rappel — TVA (taux de droit commun)",()=>`${rH}!${H.tva}`,PCT2);
+    row("R_TVAEX","Rappel — CA exonéré de TVA (1 = oui)",()=>`${rH}!${H.tvaEx}`,"0");
     row("R_DSO","Rappel — délai clients DSO (jours)",()=>`${rH}!${H.dso}`,"0");
     row("R_DIO","Rappel — rotation des stocks DIO (jours)",()=>`${rH}!${H.dio}`,"0");
     row("R_DPO","Rappel — délai fournisseurs DPO (jours)",()=>`${rH}!${H.dpo}`,"0");
     row("R_FJ","Rappel — facteur scénario délais",()=>FJOURS,"0.000");
-    row("CLI","Créances clients (CA TTC × DSO)",(i,X)=>`${X}${rr("FO")}*${X}${rr("CA")}*(1+${X}${rr("R_TVA")})*(${X}${rr("R_DSO")}*${X}${rr("R_FJ")})/360`,NF);
+    row("CLI","Créances clients (CA facturé × DSO)",(i,X)=>`${X}${rr("FO")}*${X}${rr("CA")}*(1+IF(${X}${rr("R_TVAEX")}=1,0,${X}${rr("R_TVA")}))*(${X}${rr("R_DSO")}*${X}${rr("R_FJ")})/360`,NF);
     row("STK","Stocks (coûts directs × DIO)",(i,X)=>`${X}${rr("FO")}*(-${X}${rr("CD")})*(${X}${rr("R_DIO")}*${X}${rr("R_FJ")})/360`,NF);
     row("FRN","Dettes fournisseurs (hors personnel, TTC × DPO)",(i,X)=>`-${X}${rr("FO")}*(-${X}${rr("CD")}-${X}${rr("FGT")}+${X}${rr("PERS")})*(1+${X}${rr("R_TVA")})*(${X}${rr("R_DPO")}*${X}${rr("R_FJ")})/360`,NF);
     /* situation d'ouverture : résidus encore au bilan (encaissement / règlement étalés) */
@@ -8459,7 +8471,17 @@ function vueModele(){
       +(M.exerciceCheval?'<div class="mut" style="margin:-2px 0 10px;font-style:italic">'+MENTION_CHEVAL+'</div>':'')
       +'<div class="hyp-g"><span>Horizon</span><input class="sel" value="'+(M.nb||5)+'" onchange="mSet(\'nb\',this.value,1)"><span class="suf">années</span></div>'
       +'<div class="hyp-g"><span>Durée de construction <span class="mut">· 0 = dès l\'an 1</span></span><input class="sel" value="'+(M.dureeConstruction||0)+'" onchange="mSet(\'dureeConstruction\',this.value,1)"><span class="suf">années</span></div>'
-      +'<div class="hyp-g"><span>TVA</span><input class="sel" value="'+((M.tva||0)*100)+'" onchange="mSet(\'tva\',(numFR(this.value)||0)/100)"><span class="suf">%</span></div>'
+      +'<div class="hyp-g"><span>TVA <span class="mut">· taux de droit commun</span></span><input class="sel" value="'+((M.tva||0)*100)+'" onchange="mSet(\'tva\',(numFR(this.value)||0)/100)"><span class="suf">%</span></div>'
+      /* activité exonérée : le CA est facturé HT (créances sans TVA) mais les achats restent TTC,
+         la TVA d'amont n'étant pas déductible — les charges doivent alors être saisies TTC */
+      +'<div class="hyp-l"><span>Chiffre d\'affaires exonéré de TVA <span class="mut">· enseignement, santé…</span></span>'
+        +'<span class="segvue">'
+        +'<button class="'+(M.tvaExonere?"":"on")+'" onclick="mSet(\'tvaExonere\',false)">Assujetti</button>'
+        +'<button class="'+(M.tvaExonere?"on":"")+'" onclick="mSet(\'tvaExonere\',true)">Exonéré</button></span></div>'
+      +'<div class="mut" style="margin:-2px 0 10px;font-style:italic">'
+        +(M.tvaExonere
+          ?'Ventes facturées HT : les créances clients ne portent pas de TVA. Les achats en portent toujours une et elle n\'est pas déductible — saisissez les coûts et charges <b>TTC</b>, la TVA d\'amont étant un coût définitif.'
+          :'Ventes facturées TTC : les créances clients incluent la TVA collectée, les dettes fournisseurs la TVA déductible.')+'</div>'
       +'<div class="hyp-g"><span>Impôt sur les sociétés</span><input class="sel" value="'+((M.is_taux||0)*100)+'" onchange="mSet(\'is_taux\',(numFR(this.value)||0)/100)"><span class="suf">%</span></div>'
       +'<div class="hyp-g"><span>Impôt minimum forfaitaire (% du CA)</span><input class="sel" value="'+((M.imf_taux||0)*100)+'" onchange="mSet(\'imf_taux\',(numFR(this.value)||0)/100)"><span class="suf">%</span></div>'
       +'<div class="hyp-g"><span>Inflation <span class="mut">· fait évoluer charges & coûts unitaires</span></span><input class="sel" value="'+((M.inflation||0)*100)+'" onchange="mSet(\'inflation\',(numFR(this.value)||0)/100)"><span class="suf">%</span></div></div>'
@@ -9545,11 +9567,11 @@ function construireFeuillesBP(wb){
   const hy={caCroiss:5,cd:6,apMont:7,apCroiss:8,pers:9,infl:10,is:11,opex0:12};
   const hb=12+m;
   /* tva : créances et dettes d'exploitation exprimées en TTC, comme le moteur */
-  Object.assign(hy,{dso:hb,dio:hb+1,dpo:hb+2,tva:hb+3,ac:hb+4,ad:hb+5,dfs:hb+6,capex:hb+7,amort:hb+8,
-    tauxEx:hb+9,durEx:hb+10,empr:hb+11,tauxN:hb+12,durN:hb+13,pfin:hb+14,payout:hb+15,
-    rf:hb+17,pm:hb+18,beta:hb+19,ppays:hb+20,ptaille:hb+21,pilliq:hb+22,kd:hb+23,wd:hb+24,g:hb+25,mc:hb+26,mt:hb+27,adjE:hb+28,
-    exitM:hb+29,pdcf:hb+30,pcomp:hb+31,ptrans:hb+32,panr:hb+33,
-    seuil:hb+34,repdef:hb+35,decouvert:hb+36});
+  Object.assign(hy,{dso:hb,dio:hb+1,dpo:hb+2,tva:hb+3,tvaEx:hb+4,ac:hb+5,ad:hb+6,dfs:hb+7,capex:hb+8,amort:hb+9,
+    tauxEx:hb+10,durEx:hb+11,empr:hb+12,tauxN:hb+13,durN:hb+14,pfin:hb+15,payout:hb+16,
+    rf:hb+18,pm:hb+19,beta:hb+20,ppays:hb+21,ptaille:hb+22,pilliq:hb+23,kd:hb+24,wd:hb+25,g:hb+26,mc:hb+27,mt:hb+28,adjE:hb+29,
+    exitM:hb+30,pdcf:hb+31,pcomp:hb+32,ptrans:hb+33,panr:hb+34,
+    seuil:hb+35,repdef:hb+36,decouvert:hb+37});
   const rp={CA:5,CD:6,MB:7,PMB:8,AP_:9,SEC:10,opex0:11,TFG:11+m,PERS:12+m,EBITDA:13+m,
     PEB:14+m,DA:15+m,EBIT:16+m,PF:17+m,FF:18+m,RFIN:19+m,RAO:20+m,HAO:21+m,EBT:22+m,IS:23+m,RN:24+m,REPDEF:25+m};
   const rb={BRUT:5,AMC:6,IMN:7,STK:8,CLI:9,ACR:10,FRN:11,DFI:12,DSO:13,ADT:14,BFR:15,
@@ -9594,7 +9616,8 @@ function construireFeuillesBP(wb){
   hRow(hy.dso,"Délai clients — DSO (jours)");hVal(hy.dso,H.dso+sc.dJours,"0");
   hRow(hy.dio,"Rotation des stocks — DIO (jours)");hVal(hy.dio,H.dio,"0");
   hRow(hy.dpo,"Délai fournisseurs — DPO (jours)");hVal(hy.dpo,H.dpo,"0");
-  hRow(hy.tva,"TVA (créances et dettes exprimées en TTC)");hVal(hy.tva,(H.tva!=null?+H.tva:0.18),PCT2);
+  hRow(hy.tva,"TVA — taux de droit commun");hVal(hy.tva,(H.tva!=null?+H.tva:0.18),PCT2);
+  hRow(hy.tvaEx,"Chiffre d'affaires exonéré de TVA (1 = oui, 0 = assujetti)");hVal(hy.tvaEx,(H.tvaExonere?1:0),"0");
   hRow(hy.ac,"Autres créances hors exploitation (figées)");hVal(hy.ac,mnt(H.autresCreances_fixe),NF);
   hRow(hy.ad,"Autres dettes hors exploitation (figées)");hVal(hy.ad,mnt(H.autresDettes_fixe),NF);
   hRow(hy.dfs,"Dettes fiscales & sociales (% du CA)");hVal(hy.dfs,H.dettesFiscSoc_pct,PCT2);
@@ -9768,7 +9791,7 @@ function construireFeuillesBP(wb){
    {rn:rb.STK,lib:"Stocks",hist:a=>v.STOCKS[a],
     f:i=>`-${P(rp.CD,i)}*${h1(hy.dio)}/360`},
    {rn:rb.CLI,lib:"Créances clients",hist:a=>v.CLIENTS[a],
-    f:i=>`${P(rp.CA,i)}*(1+${h1(hy.tva)})*${h1(hy.dso)}/360`},
+    f:i=>`${P(rp.CA,i)}*(1+IF(${h1(hy.tvaEx)}=1,0,${h1(hy.tva)}))*${h1(hy.dso)}/360`},
    {rn:rb.ACR,lib:"Autres créances",hist:a=>v.AUTRES_CREANCES[a]+v.AVANCES_FRS[a]+v.HAO_ACTIF[a],
     f:i=>`${h1(hy.ac)}`},
    {rn:rb.FRN,lib:"Dettes fournisseurs",hist:a=>v.FOURNISSEURS[a],

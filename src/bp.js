@@ -66,8 +66,8 @@ function hypothesesBP(etats, lignesPerso){
     amort_taux:born(brut>0?dotHist/brut:0.1,0.02,0.4,0.10),
     /* BFR en jours. DSO/DPO exprimés en jours de CA/achats TTC (TVA 18 %), cohérents avec
        les ratios affichés et l'ancien moteur ; DIO en jours de coûts HT (stocks au coût). */
-    convTTC:true, tva:0.18,
-    dso:born(v.CLIENTS[a1]/(ca1*1.18)*360,0,360,45),
+    convTTC:true, tva:0.18, tvaExonere:false,
+    dso:born(v.CLIENTS[a1]/(ca1*1.18)*360,0,360,45),   /* CA supposé taxable ici ; si l'activité est exonérée, cocher l'option recalcule le DSO en jours de CA HT */
     dio:born(cd?v.STOCKS[a1]/Math.abs(cd)*360:0,0,360,30),
     dpo:born((cd+op)?-v.FOURNISSEURS[a1]/(Math.abs(cd+op)*1.18)*360:0,0,360,30),
     /* dettes fiscales & sociales = exploitation → projetées en % du CA (croissent avec l'activité) */
@@ -212,7 +212,10 @@ function projeterBP(etats,H,scenario){
     if(ebt<0)deficits.push({montant:-ebt,resteAns:horizonDef});
     /* --- BFR --- */
     const ttc=1+((H.tva!=null&&isFinite(+H.tva))?+H.tva:0.18);        /* TVA paramétrable (défaut 18 %) */
-    const clients=caP*ttc*(H.dso+sc.dJours)/360;                     /* DSO en jours de CA TTC */
+    /* CA exonéré : facturé HT (créances sans TVA) ; les achats restent TTC, la TVA d'amont
+       n'étant pas déductible pour une activité exonérée */
+    const ttcCA=H.tvaExonere?1:ttc;
+    const clients=caP*ttcCA*(H.dso+sc.dJours)/360;                   /* DSO en jours de CA facturé */
     const stocks=Math.abs(cd)*H.dio/360;                             /* DIO en jours de coûts HT (stocks au coût) */
     const fournisseurs=-(Math.abs(cd)+Math.abs(opexTot))*ttc*H.dpo/360;   /* DPO en jours d'achats TTC */
     const dettesFiscSoc=-caP*H.dettesFiscSoc_pct;   /* exploitation : croît avec le CA */
@@ -342,7 +345,12 @@ function projeterModele(M,scenario){
   P.pl.CDIND_DETAIL={};   /* coûts directs pilotés par inducteurs (indépendants des lignes de revenus : ex. vacataires = classes × heures × taux horaire) */
   ["IMMO_BRUT","AMORT_CUM","IMMO_NET","STOCKS","CLIENTS","AUTRES_CREANCES","FOURNISSEURS","DETTES_FISC_SOC","AUTRES_DETTES","BFR","CP","DETTE","CCA","PROVISIONS","TRESO","LIGNE_CT","TRESO_ACTIVE"].forEach(function(c){P.bs[c]={};});
   var infl=M.inflation||0.03, bfrH=M.bfr||{dso:30,dio:45,dpo:30};
-  var tva=(M.tva!=null?+M.tva:0.18);   /* TVA paramétrable : créances TTC & dettes fournisseurs TTC (plus de 1,18 en dur) */
+  var tva=(M.tva!=null?+M.tva:0.18);   /* taux de TVA de droit commun */
+  /* Activité EXONÉRÉE (enseignement, santé…) : le chiffre d'affaires est facturé HT, donc les
+     créances clients ne portent pas de TVA. Les ACHATS en portent toujours une, et elle n'est
+     pas déductible : les dettes fournisseurs restent TTC et la TVA d'amont est un coût — les
+     charges doivent alors être saisies TTC. */
+  var tvaCA=(M.tvaExonere?0:tva);
   var isTx=(M.is_taux!=null?M.is_taux:0.30);
   /* Les montants du modèle sont SAISIS EN FCFA (prix unitaires, charges, CAPEX, financement).
      La base interne de l'app est le KFCFA (uni().f : F=1000, K=1, M=1/1000, fmt = valeur×f).
@@ -509,7 +517,7 @@ function projeterModele(M,scenario){
     /* clients & fournisseurs en TTC (TVA paramétrable) ; stocks HT ; le PERSONNEL (salaires, sans TVA)
        relève des dettes sociales, pas des dettes fournisseurs → hors base fournisseurs. fJours (scénario
        délais) appliqué symétriquement au DSO / DIO / DPO. */
-    var clients=isOp?ca*(1+tva)*((bfrH.dso||0)*fJours)/360:0;
+    var clients=isOp?ca*(1+tvaCA)*((bfrH.dso||0)*fJours)/360:0;
     var stocks=isOp?Math.abs(cd)*((bfrH.dio||0)*fJours)/360:0;
     var fournisseurs=isOp?-(Math.abs(cd)+Math.abs(opexTot))*(1+tva)*((bfrH.dpo||0)*fJours)/360:0;
     /* résidus de la situation d'ouverture : créances antérieures encore à recouvrer et dettes
