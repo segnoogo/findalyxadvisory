@@ -714,6 +714,9 @@ function construireBP(pptx,opts){
     {name:"RN",values:mm?ap.map(a=>proj.pl.RN[a]):[v.RESULTAT_NET[a1],...ap.map(a=>proj.pl.RN[a])],color:"8FAADC"}]);
   rpCadreComment(sl,7.65,5.55,5.15,1.3);
   rpPied(sl,mention,++page);
+  /* rapport combiné : la synthèse de VALEUR s'insère ici, dans la même section « Note de
+     synthèse » que le résumé du plan — un seul document, pas deux rapports accolés. */
+  if(typeof opts.apresSynthese==="function") page=opts.apresSynthese(page);
   rpSection(pptx,S+2,"Présentation du projet et étude de marché",
     ["Structure du projet","Étude de marché"],mention,++page);
   rpPlaceholder(pptx,B.societe,"Présentation du projet","Projet, structure et motivations",
@@ -991,11 +994,22 @@ function construireValo(pptx,opts){
       "Le présent rapport présente l'évaluation financière des fonds propres de "+B.societe+(mm?"":" au 31/12/"+a1)+", à partir des projections issues du business plan. Il constitue un support de discussion préalable aux échanges avec le management.",
       "L'évaluation combine l'actualisation des flux de trésorerie disponibles (DCF, valeur terminale de "+tvTxt+"), les multiples de marché (comparables et transactions) et l'actif net. Les flux et le coût du capital sont paramétrés dans l'application et modifiables.");
   }
-  /* ---------- 1. Synthèse multi-méthodes ---------- */
-  rpSection(pptx,S+1,"Note de synthèse",["Synthèse multi-méthodes"],mention,++page);
-  let sl=pptx.addSlide();
-  rpEnTete(sl,B.societe,"Note de synthèse");
-  rpTitre(sl,"Synthèse d'évaluation des fonds propres au 31/12/"+a1);
+  /* ---------- 1. Synthèse multi-méthodes ----------
+     En rapport combiné (BP + Valo), cette synthèse ne forme PAS une seconde section
+     « Note de synthèse » : elle est rendue dans la section 1 du document, juste après le
+     résumé du plan (opts.sansSection), pour un rapport réellement fusionné. */
+  let sl;
+  if(!opts.sansSynthese){
+  if(!opts.sansSection){
+    rpSection(pptx,S+1,"Note de synthèse",["Synthèse multi-méthodes"],mention,++page);
+    sl=pptx.addSlide();
+    rpEnTete(sl,B.societe,"Note de synthèse");
+    rpTitre(sl,"Synthèse d'évaluation des fonds propres au 31/12/"+a1);
+  } else {
+    sl=pptx.addSlide();
+    rpEnTete(sl,B.societe,"Note de synthèse");
+    rpTitre(sl,"Synthèse de valeur — fonds propres");
+  }
   rpCartes(sl,[
     ["Fonds propres — DCF",rpFmt(val.equityDcf)+" "+rpLib(),"WACC "+rpPct(val.wacc),null,"neutre","coins","FA6706"],
     ["Comparables (central)",rpFmt((mKey.comp&&mKey.comp.central)||val.equityMult)+" "+rpLib(),val.multiple.toFixed(1)+"× EBITDA",null,"neutre","chart","224289"],
@@ -1013,6 +1027,8 @@ function construireValo(pptx,opts){
     {colors:["172554","2E5AAC","8FAADC","9E3A38","16904E"]});
   rpCadreComment(sl,0.55,5.5,7.0,1.35);
   rpPied(sl,mention,++page);
+  if(opts.synthSeule) return page;   /* rapport combiné : la suite est rendue plus loin */
+  }
   /* ---------- 2. DCF : coût du capital, flux, passage aux fonds propres ---------- */
   const sousDcf=["Coût du capital et flux actualisés","Analyse de sensibilité"];
   rpSection(pptx,S+2,"Approche par les flux (DCF)",sousDcf,mention,++page);
@@ -1113,10 +1129,17 @@ function construireBPValo(pptx){
   rpPreambule(pptx,B,mention,++page,
     "Le présent document réunit le business plan de "+B.societe+" ("+ap[0]+" – "+ap[ap.length-1]+") et l'évaluation financière des fonds propres qui en découle. Il constitue un support de discussion préalable aux échanges avec le management, les investisseurs ou les partenaires financiers.",
     "La première partie présente les hypothèses et les projections (compte de résultat, bilan, trésorerie, seuil de rentabilité et covenants) ; la seconde en déduit la valeur des fonds propres par actualisation des flux (DCF), multiples de marché et actif net. Toutes les hypothèses sont paramétrées dans l'application et modifiables.");
-  /* Partie A — Business plan (sections 1 à 5) ; Partie B — Valorisation (sections 6 à 9) ; annexes partagées (10) */
-  page=construireBP(pptx,{combine:true,page:page,secBase:0,mention:mention});
-  page=construireValo(pptx,{combine:true,page:page,secBase:5,mention:mention});
-  rpSection(pptx,10,"Annexes",["Glossaire","Lexique financier"],mention,++page);
+  /* RAPPORT FUSIONNÉ (et non deux rapports accolés) :
+     section 1 « Note de synthèse » = résumé du plan PUIS synthèse de valeur ;
+     sections 2 à 5 = projet, hypothèses, projections, analyse ;
+     sections 6 à 8 = valorisation (DCF, marché & patrimoniale, risques) ; section 9 = annexes.
+     La synthèse de valorisation est injectée dans la section 1 via le hook apresSynthese ;
+     construireValo est ensuite appelé sans sa propre section de synthèse. */
+  page=construireBP(pptx,{combine:true,page:page,secBase:0,mention:mention,
+    apresSynthese:p=>construireValo(pptx,{combine:true,page:p,secBase:0,mention:mention,
+      sansSection:true,synthSeule:true})});
+  page=construireValo(pptx,{combine:true,page:page,secBase:4,mention:mention,sansSynthese:true});
+  rpSection(pptx,9,"Annexes",["Glossaire","Lexique financier"],mention,++page);
   rpGlossaire(pptx,B,mention,++page);
   rpLexique(pptx,B,mention,++page);
   rpContacts(pptx,B.cabinet,mention,++page);
