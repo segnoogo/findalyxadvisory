@@ -1900,6 +1900,21 @@ async function exporterExcelModele(){
     H.grace=one("Différé de remboursement (ans — grâce : intérêts payés, capital décalé)",(M.financement&&M.financement.emprunt&&+M.financement.emprunt.grace)||0,"0");
     H.payout=one("Distribution de dividendes (% du RN N−1, si bénéficiaire)",M.dividendes_payout||0,PCT2);
     H.divSeuil=one("Trésorerie minimale avant distribution (FCFA — plancher, vide = 0)",M.dividendes_seuilCash!=null?M.dividendes_seuilCash:"",NF);
+    /* situation d'ouverture : éléments déclarés (non audités, non exhaustifs), symétriques */
+    { const O=M.ouverture||{}, PO=(P.financement.ouverture||{});
+      sec("SITUATION D'OUVERTURE — éléments déclarés, non audités et non exhaustifs");
+      H.ouvTreso=one("Trésorerie disponible à l'ouverture (FCFA)",Math.round((+O.treso||0)),NF);
+      H.ouvCre=one("Créances à recouvrer — facturé non encaissé (FCFA)",Math.round((+O.creances||0)),NF);
+      H.ouvTaux=one("… part jugée recouvrable",(O.tauxRecouv!=null?+O.tauxRecouv:1),PCT2);
+      H.ouvDrec=one("… étalement de l'encaissement (ans)",Math.max(1,Math.round(+O.dureeRecouv||1)),"0");
+      H.ouvDetF=one("Dettes fournisseurs et autres dettes d'exploitation (FCFA)",Math.round((+O.dettesFrn||0)),NF);
+      H.ouvDetS=one("Dettes fiscales et sociales (FCFA)",Math.round((+O.dettesFiscSoc||0)),NF);
+      H.ouvDdet=one("… étalement du règlement (ans)",Math.max(1,Math.round(+O.dureeDettes||1)),"0");
+      hr++; wsH.getCell(hr,2).value=(PO.actif&&!PO.passif)
+        ?"⚠ Actif d'ouverture renseigné sans passif : situation asymétrique à justifier auprès de l'acquéreur."
+        :"Ces éléments alimentent le bilan et la trésorerie sans passer par le compte de résultat ; l'écart éventuel relève d'une garantie d'actif et de passif ou d'un ajustement de prix au closing.";
+      wsH.getCell(hr,2).font={italic:true,size:9,color:{argb:(PO.actif&&!PO.passif)?"FFB35C00":"FF808080"}};
+    }
     sec("BESOIN EN FONDS DE ROULEMENT (jours)");
     const b=M.bfr||{};
     H.dso=one("Délai clients (DSO)",Math.round(+b.dso||0),"0");
@@ -2120,7 +2135,15 @@ async function exporterExcelModele(){
     row("CLI","Créances clients (CA TTC × DSO)",(i,X)=>`${X}${rr("FO")}*${X}${rr("CA")}*(1+${X}${rr("R_TVA")})*(${X}${rr("R_DSO")}*${X}${rr("R_FJ")})/360`,NF);
     row("STK","Stocks (coûts directs × DIO)",(i,X)=>`${X}${rr("FO")}*(-${X}${rr("CD")})*(${X}${rr("R_DIO")}*${X}${rr("R_FJ")})/360`,NF);
     row("FRN","Dettes fournisseurs (hors personnel, TTC × DPO)",(i,X)=>`-${X}${rr("FO")}*(-${X}${rr("CD")}-${X}${rr("FGT")}+${X}${rr("PERS")})*(1+${X}${rr("R_TVA")})*(${X}${rr("R_DPO")}*${X}${rr("R_FJ")})/360`,NF);
-    row("BFR","Besoin en fonds de roulement",(i,X)=>`${X}${rr("CLI")}+${X}${rr("STK")}+${X}${rr("FRN")}`,NF,true);
+    /* situation d'ouverture : résidus encore au bilan (encaissement / règlement étalés) */
+    row("R_OUVTR","Rappel — trésorerie d'ouverture (en unité)",(i,X)=>`${rH}!${H.ouvTreso}/${X}${rr("R_DIV")}`,NF);
+    row("R_OUVCR","Rappel — créances d'ouverture retenues (brut × part recouvrable, en unité)",(i,X)=>`${rH}!${H.ouvCre}*${rH}!${H.ouvTaux}/${X}${rr("R_DIV")}`,NF);
+    row("R_OUVDT","Rappel — dettes d'ouverture (fournisseurs + fiscales et sociales, en unité)",(i,X)=>`(${rH}!${H.ouvDetF}+${rH}!${H.ouvDetS})/${X}${rr("R_DIV")}`,NF);
+    row("R_OUVNR","Rappel — étalement de l'encaissement des créances (ans)",()=>`${rH}!${H.ouvDrec}`,"0");
+    row("R_OUVND","Rappel — étalement du règlement des dettes (ans)",()=>`${rH}!${H.ouvDdet}`,"0");
+    row("OUVCRE","   Créances antérieures restant à recouvrer",(i,X)=>`${X}${rr("R_OUVCR")}*MAX(0,1-${X}${rr("IDX")}/${X}${rr("R_OUVNR")})`,NF);
+    row("OUVDET","   Dettes d'ouverture restant à régler (−)",(i,X)=>`-${X}${rr("R_OUVDT")}*MAX(0,1-${X}${rr("IDX")}/${X}${rr("R_OUVND")})`,NF);
+    row("BFR","Besoin en fonds de roulement",(i,X)=>`${X}${rr("CLI")}+${X}${rr("STK")}+${X}${rr("FRN")}+${X}${rr("OUVCRE")}+${X}${rr("OUVDET")}`,NF,true);
 
     /* ---- BILAN — bouclage par la trésorerie (actif net = capitaux propres) ---- */
     sec2("BILAN — bouclage (actif net = capitaux propres)");
@@ -2130,8 +2153,9 @@ async function exporterExcelModele(){
     row("CAPSOC","   Capital social (rappel du montage, en unité)",(i,X)=>`${rH}!${H.capital}/${X}${rr("R_DIV")}`,NF);
     row("PRIMESR","   Primes liées au capital (rappel du montage, en unité)",(i,X)=>`${rH}!${H.primes}/${X}${rr("R_DIV")}`,NF);
     row("SUBVR","   Subventions d'investissement (rappel du montage, en unité)",(i,X)=>`${rH}!${H.subv}/${X}${rr("R_DIV")}`,NF);
+    row("OUVNET","   Situation nette apportée à l'ouverture (trésorerie + créances retenues − dettes)",(i,X)=>`${X}${rr("R_OUVTR")}+${X}${rr("R_OUVCR")}-${X}${rr("R_OUVDT")}`,NF);
     row("RANR","   Report à nouveau & résultats antérieurs",(i,X)=>`${X}${rr("CP")}-${X}${rr("CAPSOC")}-${X}${rr("PRIMESR")}-${X}${rr("SUBVR")}-${X}${rr("RN")}`,NF);
-    row("CP","Capitaux propres",(i,X)=>`${pRef("CP",i)}+${X}${rr("RN")}-${X}${rr("DIVX")}+IF(${X}${rr("IDX")}=1,${X}${rr("CAPSOC")}+${X}${rr("PRIMESR")}+${X}${rr("SUBVR")},0)`,NF,true);
+    row("CP","Capitaux propres",(i,X)=>`${pRef("CP",i)}+${X}${rr("RN")}-${X}${rr("DIVX")}+IF(${X}${rr("IDX")}=1,${X}${rr("CAPSOC")}+${X}${rr("PRIMESR")}+${X}${rr("SUBVR")}+${X}${rr("OUVNET")},0)`,NF,true);
     row("TRES","Trésorerie nette (bouclage du bilan)",(i,X)=>`${X}${rr("CP")}+${X}${rr("DETTE")}+${X}${rr("CCAS")}-${X}${rr("IMN")}-${X}${rr("BFR")}`,NF,true);
     row("LCT","   Découvert (si trésorerie négative)",(i,X)=>`MAX(0,-${X}${rr("TRES")})`,NF);
     row("DETTEN","   Dettes financières (−, présentation actif net)",(i,X)=>`-${X}${rr("DETTE")}`,NF);
@@ -2141,12 +2165,16 @@ async function exporterExcelModele(){
 
     /* ---- TABLEAU DE FLUX DE TRÉSORERIE ---- */
     sec2("TABLEAU DE FLUX DE TRÉSORERIE");
-    row("ZA","Trésorerie à l'ouverture",(i,X)=>i>0?`${CL(i-1)}${rr("TRES")}`:"0",NF);
+    row("ZA","Trésorerie à l'ouverture",(i,X)=>i>0?`${CL(i-1)}${rr("TRES")}`:`${X}${rr("R_OUVTR")}`,NF);
     row("FA","Capacité d'autofinancement (CAFG)",(i,X)=>`${X}${rr("RN")}+${X}${rr("DOT")}`,NF);
     row("VCR","   Variation des créances",(i,X)=>`-(${X}${rr("CLI")}-${pRef("CLI",i)})`,NF);
     row("VST","   Variation des stocks",(i,X)=>`-(${X}${rr("STK")}-${pRef("STK",i)})`,NF);
     row("VFR","   Variation des dettes d'exploitation",(i,X)=>`-(${X}${rr("FRN")}-${pRef("FRN",i)})`,NF);
-    row("ZB","Flux de trésorerie opérationnels",(i,X)=>`${X}${rr("FA")}+${X}${rr("VCR")}+${X}${rr("VST")}+${X}${rr("VFR")}`,NF,true);
+    /* ouverture : l'encaissement des créances antérieures et le règlement des dettes d'ouverture
+       sont des flux de trésorerie sans effet sur le résultat (produits/charges déjà constatés) */
+    row("VOUV","   Encaissement des créances antérieures et règlement des dettes d'ouverture",
+      (i,X)=>`-(${X}${rr("OUVCRE")}-${i>0?`${CL(i-1)}${rr("OUVCRE")}`:`${X}${rr("R_OUVCR")}`})-(${X}${rr("OUVDET")}-${i>0?`${CL(i-1)}${rr("OUVDET")}`:`(-${X}${rr("R_OUVDT")})`})`,NF);
+    row("ZB","Flux de trésorerie opérationnels",(i,X)=>`${X}${rr("FA")}+${X}${rr("VCR")}+${X}${rr("VST")}+${X}${rr("VFR")}+${X}${rr("VOUV")}`,NF,true);
     row("ZC","Flux d'investissement",(i,X)=>`-${X}${rr("CAPEX")}`,NF,true);
     row("FK","   Augmentation de capital (capital + primes)",(i,X)=>`IF(${X}${rr("IDX")}=1,${X}${rr("CAPSOC")}+${X}${rr("PRIMESR")},0)`,NF);
     row("FL","   Subvention",(i,X)=>`IF(${X}${rr("IDX")}=1,${X}${rr("SUBVR")},0)`,NF);
@@ -2234,7 +2262,8 @@ async function exporterExcelModele(){
       ["   Immobilisations brutes","BRUT"],["   Amortissements cumulés","AMCN"],["Actifs immobilisés (nets)","IMN",1],
       [],
       ["Besoin en fonds de roulement",null],
-      ["   Stocks","STK"],["   Créances clients","CLI"],["   Dettes fournisseurs","FRNP"],["Besoin en fonds de roulement global","BFR",1],
+      ["   Stocks","STK"],["   Créances clients","CLI"],["   Créances antérieures à recouvrer (ouverture)","OUVCRE"],
+      ["   Dettes fournisseurs","FRNP"],["   Dettes d'ouverture à régler","OUVDET"],["Besoin en fonds de roulement global","BFR",1],
       [],
       ["Trésorerie",null],
       ["   Trésorerie active","TRA"],["   Concours bancaires courants (découvert)","DECN"],["Trésorerie nette","TRES",1],
@@ -2244,14 +2273,20 @@ async function exporterExcelModele(){
       [],
       ["Capitaux propres",null],
       ["   Capital social","CAPSOC"],["   Primes liées au capital","PRIMESR"],["   Subventions d'investissement","SUBVR"],
+      ["   Situation nette apportée à l'ouverture","OUVNET"],
       ["   Report à nouveau et résultats antérieurs","RANR"],["   Résultat net de l'exercice","RN"],["Capitaux propres","CP",1],
       [],
       ["Contrôle : actif net − capitaux propres (= 0)","CTRL"]];
     feuille(nB,"Bilan prévisionnel détaillé — présentation actif net",bsDefs,
-      "Actifs immobilisés (nets) + BFR + trésorerie nette − dettes financières = Actif net = Capitaux propres. La trésorerie boucle le bilan ; la ligne de contrôle doit être nulle.");
+      "Actifs immobilisés (nets) + BFR + trésorerie nette − dettes financières − comptes courants d'associés = Actif net = Capitaux propres. La trésorerie boucle le bilan ; la ligne de contrôle doit être nulle."
+      +((P.financement.ouverture&&(P.financement.ouverture.actif||P.financement.ouverture.passif))
+        ?" Situation d'ouverture : éléments déclarés par la direction, non audités et non exhaustifs ; l'écart éventuel relève d'une garantie d'actif et de passif ou d'un ajustement de prix au closing."
+          +((P.financement.ouverture.actif&&!P.financement.ouverture.passif)?" ⚠ Un actif d'ouverture est renseigné sans aucun passif : situation asymétrique, à justifier.":"")
+        :""));
     feuille(nT,"Tableau des flux de trésorerie",[
       ["Trésorerie nette à l'ouverture","ZA"],["Capacité d'autofinancement (CAFG)","FA"],
       ["Variation des créances","VCR"],["Variation des stocks","VST"],["Variation des dettes d'exploitation","VFR"],
+      ["Encaissement des créances antérieures et règlement des dettes d'ouverture","VOUV"],
       ["Flux opérationnels","ZB",1],["Flux d'investissement","ZC",1],["Augmentation de capital","FK"],
       ["Subvention","FL"],["Emprunts nouveaux","TIR"],["Remboursements","REMB"],
       ["Apport en comptes courants d'associés","TIRCCA"],["Remboursement des comptes courants","REMCCA"],
