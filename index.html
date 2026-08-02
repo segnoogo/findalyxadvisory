@@ -6497,7 +6497,7 @@ async function exporterExcelModele(){
     const fypPh=P.annees.map((a,i)=>"FY"+String(a).slice(-2)+"p"+(i<ncPh?" (constr.)":""));  /* en-tête présentation : phase marquée */
     const CL=i=>String.fromCharCode(67+i);              /* colonne de l'année i (0-based) : C, D, … */
     /* scénario : plus de facteur incorporé ici — le bloc « SCÉNARIO » des Hypothèses expose fCA/fCout/fJours, appliqués dans le Modèle */
-    const JAUNE={type:"pattern",pattern:"solid",fgColor:{argb:"FFFFF2CC"}};
+    const BLEU={color:{argb:"FF0000FF"}};   /* convention : saisies en bleu, calculs en noir, renvois en vert */
     const wb=new ExcelJS.Workbook();
     const nA="Accueil",nH=nomOnglet("Hypothèses"),nC=nomOnglet("Modèle"),
       nP=nomOnglet("P&L prévisionnel"),nB=nomOnglet("Bilan prévisionnel"),nT=nomOnglet("TFT prévisionnel"),
@@ -6508,7 +6508,7 @@ async function exporterExcelModele(){
 
     /* ================= HYPOTHÈSES (jaune = modifiable) ================= */
     const wsH=wb.addWorksheet(nH);
-    titreLiasse(wsH,"Hypothèses du modèle — cellules jaunes modifiables — scénario "+((M.scenarios&&M.scenario&&M.scenarios[M.scenario]&&M.scenarios[M.scenario].lab)||"Central")+" intégré");
+    titreLiasse(wsH,"Hypothèses du modèle — valeurs saisies en bleu (modifiables), calculs en noir — scénario "+((M.scenarios&&M.scenario&&M.scenarios[M.scenario]&&M.scenarios[M.scenario].lab)||"Central")+" intégré");
     const GC=CL(N);   /* colonne « Croissance %/an » (juste après les N colonnes d'années) */
     styliserEntete(wsH.addRow([null,"Hypothèse",...fyp,"Croiss. %/an"]),2);
     wsH.views=[{state:"frozen",xSplit:2,ySplit:wsH.rowCount}];   /* titre + années figés, libellés figés */
@@ -6517,15 +6517,15 @@ async function exporterExcelModele(){
     /* en-tête de section : bandeau + 2 lignes vides avant (blocs bien séparés) */
     const sec=t=>{ if(!hSecFirst)hr+=2; hSecFirst=false; hr++; const r=wsH.getRow(hr); r.getCell(2).value=t;
       for(let c=2;c<=3+N;c++){const cc=r.getCell(c);cc.fill={type:"pattern",pattern:"solid",fgColor:{argb:"FF213768"}};cc.font={bold:true,color:{argb:"FFFFFFFF"},size:10.5};} };
-    const one=(lib,v,fmt)=>{hr++;wsH.getCell(hr,2).value=lib;const c=wsH.getCell(hr,3);c.value=v;if(fmt)c.numFmt=fmt;c.fill=JAUNE;return "$C$"+hr;};
-    const ser=(lib,vals,fmt)=>{hr++;wsH.getCell(hr,2).value=lib;for(let i=0;i<N;i++){const c=wsH.getCell(hr,3+i);c.value=(vals[i]==null?0:vals[i]);if(fmt)c.numFmt=fmt;c.fill=JAUNE;}return hr;};
+    const one=(lib,v,fmt)=>{hr++;wsH.getCell(hr,2).value=lib;const c=wsH.getCell(hr,3);c.value=v;if(fmt)c.numFmt=fmt;c.font=BLEU;return "$C$"+hr;};
+    const ser=(lib,vals,fmt)=>{hr++;wsH.getCell(hr,2).value=lib;for(let i=0;i<N;i++){const c=wsH.getCell(hr,3+i);c.value=(vals[i]==null?0:vals[i]);if(fmt)c.numFmt=fmt;c.font=BLEU;}return hr;};
     /* base (an 1, jaune) + croissance %/an (jaune) → la SÉRIE ANNUELLE est calculée ICI, dans les
        colonnes d'années (formules grises). Le Modèle IMPORTE la série (INDEX) sans jamais recalculer
        une évolution : chaque hypothèse est lisible année par année à sa source. */
     const grow2=(lib,base,g,bfmt)=>{hr++;wsH.getCell(hr,2).value=lib;
-      const c=wsH.getCell(hr,3);c.value=(base==null?0:base);c.numFmt=bfmt||QF;c.fill=JAUNE;
-      for(let i=1;i<N;i++){const e=wsH.getCell(hr,3+i);e.value={formula:`$C$${hr}*(1+$${GC}$${hr})^${i}`};e.numFmt=bfmt||QF;e.font={italic:true,color:{argb:"FF6B7280"}};}
-      const d=wsH.getCell(hr,3+N);d.value=(g==null?0:g);d.numFmt=PCT2;d.fill=JAUNE;return {row:hr};};
+      const c=wsH.getCell(hr,3);c.value=(base==null?0:base);c.numFmt=bfmt||QF;c.font=BLEU;
+      for(let i=1;i<N;i++){const e=wsH.getCell(hr,3+i);e.value={formula:`$C$${hr}*(1+$${GC}$${hr})^${i}`};e.numFmt=bfmt||QF;}
+      const d=wsH.getCell(hr,3+N);d.value=(g==null?0:g);d.numFmt=PCT2;d.font=BLEU;return {row:hr};};
     const rng=row=>`${rH}!$C$${row}:$${CL(N-1)}$${row}`;   /* plage horizontale d'une série (par année d'exploitation) */
     const Nc=Math.max(0,Math.min((M.dureeConstruction!=null?Math.round(+M.dureeConstruction):0),N-1));
     /* ---- UNITÉ D'AFFICHAGE : diviseur piloté par une liste déroulante (reflète le sélecteur d'unité de l'app).
@@ -6534,7 +6534,7 @@ async function exporterExcelModele(){
     const uLabels={F:"FCFA",K:"Milliers (KFCFA)",M:"Millions (MFCFA)"};
     sec("UNITÉ D'AFFICHAGE — pilote toutes les valeurs monétaires du classeur");
     hr++; wsH.getCell(hr,2).value="Unité (liste déroulante)";
-    const cUn=wsH.getCell(hr,3); cUn.value=(uLabels[(DOSSIER&&DOSSIER.unite)||"K"]||uLabels.K); cUn.fill=JAUNE;
+    const cUn=wsH.getCell(hr,3); cUn.value=(uLabels[(DOSSIER&&DOSSIER.unite)||"K"]||uLabels.K); cUn.font=BLEU;
     cUn.dataValidation={type:"list",allowBlank:false,showErrorMessage:true,formulae:['"FCFA,Milliers (KFCFA),Millions (MFCFA)"']};
     H.unite="$C$"+hr;
     hr++; wsH.getCell(hr,2).value="Diviseur appliqué dans les formules (FCFA ÷)";
@@ -6552,10 +6552,10 @@ async function exporterExcelModele(){
     hr++; { const r=wsH.getRow(hr); r.getCell(2).value="Paramètres par scénario"; r.getCell(3).value="Δ Volume/CA"; r.getCell(4).value="Δ Marge"; r.getCell(5).value="Δ Délais BFR"; for(let c=2;c<=5;c++){r.getCell(c).font={bold:true,italic:true,size:9,color:{argb:"FF224289"}};} }
     const rT1=hr+1;
     SCEN.forEach(function(s){ hr++; const r=wsH.getRow(hr); r.getCell(2).value=s.lab; r.getCell(2).font={italic:true,color:{argb:"FF224289"}};
-      [[3,s.dCA],[4,s.dMarge],[5,s.dJours]].forEach(function(cv){const cc=r.getCell(cv[0]);cc.value=cv[1];cc.numFmt=PCT2;cc.fill=JAUNE;}); });
+      [[3,s.dCA],[4,s.dMarge],[5,s.dJours]].forEach(function(cv){const cc=r.getCell(cv[0]);cc.value=cv[1];cc.numFmt=PCT2;cc.font=BLEU;}); });
     const rT2=hr, tRange=`$B$${rT1}:$E$${rT2}`;
     hr++; wsH.getCell(hr,2).value="Scénario actif (liste déroulante)";
-    const cSc=wsH.getCell(hr,3); cSc.value=scenActifLab; cSc.fill=JAUNE;
+    const cSc=wsH.getCell(hr,3); cSc.value=scenActifLab; cSc.font=BLEU;
     cSc.dataValidation={type:"list",allowBlank:false,showErrorMessage:true,formulae:['"'+SCEN.map(function(s){return s.lab;}).join(",")+'"']};
     H.scenActif="$C$"+hr;
     const facRow=function(lib,expr){hr++;wsH.getCell(hr,2).value=lib;const c=wsH.getCell(hr,3);c.value={formula:expr};c.numFmt="0.000";c.fill={type:"pattern",pattern:"solid",fgColor:{argb:"FFEFEFEF"}};c.font={italic:true,color:{argb:"FF6B7280"}};return "$C$"+hr;};
@@ -6633,7 +6633,7 @@ async function exporterExcelModele(){
         const gg=one("   Croissance /an",((+pp.g||0)/100),PCT2);
         /* série annuelle calculée ICI (effectif × salaire × 12, évoluée) — le Modèle importe la série */
         hr++;wsH.getCell(hr,2).value="   → Charge annuelle du poste (FCFA/an)";
-        for(let i=0;i<N;i++){const e=wsH.getCell(hr,3+i);e.value={formula:`${eff}*${sal}*12*(1+${gg})^${i}`};e.numFmt=NF;e.font={italic:true,color:{argb:"FF6B7280"}};}
+        for(let i=0;i<N;i++){const e=wsH.getCell(hr,3+i);e.value={formula:`${eff}*${sal}*12*(1+${gg})^${i}`};e.numFmt=NF;}
         H.persPostes.push({serie:hr,name:pp.poste||("Poste "+(k+1))});
       });
     }
@@ -6641,9 +6641,9 @@ async function exporterExcelModele(){
     H.capM=[];H.capDur=[];H.capAn=[];
     (M.capex||[]).forEach((c,k)=>{
       hr++;wsH.getCell(hr,2).value="CAPEX "+(k+1)+" — "+(c.name||"Investissement");
-      const cm=wsH.getCell(hr,3);cm.value=(c.montant!=null?+c.montant:0);cm.numFmt=NF;cm.fill=JAUNE;H.capM[k]="$C$"+hr;
-      const cd=wsH.getCell(hr,4);cd.value=+c.duree||5;cd.numFmt="0";cd.fill=JAUNE;H.capDur[k]="$D$"+hr;
-      const ca=wsH.getCell(hr,5);ca.value=Math.max(1,Math.round(+c.annee||1));ca.numFmt="0";ca.fill=JAUNE;H.capAn[k]="$E$"+hr;
+      const cm=wsH.getCell(hr,3);cm.value=(c.montant!=null?+c.montant:0);cm.numFmt=NF;cm.font=BLEU;H.capM[k]="$C$"+hr;
+      const cd=wsH.getCell(hr,4);cd.value=+c.duree||5;cd.numFmt="0";cd.font=BLEU;H.capDur[k]="$D$"+hr;
+      const ca=wsH.getCell(hr,5);ca.value=Math.max(1,Math.round(+c.annee||1));ca.numFmt="0";ca.font=BLEU;H.capAn[k]="$E$"+hr;
       wsH.getCell(hr,6).value="montant (FCFA) / durée / année";wsH.getCell(hr,6).font={italic:true,size:9,color:{argb:"FF808080"}};
     });
     sec("FINANCEMENT — montage initial (tiré en année 1)");
@@ -6933,7 +6933,10 @@ async function exporterExcelModele(){
       const rn=R[d[0]];const r=wsC.getRow(rn);r.getCell(2).value=d[1];
       if(d[5]==="sub"){ r.getCell(2).font={bold:true,italic:true,color:{argb:"FF224289"}}; return; }   /* sous-titre de bloc */
       if(d[5]){ for(let c=2;c<3+N;c++){const cc=r.getCell(c);cc.fill={type:"pattern",pattern:"solid",fgColor:{argb:"FF213768"}};cc.font={bold:true,color:{argb:"FFFFFFFF"},size:10.5};} return; }
-      for(let i=0;i<N;i++){const c=r.getCell(3+i);c.value={formula:d[2](i,CL(i))};c.numFmt=d[3];}
+      let lien=false;
+      for(let i=0;i<N;i++){const c=r.getCell(3+i);const f=d[2](i,CL(i));c.value={formula:f};c.numFmt=d[3];if(String(f).indexOf("Hypoth")>=0)lien=true;}
+      if(lien){ const VERT={color:{argb:"FF107C41"}};   /* renvoi d'hypothèses : convention verte */
+        r.getCell(2).font=VERT; for(let i=0;i<N;i++)r.getCell(3+i).font=VERT; }
       if(d[4]){r.font={bold:true,color:{argb:"FF172554"}};for(let c=2;c<3+N;c++)r.getCell(c).fill=FOND_TOTAL;}});
     wsC.columns=[{width:3},{width:52},...fyp.map(()=>({width:13}))];
 
@@ -6984,7 +6987,7 @@ async function exporterExcelModele(){
     plDefs.push(["Impôt sur les sociétés","IS"]);
     plDefs.push(["Résultat net","RN",1]);
     feuille(nP,"Compte de résultat prévisionnel détaillé",plDefs,
-      "Chaque ligne de revenus, de coûts et chaque charge est dépliée. Cellules calculées à partir des Hypothèses (jaune) via Calculs.");
+      "Chaque ligne de revenus, de coûts et chaque charge est dépliée. Cellules calculées à partir des Hypothèses (saisies en bleu) via le Modèle ; renvois d'hypothèses en vert.");
     /* ---- BILAN DÉTAILLÉ (présentation actif net) ---- */
     const bsDefs=[
       ["Actif immobilisé",null],
@@ -7146,7 +7149,7 @@ async function exporterExcelModele(){
     wsA.getCell("B3").value="Business plan — projet — modèle financier";wsA.getCell("B3").font={size:11,color:{argb:"FF6B7280"}};
     wsA.getCell("B4").value="Généré le "+new Date().toLocaleDateString("fr-FR",{day:"numeric",month:"long",year:"numeric"})+" · "+(cabinetExport()||"Findalyx Advisory");wsA.getCell("B4").font={size:9,color:{argb:"FF808080"}};
     wsA.getCell("B6").value="Feuilles du classeur";wsA.getCell("B6").font={bold:true,color:{argb:"FF224289"}};
-    const nav=[["Hypothèses",nH,"Cellules jaunes modifiables — tout le classeur se recalcule."],
+    const nav=[["Hypothèses",nH,"Valeurs saisies en bleu (modifiables) — tout le classeur se recalcule."],
       ["Modèle",nC,"Modèle financier détaillé par section (CA, coûts, charges, amortissements & VNC, dette, résultat, BFR, bilan, trésorerie)."],
       ["P&L prévisionnel",nP,"Compte de résultat sur l'horizon du plan."],
       ["Bilan prévisionnel",nB,"Grandes masses, bouclé par la trésorerie."],
