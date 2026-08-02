@@ -6647,6 +6647,7 @@ async function exporterExcelModele(){
       wsH.getCell(hr,6).value="montant (FCFA) / durée / année";wsH.getCell(hr,6).font={italic:true,size:9,color:{argb:"FF808080"}};
     });
     sec("FINANCEMENT — montage initial (tiré en année 1)");
+    H.moisBFR=one("BFR de démarrage (mois de charges de l'année 1)",(M.financement&&M.financement.moisBFR!=null?+M.financement.moisBFR:3),"0.0");
     H.capital=one("Capital social (FCFA)",Math.round((P.financement.capital||0)*1000),NF);
     H.primes=one("Primes liées au capital (FCFA)",Math.round((P.financement.primes||0)*1000),NF);
     H.cca0=one("Comptes courants d'associés — CCA (FCFA)",Math.round((P.financement.cca||0)*1000),NF);
@@ -7027,20 +7028,38 @@ async function exporterExcelModele(){
     const Pf=P.financement, wsSU=wb.addWorksheet(nSU);
     titreLiasse(wsSU,"Sources & Emplois du montage");
     { const suHdr=wsSU.addRow([null,"Rubrique",""]); styliserEntete(suHdr,1); suHdr.getCell(3).value={formula:`"Montant ("&${rH}!${H.unite}&")"`}; wsSU.views=[{state:"frozen",xSplit:2,ySplit:suHdr.number}]; }
-    const suRow=(lib,x,tot)=>{const r=wsSU.addRow([null,lib]);r.getCell(3).value={formula:`${Math.round((x||0)*1000)}/${DIV}`};r.getCell(3).numFmt=NF;if(tot){r.font={bold:true,color:{argb:"FF172554"}};r.getCell(2).fill=FOND_TOTAL;r.getCell(3).fill=FOND_TOTAL;}return r;};
+    /* rangée en VALEUR (instantané) ou en FORMULE vivante — les emplois et les ressources
+       référencent les cellules d'hypothèses ; changer une hypothèse recalcule le montage */
+    const suRow=(lib,x,tot)=>{const r=wsSU.addRow([null,lib]);r.getCell(3).value={formula:`${Math.round((x||0)*1000)}/${DIV}`};r.getCell(3).numFmt=NF;if(tot){r.font={bold:true,color:{argb:"FF172554"}};r.getCell(2).fill=FOND_TOTAL;r.getCell(3).fill=FOND_TOTAL;}return r.number;};
+    const suF=(lib,f,tot)=>{const r=wsSU.addRow([null,lib]);r.getCell(3).value={formula:f};r.getCell(3).numFmt=NF;if(tot){r.font={bold:true,color:{argb:"FF172554"}};r.getCell(2).fill=FOND_TOTAL;r.getCell(3).fill=FOND_TOTAL;}return r.number;};
     wsSU.addRow([null,"EMPLOIS"]).getCell(2).font={bold:true,color:{argb:"FF224289"}};
-    suRow("Investissements (jusqu'à la mise en service)",Pf.capexFinance);
-    suRow("BFR de démarrage",Pf.bfrDemarrage);
+    const rCapexF=suF("Investissements (jusqu'à la mise en service)",
+      (M.capex||[]).length?("("+(M.capex||[]).map((_,k)=>`IF(${rH}!${H.capAn[k]}<=${rH}!${H.nc}+1,${rH}!${H.capM[k]},0)`).join("+")+`)/${DIV}`):"0");
+    const rBfrD=suF("BFR de démarrage (mois × charges de l'année 1)",
+      `${rH}!${H.moisBFR}/12*(-(${rC}!C${rr("CD")}+${rC}!C${rr("FGT")}))`);
     if(Pf.idc>0.01)suRow("Intérêts de construction (IDC)",Pf.idc);
-    const rEmp=wsSU.rowCount+1;suRow("Total emplois",Pf.emplois,true);
+    const rEmp=suF("Total emplois",`SUM(C${rCapexF}:C${wsSU.rowCount})`,true);
     wsSU.addRow([]);
     wsSU.addRow([null,"RESSOURCES"]).getCell(2).font={bold:true,color:{argb:"FF224289"}};
-    suRow("Capital social"+(Pf.mode==="auto"?" ("+Math.round(Pf.partFP*100)+" %)":""),Pf.capital);
-    if(Pf.primes>0.01)suRow("Primes liées au capital",Pf.primes);
-    if(Pf.cca>0.01)suRow("Comptes courants d'associés (CCA)",Pf.cca);
-    if(Pf.subvention>0.01)suRow("Subvention",Pf.subvention);
-    suRow("Dette"+(Pf.idc>0.01?" (dont IDC)":""),Pf.detteAvecIDC);
-    suRow("Total ressources",Pf.sources,true);
+    suF("Capital social"+(Pf.mode==="auto"?" ("+Math.round(Pf.partFP*100)+" %)":""),`${rH}!${H.capital}/${DIV}`);
+    const rRes1=wsSU.rowCount;
+    suF("Primes liées au capital",`${rH}!${H.primes}/${DIV}`);
+    suF("Comptes courants d'associés (CCA)",`${rH}!${H.cca0}/${DIV}`);
+    suF("Subvention",`${rH}!${H.subv}/${DIV}`);
+    suF("Dette"+(Pf.idc>0.01?" (dont IDC, instantané)":""),Pf.idc>0.01?`${Math.round((Pf.detteAvecIDC||0)*1000)}/${DIV}`:`${rH}!${H.dette}/${DIV}`);
+    suF("Total ressources",`SUM(C${rRes1}:C${wsSU.rowCount})`,true);
+    /* source d'équilibrage : la cellule d'hypothèse correspondante devient une formule qui boucle
+       le montage (besoin − autres sources), hors période de construction (IDC autofinancé) */
+    if(Pf.mode==="manuel"&&(M.financement&&M.financement.plug)&&!(Pf.dureeConstruction>0)){
+      const plug=M.financement.plug;
+      const cible=plug==="cca"?H.cca0:(plug==="capital"?H.capital:(plug==="dette"?H.dette:null));
+      if(cible){
+        const autres=[H.capital,H.primes,H.cca0,H.dette].filter(c=>c!==cible).map(c=>`${rH}!${c}`).join("-");
+        const cc=wsH.getCell(+cible.match(/\d+/)[0],3);
+        cc.value={formula:`MAX(0,${q(nSU)}!C${rEmp}*${DIV}-${rH}!${H.subv}-${autres.length?autres:"0"})`};
+        cc.fill={type:"pattern",pattern:"solid",fgColor:{argb:"FFEFEFEF"}};cc.font={italic:true,color:{argb:"FF6B7280"}};
+      }
+    }
     wsSU.addRow([]);
     const rNote=wsSU.addRow([null,"Durée de construction : "+(Pf.dureeConstruction||0)+" an(s) ; exploitation à partir de l'année "+Pf.anneeExploit+"."]);
     rNote.getCell(2).font={italic:true,size:9,color:{argb:"FF808080"}};
