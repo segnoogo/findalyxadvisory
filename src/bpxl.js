@@ -274,7 +274,7 @@ function construireFeuillesBP(wb){
    {rn:rb.CP,lib:"Capitaux propres",st:1,hist:a=>v.CAPITAUX_PROPRES[a],
     f:i=>`${Bp(rb.CP,i)}+${P(rp.RN,i)}-${B(rb.DIV,i)}`},
    {rn:rb.DIV,lib:"Dividendes versés (mémo)",pctRow:1,hist:()=>0,
-    f:i=>`MAX(0,${h1(hy.payout)}*${Pp(rp.RN,i)})`},
+    f:i=>`MIN(MAX(0,${h1(hy.payout)}*${Pp(rp.RN,i)}),MAX(0,${Bp(rb.TRES,i)}))`},
    {rn:rb.DET,lib:"Dettes financières",hist:a=>-v.DETTES_FINANCIERES[a],
     f:i=>`${D(rd.CLO,i)}`},
    {rn:rb.PROV,lib:"Provisions pour risques et charges",hist:a=>-v.PROVISIONS_RC[a],

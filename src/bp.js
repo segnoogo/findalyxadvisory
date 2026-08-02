@@ -209,7 +209,11 @@ function projeterBP(etats,H,scenario){
     const autresDet=H.autresDettes_fixe;             /* hors exploitation : figé (HAO inclus) */
     const bfr=clients+stocks+fournisseurs+dettesFiscSoc+autresCr+autresDet;
     /* --- capitaux propres & dividendes --- */
-    const div=H.dividendes_payout>0&&rnPrec>0?H.dividendes_payout*rnPrec:0;
+    /* dividende = payout × RN N−1 si bénéficiaire, TOUJOURS plafonné par la trésorerie d'ouverture
+       (moins le plancher éventuel) : pas de distribution financée par le découvert */
+    const div=H.dividendes_payout>0&&rnPrec>0
+      ?Math.min(H.dividendes_payout*rnPrec,Math.max(0,tresoP-((+H.dividendes_seuilCash||0))))
+      :0;
     cp=cp+rn-div;
     /* --- trésorerie = bouclage du bilan (position nette) --- */
     const immoNet=brut-amortCum;
@@ -480,11 +484,10 @@ function projeterModele(M,scenario){
     var fournisseurs=isOp?-(Math.abs(cd)+Math.abs(opexTot))*(1+tva)*((bfrH.dpo||0)*fJours)/360:0;
     var bfr=clients+stocks+fournisseurs;
     /* --- CP & trésorerie de bouclage --- */
-    /* dividendes : payout × résultat net de l'exercice précédent, si bénéficiaire (même convention que projeterBP).
-       Plancher optionnel : ne distribuer que ce que la trésorerie d'ouverture permet au-delà du minimum à conserver. */
+    /* dividendes : payout × résultat net de l'exercice précédent, si bénéficiaire — TOUJOURS plafonné
+       par la trésorerie d'ouverture moins le plancher (défaut 0 : jamais financé par le découvert) */
     var div=(M.dividendes_payout>0&&rnPrec>0)?M.dividendes_payout*rnPrec:0;
-    if(div>0&&M.dividendes_seuilCash!=null&&isFinite(+M.dividendes_seuilCash))
-      div=Math.min(div,Math.max(0,tresoP-(+M.dividendes_seuilCash||0)/SC));
+    if(div>0) div=Math.min(div,Math.max(0,tresoP-(+M.dividendes_seuilCash||0)/SC));
     cp=cp+rn-div;
     var immoNet=brut-amortCum;
     var tresoNette=cp+dette+ccaSolde+provisions-immoNet-bfr;
