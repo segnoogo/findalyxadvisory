@@ -397,7 +397,9 @@ function vueModele(){
           +(Pf.cca?'<div class="hyp-l"><span>Comptes courants d\'associés (CCA'+(Pf.ccaTaux?', '+(Pf.ccaTaux*100).toFixed(1)+' %':', 0 %')+' · '+(Pf.ccaMode==='infine'?'in fine':Pf.ccaMode==='lineaire'?'linéaire':'maintenu')+')</span><b style="color:#8a5a00">'+fmt(Pf.cca)+' '+u.suf+'</b></div>':'')
           +(Pf.subvention?'<div class="hyp-l"><span>Subvention</span><b>'+fmt(Pf.subvention)+' '+u.suf+'</b></div>':'')
           +'<div class="hyp-l"><span>Dette'+(Pf.idc>0.01?' (dont IDC)':'')+'</span><b style="color:#224289">'+fmt(Pf.detteAvecIDC)+' '+u.suf+'</b></div>'
-          +'<div class="hyp-l" style="border-top:2px solid #224289;padding-top:6px"><span><b>Total ressources</b></span><b>'+fmt(Pf.sources)+' '+u.suf+'</b></div></div>'
+          +'<div class="hyp-l" style="border-top:2px solid #224289;padding-top:6px"><span><b>Total ressources</b></span><b>'+fmt(Pf.sources)+' '+u.suf+'</b></div>'
+          +((!auto&&Math.abs(Pf.sources-Pf.emplois)>0.5)?'<div class="hyp-l" style="color:'+(Pf.sources<Pf.emplois?'#c0392b':'#8a5a00')+'"><span><b>'+(Pf.sources<Pf.emplois?'Besoin non couvert (part en découvert à défaut)':'Excédent de financement (trésorerie initiale)')+'</b></span><b>'+fmt(Math.abs(Pf.sources-Pf.emplois))+' '+u.suf+'</b></div>':'')
+          +'</div>'
       +'</div></div>';
     if(auto){
       corps='<div class="card"><div class="sec-titre" style="margin-top:0">Financement — automatique</div>'+modeSeg+consLigne
@@ -407,20 +409,29 @@ function vueModele(){
         +empBloc+su
         +'<div class="mut" style="margin-top:8px">Le besoin (investissements + BFR de démarrage + IDC) est réparti fonds propres / dette selon la part choisie ; amortissement et remboursement démarrent à la mise en service. En automatique, les fonds propres sont entièrement en capital social — pour <b>répartir</b> entre capital social, primes liées au capital et comptes courants d\'associés (CCA), passez en mode <b>Manuel</b>.</div></div>';
     } else {
-      var ccaMode=(f.ccaMode||"maintenu");
+      var ccaMode=(f.ccaMode||"maintenu"), plug=(f.plug||"");
       var ccaSeg='<span class="segvue">'
         +'<button class="'+(ccaMode==="maintenu"?"on":"")+'" onclick="mSet(\'financement.ccaMode\',\'maintenu\')">Maintenu</button>'
         +'<button class="'+(ccaMode==="infine"?"on":"")+'" onclick="mSet(\'financement.ccaMode\',\'infine\')">In fine</button>'
         +'<button class="'+(ccaMode==="lineaire"?"on":"")+'" onclick="mSet(\'financement.ccaMode\',\'lineaire\')">Linéaire</button></span>';
-      corps='<div class="card"><div class="sec-titre" style="margin-top:0">Financement — manuel</div>'+modeSeg+consLigne
-        +'<div class="hyp-g"><span>Capital social</span><input class="sel ninm" value="'+mAmt(f.capital||0)+'" oninput="mSep(this)" onchange="mSet(\'financement.capital\',this.value,1)"><span class="suf"></span></div>'
+      /* champ saisi, ou calculé (grisé) si désigné comme source d'équilibrage */
+      var champFin=function(champ,pfVal){return plug===champ
+        ?'<input class="sel ninm" value="'+mAmt(Math.round((pfVal||0)*1000))+'" disabled style="background:#f2f4f8;color:#5a6472" title="Calculé : source d\'équilibrage">'
+        :null;};
+      var plugSel='<div class="hyp-l"><span>Source d\'équilibrage <span class="mut">· calculée pour couvrir exactement le besoin</span></span><select class="sel" style="width:auto" onchange="mSet(\'financement.plug\',this.value||null)">'
+        +'<option value=""'+(plug===""?" selected":"")+'>Aucune — montants saisis tels quels</option>'
+        +'<option value="cca"'+(plug==="cca"?" selected":"")+'>CCA (solde du montage)</option>'
+        +'<option value="capital"'+(plug==="capital"?" selected":"")+'>Capital social (solde du montage)</option>'
+        +'<option value="dette"'+(plug==="dette"?" selected":"")+'>Emprunt (solde du montage)</option></select></div>';
+      corps='<div class="card"><div class="sec-titre" style="margin-top:0">Financement — manuel</div>'+modeSeg+consLigne+plugSel
+        +'<div class="hyp-g"><span>Capital social</span>'+(champFin("capital",Pf.capital)||'<input class="sel ninm" value="'+mAmt(f.capital||0)+'" oninput="mSep(this)" onchange="mSet(\'financement.capital\',this.value,1)">')+'<span class="suf"></span></div>'
         +'<div class="hyp-g"><span>Primes liées au capital <span class="mut">· émission / apport</span></span><input class="sel ninm" value="'+mAmt(f.primes||0)+'" oninput="mSep(this)" onchange="mSet(\'financement.primes\',this.value,1)"><span class="suf"></span></div>'
-        +'<div class="hyp-g"><span>Comptes courants d\'associés (CCA) <span class="mut">· dette financière</span></span><input class="sel ninm" value="'+mAmt(f.apports||0)+'" oninput="mSep(this)" onchange="mSet(\'financement.apports\',this.value,1)"><span class="suf"></span></div>'
+        +'<div class="hyp-g"><span>Comptes courants d\'associés (CCA) <span class="mut">· dette financière</span></span>'+(champFin("cca",Pf.cca)||'<input class="sel ninm" value="'+mAmt(f.apports||0)+'" oninput="mSep(this)" onchange="mSet(\'financement.apports\',this.value,1)">')+'<span class="suf"></span></div>'
         +'<div class="hyp-g"><span>CCA — taux de rémunération <span class="mut">· 0 % = non rémunéré</span></span><input class="sel" value="'+((f.ccaTaux||0)*100)+'" onchange="mSet(\'financement.ccaTaux\',(numFR(this.value)||0)/100)"><span class="suf">%</span></div>'
         +'<div class="hyp-l"><span>CCA — remboursement</span>'+ccaSeg+'</div>'
         +(ccaMode!=="maintenu"?'<div class="hyp-g"><span>CCA — '+(ccaMode==="infine"?'année de remboursement':'durée de remboursement')+'</span><input class="sel" value="'+(f.ccaDuree||(M.nb||5))+'" onchange="mSet(\'financement.ccaDuree\',this.value,1)"><span class="suf">'+(ccaMode==="infine"?'(année du plan)':'ans')+'</span></div>':'')
         +'<div class="hyp-g"><span>Subvention</span><input class="sel ninm" value="'+mAmt(f.subvention||0)+'" oninput="mSep(this)" onchange="mSet(\'financement.subvention\',this.value,1)"><span class="suf"></span></div>'
-        +'<div class="hyp-g"><span>Emprunt — montant</span><input class="sel ninm" value="'+mAmt(e.montant||0)+'" oninput="mSep(this)" onchange="mSet(\'financement.emprunt.montant\',this.value,1)"><span class="suf"></span></div>'
+        +'<div class="hyp-g"><span>Emprunt — montant</span>'+(champFin("dette",Pf.dette)||'<input class="sel ninm" value="'+mAmt(e.montant||0)+'" oninput="mSep(this)" onchange="mSet(\'financement.emprunt.montant\',this.value,1)">')+'<span class="suf"></span></div>'
         +empBloc+su
         +'<div class="mut" style="margin-top:8px">Le financement est tiré en année 1 ; en cas de construction, les intérêts courent et sont capitalisés dans la dette (IDC). Le CCA est une dette financière (quasi-fonds propres) : inclus dans la dette nette de la valorisation, reclassable dans le pont. Aucun bilan d\'ouverture.</div></div>';
     }

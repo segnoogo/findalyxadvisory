@@ -375,7 +375,14 @@ function projeterModele(M,scenario){
   var capital, primes=0, cca0=0, detteBase;
   var ccaTaux=(+fin.ccaTaux||0), ccaMode=(fin.ccaMode||"maintenu"), ccaDuree=Math.max(1,Math.round(+fin.ccaDuree||N));
   if(fin.mode==="auto"){ var baseBesoin=Math.max(0,capexFinance+bfrDem-subv); capital=baseBesoin*partFP; detteBase=baseBesoin*(1-partFP); }
-  else { capital=(+fin.capital||0)/SC; primes=(+fin.primes||0)/SC; cca0=(+fin.apports||0)/SC; detteBase=((fin.emprunt&&+fin.emprunt.montant)||0)/SC; }
+  else { capital=(+fin.capital||0)/SC; primes=(+fin.primes||0)/SC; cca0=(+fin.apports||0)/SC; detteBase=((fin.emprunt&&+fin.emprunt.montant)||0)/SC;
+    /* source d'équilibrage (« plug ») : la source désignée est calculée pour couvrir exactement
+       le besoin (investissements + BFR de démarrage − subvention) — les autres restent saisies */
+    var besoinM=Math.max(0,capexFinance+bfrDem-subv);
+    if(fin.plug==="cca") cca0=Math.max(0,besoinM-capital-primes-detteBase);
+    else if(fin.plug==="capital") capital=Math.max(0,besoinM-primes-cca0-detteBase);
+    else if(fin.plug==="dette") detteBase=Math.max(0,besoinM-capital-primes-cca0);
+  }
 
   var brut=0, amortCum=0, cp=0, provisions=0, detteSolde=0, ccaSolde=0, ligneCT=0, bfrP=0, tresoP=0;
   var idcTotal=0, idcAmorti=0, idcDuree=(dDuree>0?dDuree:5), amortAnnuel=0;
