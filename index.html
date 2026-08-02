@@ -7552,7 +7552,9 @@ function vueModele(){
         +'<option value="cca"'+(plug==="cca"?" selected":"")+'>CCA (solde du montage)</option>'
         +'<option value="capital"'+(plug==="capital"?" selected":"")+'>Capital social (solde du montage)</option>'
         +'<option value="dette"'+(plug==="dette"?" selected":"")+'>Emprunt (solde du montage)</option></select></div>';
-      corps='<div class="card"><div class="sec-titre" style="margin-top:0">Financement — manuel</div>'+modeSeg+consLigne+plugSel
+      corps='<div class="card"><div class="sec-titre" style="margin-top:0">Financement — manuel</div>'+modeSeg+consLigne
+        +'<div class="hyp-g"><span>BFR de démarrage <span class="mut">· entre dans le besoin couvert par la source d\'équilibrage</span></span><input class="sel" value="'+(f.moisBFR!=null?f.moisBFR:3)+'" onchange="mSet(\'financement.moisBFR\',this.value,1)"><span class="suf">mois de charges</span></div>'
+        +plugSel
         +'<div class="hyp-g"><span>Capital social</span>'+(champFin("capital",Pf.capital)||'<input class="sel ninm" value="'+mAmt(f.capital||0)+'" oninput="mSep(this)" onchange="mSet(\'financement.capital\',this.value,1)">')+'<span class="suf"></span></div>'
         +'<div class="hyp-g"><span>Primes liées au capital <span class="mut">· émission / apport</span></span><input class="sel ninm" value="'+mAmt(f.primes||0)+'" oninput="mSep(this)" onchange="mSet(\'financement.primes\',this.value,1)"><span class="suf"></span></div>'
         +'<div class="hyp-g"><span>Comptes courants d\'associés (CCA) <span class="mut">· dette financière</span></span>'+(champFin("cca",Pf.cca)||'<input class="sel ninm" value="'+mAmt(f.apports||0)+'" oninput="mSep(this)" onchange="mSet(\'financement.apports\',this.value,1)">')+'<span class="suf"></span></div>'
