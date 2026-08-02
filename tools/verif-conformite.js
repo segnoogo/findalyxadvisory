@@ -325,7 +325,9 @@ async function verifModele(app,G,ctx,dossier){
   {
     const ws=feuille(wb,"Sources & Emplois"), ix=indexer(ws), F=P.financement||{};
     const un=(lib,att)=>{ if(att!==undefined&&att!==null) ligne(ctx,ws,ix,lib,C0,[att],uf); };
-    un("Capital social",F.capital);
+    /* en montage automatique le libellé porte la part de fonds propres : « Capital social (50 %) » */
+    {const t=ix.ordre.filter(o=>o.lib.indexOf("Capital social")===0)[0];
+     if(t) un(t.lib,F.capital); else pb(ctx,"ligne « Capital social » absente de Sources & Emplois");}
     un("Primes liées au capital",F.primes||0);
     un("Comptes courants d'associés (CCA)",F.cca||0);
     un("Subvention",F.subvention||F.subv||0);
