@@ -2602,7 +2602,7 @@ function projeterModele(M,scenario){
     else if(fin.plug==="dette") detteBase=Math.max(0,besoinM-capital-primes-cca0);
   }
 
-  var brut=0, amortCum=0, cp=0, provisions=0, detteSolde=0, ccaSolde=0, ligneCT=0, bfrP=0, tresoP=0;
+  var brut=0, amortCum=0, cp=0, provisions=0, detteSolde=0, ccaSolde=0, ligneCT=0, bfrP=0, tresoP=0, rnPrec=0;
   var idcTotal=0, idcAmorti=0, idcDuree=(dDuree>0?dDuree:5), amortAnnuel=0;
   var horizonDef=M.reportDef_horizon||3;
   var deficits=(M.reportDeficitaire>0)?[{montant:+M.reportDeficitaire,resteAns:horizonDef}]:[];
@@ -2696,7 +2696,9 @@ function projeterModele(M,scenario){
     var fournisseurs=isOp?-(Math.abs(cd)+Math.abs(opexTot))*(1+tva)*((bfrH.dpo||0)*fJours)/360:0;
     var bfr=clients+stocks+fournisseurs;
     /* --- CP & trésorerie de bouclage --- */
-    var div=0; cp=cp+rn-div;
+    /* dividendes : payout × résultat net de l'exercice précédent, si bénéficiaire (même convention que projeterBP) */
+    var div=(M.dividendes_payout>0&&rnPrec>0)?M.dividendes_payout*rnPrec:0;
+    cp=cp+rn-div;
     var immoNet=brut-amortCum;
     var tresoNette=cp+dette+ccaSolde+provisions-immoNet-bfr;
     ligneCT=tresoNette<0?-tresoNette:0;
@@ -6646,6 +6648,7 @@ async function exporterExcelModele(){
     H.dette=one("Dette de base (hors IDC) (FCFA)",Math.round((P.financement.dette||0)*1000),NF);
     H.taux=one("Taux d'intérêt de la dette",(M.financement&&M.financement.emprunt&&+M.financement.emprunt.taux)||0.08,PCT2);
     H.dur=one("Durée de remboursement (ans)",(M.financement&&M.financement.emprunt&&+M.financement.emprunt.duree)||5,"0");
+    H.payout=one("Distribution de dividendes (% du RN N−1, si bénéficiaire)",M.dividendes_payout||0,PCT2);
     sec("BESOIN EN FONDS DE ROULEMENT (jours)");
     const b=M.bfr||{};
     H.dso=one("Délai clients (DSO)",Math.round(+b.dso||0),"0");
@@ -6869,11 +6872,13 @@ async function exporterExcelModele(){
 
     /* ---- BILAN — bouclage par la trésorerie (actif net = capitaux propres) ---- */
     sec2("BILAN — bouclage (actif net = capitaux propres)");
+    row("R_PAY","Rappel — taux de distribution (% du RN N−1)",()=>`${rH}!${H.payout}`,PCT2);
+    row("DIVX","Dividendes versés (payout × RN N−1, si bénéficiaire)",(i,X)=>`${X}${rr("R_PAY")}*MAX(0,${pRef("RN",i)})`,NF);
     row("CAPSOC","   Capital social (rappel du montage, en unité)",(i,X)=>`${rH}!${H.capital}/${X}${rr("R_DIV")}`,NF);
     row("PRIMESR","   Primes liées au capital (rappel du montage, en unité)",(i,X)=>`${rH}!${H.primes}/${X}${rr("R_DIV")}`,NF);
     row("SUBVR","   Subventions d'investissement (rappel du montage, en unité)",(i,X)=>`${rH}!${H.subv}/${X}${rr("R_DIV")}`,NF);
     row("RANR","   Report à nouveau & résultats antérieurs",(i,X)=>`${X}${rr("CP")}-${X}${rr("CAPSOC")}-${X}${rr("PRIMESR")}-${X}${rr("SUBVR")}-${X}${rr("RN")}`,NF);
-    row("CP","Capitaux propres",(i,X)=>`${pRef("CP",i)}+${X}${rr("RN")}+IF(${X}${rr("IDX")}=1,${X}${rr("CAPSOC")}+${X}${rr("PRIMESR")}+${X}${rr("SUBVR")},0)`,NF,true);
+    row("CP","Capitaux propres",(i,X)=>`${pRef("CP",i)}+${X}${rr("RN")}-${X}${rr("DIVX")}+IF(${X}${rr("IDX")}=1,${X}${rr("CAPSOC")}+${X}${rr("PRIMESR")}+${X}${rr("SUBVR")},0)`,NF,true);
     row("TRES","Trésorerie nette (bouclage du bilan)",(i,X)=>`${X}${rr("CP")}+${X}${rr("DETTE")}+${X}${rr("CCAS")}-${X}${rr("IMN")}-${X}${rr("BFR")}`,NF,true);
     row("LCT","   Découvert (si trésorerie négative)",(i,X)=>`MAX(0,-${X}${rr("TRES")})`,NF);
     row("DETTEN","   Dettes financières (−, présentation actif net)",(i,X)=>`-${X}${rr("DETTE")}`,NF);
@@ -6892,7 +6897,8 @@ async function exporterExcelModele(){
     row("ZC","Flux d'investissement",(i,X)=>`-${X}${rr("CAPEX")}`,NF,true);
     row("FK","   Augmentation de capital (capital + primes)",(i,X)=>`IF(${X}${rr("IDX")}=1,${X}${rr("CAPSOC")}+${X}${rr("PRIMESR")},0)`,NF);
     row("FL","   Subvention",(i,X)=>`IF(${X}${rr("IDX")}=1,${X}${rr("SUBVR")},0)`,NF);
-    row("ZFIN","Flux de financement",(i,X)=>`${X}${rr("FK")}+${X}${rr("FL")}+${X}${rr("TIR")}-${X}${rr("REMB")}+${X}${rr("TIRCCA")}-${X}${rr("R_RCCA")}`,NF,true);
+    row("DIVN","   Dividendes versés (−)",(i,X)=>`-${X}${rr("DIVX")}`,NF);
+    row("ZFIN","Flux de financement",(i,X)=>`${X}${rr("FK")}+${X}${rr("FL")}+${X}${rr("TIR")}-${X}${rr("REMB")}+${X}${rr("TIRCCA")}-${X}${rr("R_RCCA")}-${X}${rr("DIVX")}`,NF,true);
     row("ZF","Variation nette de trésorerie",(i,X)=>`${X}${rr("ZB")}+${X}${rr("ZC")}+${X}${rr("ZFIN")}`,NF,true);
     row("ZG","Trésorerie à la clôture",(i,X)=>`${X}${rr("ZA")}+${X}${rr("ZF")}`,NF,true);
     row("ECART","Contrôle (clôture TFT − trésorerie bilan = 0)",(i,X)=>`${X}${rr("ZG")}-${X}${rr("TRES")}`,NF);
@@ -6992,7 +6998,8 @@ async function exporterExcelModele(){
       ["Variation des créances","VCR"],["Variation des stocks","VST"],["Variation des dettes d'exploitation","VFR"],
       ["Flux opérationnels","ZB",1],["Flux d'investissement","ZC",1],["Augmentation de capital","FK"],
       ["Subvention","FL"],["Emprunts nouveaux","TIR"],["Remboursements","REMB"],
-      ["Apport en comptes courants d'associés","TIRCCA"],["Remboursement des comptes courants","REMCCA"],["Flux de financement","ZFIN",1],
+      ["Apport en comptes courants d'associés","TIRCCA"],["Remboursement des comptes courants","REMCCA"],
+      ["Dividendes versés","DIVN"],["Flux de financement","ZFIN",1],
       ["Variation nette de trésorerie","ZF",1],["Trésorerie nette à la clôture","ZG",1]],
       "En période de construction, capital / emprunt / investissement apparaissent dans l'année concernée ; l'exploitation démarre après.");
     feuille(nD,"Tableau de la dette financière",[
@@ -7495,7 +7502,8 @@ function vueModele(){
       +'<button class="'+(auto?"":"on")+'" onclick="mSet(\'financement.mode\',\'manuel\')">Manuel</button></span></div>';
     var consLigne='<div class="hyp-g"><span>Durée de construction <span class="mut">· 0 = dès l\'an 1</span></span><input class="sel" value="'+(M.dureeConstruction||0)+'" onchange="mSet(\'dureeConstruction\',this.value,1)"><span class="suf">ans</span></div>';
     var empBloc='<div class="hyp-g"><span>Emprunt — taux d\'intérêt</span><input class="sel" value="'+((e.taux||0)*100)+'" onchange="mSet(\'financement.emprunt.taux\',(numFR(this.value)||0)/100)"><span class="suf">%</span></div>'
-      +'<div class="hyp-g"><span>Emprunt — durée de remboursement</span><input class="sel" value="'+(e.duree||5)+'" onchange="mSet(\'financement.emprunt.duree\',this.value,1)"><span class="suf">ans</span></div>';
+      +'<div class="hyp-g"><span>Emprunt — durée de remboursement</span><input class="sel" value="'+(e.duree||5)+'" onchange="mSet(\'financement.emprunt.duree\',this.value,1)"><span class="suf">ans</span></div>'
+      +'<div class="hyp-g"><span>Distribution de dividendes <span class="mut">· % du résultat net N−1, si bénéficiaire</span></span><input class="sel" value="'+((M.dividendes_payout||0)*100)+'" onchange="mSet(\'dividendes_payout\',(numFR(this.value)||0)/100)"><span class="suf">%</span></div>';
     var su='<div class="card" style="background:#f6f8fc;margin-top:12px"><div class="sec-titre" style="margin-top:0">Sources & Emplois du montage</div>'
       +'<div class="mut" style="margin:-4px 0 10px">'+(Pf.dureeConstruction>0?('Construction sur '+Pf.dureeConstruction+' an(s) ; exploitation à partir de l\'année '+Pf.anneeExploit+'. Intérêts de construction (IDC) capitalisés dans la dette.'):'Pas de période de construction : investissement et exploitation dès l\'année 1.')+'</div>'
       +'<div class="row" style="gap:24px;flex-wrap:wrap;align-items:flex-start">'

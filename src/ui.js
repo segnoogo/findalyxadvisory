@@ -1880,6 +1880,7 @@ async function exporterExcelModele(){
     H.dette=one("Dette de base (hors IDC) (FCFA)",Math.round((P.financement.dette||0)*1000),NF);
     H.taux=one("Taux d'intérêt de la dette",(M.financement&&M.financement.emprunt&&+M.financement.emprunt.taux)||0.08,PCT2);
     H.dur=one("Durée de remboursement (ans)",(M.financement&&M.financement.emprunt&&+M.financement.emprunt.duree)||5,"0");
+    H.payout=one("Distribution de dividendes (% du RN N−1, si bénéficiaire)",M.dividendes_payout||0,PCT2);
     sec("BESOIN EN FONDS DE ROULEMENT (jours)");
     const b=M.bfr||{};
     H.dso=one("Délai clients (DSO)",Math.round(+b.dso||0),"0");
@@ -2103,11 +2104,13 @@ async function exporterExcelModele(){
 
     /* ---- BILAN — bouclage par la trésorerie (actif net = capitaux propres) ---- */
     sec2("BILAN — bouclage (actif net = capitaux propres)");
+    row("R_PAY","Rappel — taux de distribution (% du RN N−1)",()=>`${rH}!${H.payout}`,PCT2);
+    row("DIVX","Dividendes versés (payout × RN N−1, si bénéficiaire)",(i,X)=>`${X}${rr("R_PAY")}*MAX(0,${pRef("RN",i)})`,NF);
     row("CAPSOC","   Capital social (rappel du montage, en unité)",(i,X)=>`${rH}!${H.capital}/${X}${rr("R_DIV")}`,NF);
     row("PRIMESR","   Primes liées au capital (rappel du montage, en unité)",(i,X)=>`${rH}!${H.primes}/${X}${rr("R_DIV")}`,NF);
     row("SUBVR","   Subventions d'investissement (rappel du montage, en unité)",(i,X)=>`${rH}!${H.subv}/${X}${rr("R_DIV")}`,NF);
     row("RANR","   Report à nouveau & résultats antérieurs",(i,X)=>`${X}${rr("CP")}-${X}${rr("CAPSOC")}-${X}${rr("PRIMESR")}-${X}${rr("SUBVR")}-${X}${rr("RN")}`,NF);
-    row("CP","Capitaux propres",(i,X)=>`${pRef("CP",i)}+${X}${rr("RN")}+IF(${X}${rr("IDX")}=1,${X}${rr("CAPSOC")}+${X}${rr("PRIMESR")}+${X}${rr("SUBVR")},0)`,NF,true);
+    row("CP","Capitaux propres",(i,X)=>`${pRef("CP",i)}+${X}${rr("RN")}-${X}${rr("DIVX")}+IF(${X}${rr("IDX")}=1,${X}${rr("CAPSOC")}+${X}${rr("PRIMESR")}+${X}${rr("SUBVR")},0)`,NF,true);
     row("TRES","Trésorerie nette (bouclage du bilan)",(i,X)=>`${X}${rr("CP")}+${X}${rr("DETTE")}+${X}${rr("CCAS")}-${X}${rr("IMN")}-${X}${rr("BFR")}`,NF,true);
     row("LCT","   Découvert (si trésorerie négative)",(i,X)=>`MAX(0,-${X}${rr("TRES")})`,NF);
     row("DETTEN","   Dettes financières (−, présentation actif net)",(i,X)=>`-${X}${rr("DETTE")}`,NF);
@@ -2126,7 +2129,8 @@ async function exporterExcelModele(){
     row("ZC","Flux d'investissement",(i,X)=>`-${X}${rr("CAPEX")}`,NF,true);
     row("FK","   Augmentation de capital (capital + primes)",(i,X)=>`IF(${X}${rr("IDX")}=1,${X}${rr("CAPSOC")}+${X}${rr("PRIMESR")},0)`,NF);
     row("FL","   Subvention",(i,X)=>`IF(${X}${rr("IDX")}=1,${X}${rr("SUBVR")},0)`,NF);
-    row("ZFIN","Flux de financement",(i,X)=>`${X}${rr("FK")}+${X}${rr("FL")}+${X}${rr("TIR")}-${X}${rr("REMB")}+${X}${rr("TIRCCA")}-${X}${rr("R_RCCA")}`,NF,true);
+    row("DIVN","   Dividendes versés (−)",(i,X)=>`-${X}${rr("DIVX")}`,NF);
+    row("ZFIN","Flux de financement",(i,X)=>`${X}${rr("FK")}+${X}${rr("FL")}+${X}${rr("TIR")}-${X}${rr("REMB")}+${X}${rr("TIRCCA")}-${X}${rr("R_RCCA")}-${X}${rr("DIVX")}`,NF,true);
     row("ZF","Variation nette de trésorerie",(i,X)=>`${X}${rr("ZB")}+${X}${rr("ZC")}+${X}${rr("ZFIN")}`,NF,true);
     row("ZG","Trésorerie à la clôture",(i,X)=>`${X}${rr("ZA")}+${X}${rr("ZF")}`,NF,true);
     row("ECART","Contrôle (clôture TFT − trésorerie bilan = 0)",(i,X)=>`${X}${rr("ZG")}-${X}${rr("TRES")}`,NF);
@@ -2226,7 +2230,8 @@ async function exporterExcelModele(){
       ["Variation des créances","VCR"],["Variation des stocks","VST"],["Variation des dettes d'exploitation","VFR"],
       ["Flux opérationnels","ZB",1],["Flux d'investissement","ZC",1],["Augmentation de capital","FK"],
       ["Subvention","FL"],["Emprunts nouveaux","TIR"],["Remboursements","REMB"],
-      ["Apport en comptes courants d'associés","TIRCCA"],["Remboursement des comptes courants","REMCCA"],["Flux de financement","ZFIN",1],
+      ["Apport en comptes courants d'associés","TIRCCA"],["Remboursement des comptes courants","REMCCA"],
+      ["Dividendes versés","DIVN"],["Flux de financement","ZFIN",1],
       ["Variation nette de trésorerie","ZF",1],["Trésorerie nette à la clôture","ZG",1]],
       "En période de construction, capital / emprunt / investissement apparaissent dans l'année concernée ; l'exploitation démarre après.");
     feuille(nD,"Tableau de la dette financière",[

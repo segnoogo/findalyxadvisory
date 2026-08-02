@@ -382,7 +382,8 @@ function vueModele(){
       +'<button class="'+(auto?"":"on")+'" onclick="mSet(\'financement.mode\',\'manuel\')">Manuel</button></span></div>';
     var consLigne='<div class="hyp-g"><span>Durée de construction <span class="mut">· 0 = dès l\'an 1</span></span><input class="sel" value="'+(M.dureeConstruction||0)+'" onchange="mSet(\'dureeConstruction\',this.value,1)"><span class="suf">ans</span></div>';
     var empBloc='<div class="hyp-g"><span>Emprunt — taux d\'intérêt</span><input class="sel" value="'+((e.taux||0)*100)+'" onchange="mSet(\'financement.emprunt.taux\',(numFR(this.value)||0)/100)"><span class="suf">%</span></div>'
-      +'<div class="hyp-g"><span>Emprunt — durée de remboursement</span><input class="sel" value="'+(e.duree||5)+'" onchange="mSet(\'financement.emprunt.duree\',this.value,1)"><span class="suf">ans</span></div>';
+      +'<div class="hyp-g"><span>Emprunt — durée de remboursement</span><input class="sel" value="'+(e.duree||5)+'" onchange="mSet(\'financement.emprunt.duree\',this.value,1)"><span class="suf">ans</span></div>'
+      +'<div class="hyp-g"><span>Distribution de dividendes <span class="mut">· % du résultat net N−1, si bénéficiaire</span></span><input class="sel" value="'+((M.dividendes_payout||0)*100)+'" onchange="mSet(\'dividendes_payout\',(numFR(this.value)||0)/100)"><span class="suf">%</span></div>';
     var su='<div class="card" style="background:#f6f8fc;margin-top:12px"><div class="sec-titre" style="margin-top:0">Sources & Emplois du montage</div>'
       +'<div class="mut" style="margin:-4px 0 10px">'+(Pf.dureeConstruction>0?('Construction sur '+Pf.dureeConstruction+' an(s) ; exploitation à partir de l\'année '+Pf.anneeExploit+'. Intérêts de construction (IDC) capitalisés dans la dette.'):'Pas de période de construction : investissement et exploitation dès l\'année 1.')+'</div>'
       +'<div class="row" style="gap:24px;flex-wrap:wrap;align-items:flex-start">'

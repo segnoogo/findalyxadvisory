@@ -384,7 +384,7 @@ function projeterModele(M,scenario){
     else if(fin.plug==="dette") detteBase=Math.max(0,besoinM-capital-primes-cca0);
   }
 
-  var brut=0, amortCum=0, cp=0, provisions=0, detteSolde=0, ccaSolde=0, ligneCT=0, bfrP=0, tresoP=0;
+  var brut=0, amortCum=0, cp=0, provisions=0, detteSolde=0, ccaSolde=0, ligneCT=0, bfrP=0, tresoP=0, rnPrec=0;
   var idcTotal=0, idcAmorti=0, idcDuree=(dDuree>0?dDuree:5), amortAnnuel=0;
   var horizonDef=M.reportDef_horizon||3;
   var deficits=(M.reportDeficitaire>0)?[{montant:+M.reportDeficitaire,resteAns:horizonDef}]:[];
@@ -478,7 +478,9 @@ function projeterModele(M,scenario){
     var fournisseurs=isOp?-(Math.abs(cd)+Math.abs(opexTot))*(1+tva)*((bfrH.dpo||0)*fJours)/360:0;
     var bfr=clients+stocks+fournisseurs;
     /* --- CP & trésorerie de bouclage --- */
-    var div=0; cp=cp+rn-div;
+    /* dividendes : payout × résultat net de l'exercice précédent, si bénéficiaire (même convention que projeterBP) */
+    var div=(M.dividendes_payout>0&&rnPrec>0)?M.dividendes_payout*rnPrec:0;
+    cp=cp+rn-div;
     var immoNet=brut-amortCum;
     var tresoNette=cp+dette+ccaSolde+provisions-immoNet-bfr;
     ligneCT=tresoNette<0?-tresoNette:0;
