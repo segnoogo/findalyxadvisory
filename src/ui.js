@@ -1540,7 +1540,8 @@ function vueExports(){
     <div class="mut" style="margin-bottom:12px">Business plan — projet : les exports reprennent vos inducteurs, le montage de financement (Sources &amp; Emplois) et la valorisation. Les analyses historiques (due diligence, databook, balance mappée) ne s'appliquent pas ici.</div>
     <div class="sec-titre">Classeur Excel</div>
     <div class="grille-exp">
-    ${carte("Business plan + Valorisation (Excel)","P&amp;L, bilan, TFT et dette prévisionnels, Sources &amp; Emplois du montage et valorisation multi-méthodes — en valeurs, prêt à retravailler.","exporterExcelModele()","Télécharger")}
+    ${carte("Business plan + Valorisation (Excel)","P&amp;L, bilan, TFT et dette prévisionnels, Sources &amp; Emplois du montage et valorisation multi-méthodes. <b>Formules vivantes</b> : changer une hypothèse recalcule tout le classeur.","exporterExcelModele()","Télécharger")}
+    ${carte("Business plan + Valorisation — en valeurs","Même classeur, <b>sans aucune formule</b> : chaque cellule porte son résultat. À diffuser quand on ne veut pas exposer la mécanique du modèle, ou pour un destinataire qui l'ouvrira ailleurs (Sheets, Numbers). Le classeur ne se recalcule pas.","exporterExcelModele(true)","Télécharger")}
     </div>
     <div class="sec-titre">Rapports PowerPoint</div>
     <div class="mut" style="margin:-4px 0 10px">Style banque d'affaires Findalyx — natif PowerPoint, entièrement retouchable.</div>
@@ -1754,9 +1755,12 @@ async function exporterExcel(seulementTbagr){
    Accueil (navigation) + Hypothèses (jaune = modifiable) + Calculs (récurrence annuelle avec
    phase construction/exploitation + IDC) + P&L / Bilan / TFT / Dette / Sources & Emplois /
    Valorisation qui référencent Calculs. Reproduit les équations de projeterModele. */
-async function exporterExcelModele(){
+/* sansFormule : même classeur, mais chaque formule est remplacée par son résultat (xlValoriser).
+   Version diffusable — n'expose pas la mécanique du modèle et s'ouvre partout sans recalcul. */
+async function exporterExcelModele(sansFormule){
   if(!DOSSIER||!DOSSIER.sansHistorique){toast("Réservé au business plan — projet");return;}
   if(typeof ExcelJS==="undefined"){toast("Bibliothèque Excel non chargée (connexion requise)");return;}
+  if(sansFormule&&typeof xlValoriser!=="function"){toast("Module de calcul indisponible");return;}
   try{
     const M=assurerModele();
     const P=projeterModele(M);
@@ -1783,7 +1787,10 @@ async function exporterExcelModele(){
 
     /* ================= HYPOTHÈSES (jaune = modifiable) ================= */
     const wsH=wb.addWorksheet(nH);
-    titreLiasse(wsH,"Hypothèses du modèle — valeurs saisies en bleu (modifiables), calculs en noir — scénario "+((M.scenarios&&M.scenario&&M.scenarios[M.scenario]&&M.scenarios[M.scenario].lab)||"Central")+" intégré");
+    const scLab=((M.scenarios&&M.scenario&&M.scenarios[M.scenario]&&M.scenarios[M.scenario].lab)||"Central");
+    titreLiasse(wsH,sansFormule
+      ?("Hypothèses du modèle — VERSION EN VALEURS : les formules ont été remplacées par leurs résultats, le classeur ne se recalcule pas — scénario "+scLab)
+      :("Hypothèses du modèle — valeurs saisies en bleu (modifiables), calculs en noir — scénario "+scLab+" intégré"));
     if(planCheval()){const rC0=wsH.addRow([null,MENTION_CHEVAL]);rC0.getCell(2).font={italic:true,size:9,color:{argb:"FF808080"}};wsH.addRow([]);}
     const GC=CL(N);   /* colonne « Croissance %/an » (juste après les N colonnes d'années) */
     styliserEntete(wsH.addRow([null,"Hypothèse",...fyp,"Croiss. %/an"]),2);
@@ -1889,6 +1896,14 @@ async function exporterExcelModele(){
           info.inds=inds; info.taux=taux; }
         H.cd[k]=info;
       });
+    }
+    /* autres produits d'exploitation (subventions, produits accessoires) : série annuelle ou
+       montant + croissance, exactement comme le moteur (valAnnee sur M.autresProd) */
+    if(M.autresProd&&(M.autresProd.mode==="yearly"||(+M.autresProd.val||0))){
+      sec("AUTRES PRODUITS D'EXPLOITATION");
+      if(M.autresProd.mode==="yearly"){const vals=[];for(let j=0;j<N;j++)vals.push(+((M.autresProd.vals||[])[j])||0);
+        H.autresProd=ser("   Autres produits (FCFA/an)",vals,NF);}
+      else H.autresProd=grow2("   Autres produits (FCFA/an)",(+M.autresProd.val||0),(+M.autresProd.g||0)/100,NF).row;
     }
     sec("FRAIS GÉNÉRAUX — charges fixes annuelles (hors personnel)");
     H.opex=[];
@@ -2104,7 +2119,12 @@ async function exporterExcelModele(){
     row("PERS","   Charges du personnel (sous-total)",(i,X)=>(H.persPostes||[]).length?H.persPostes.map((_,k)=>`${X}${rr("PEL"+k)}`).join("+"):"0",NF);
     blank();
     row("FGT","Frais généraux (dont personnel) — total",(i,X)=>{const t=[...H.opex.map((_,k)=>`${X}${rr("OPL"+k)}`),((H.persPostes||[]).length?`${X}${rr("PERS")}`:null)].filter(Boolean);return t.length?t.join("+"):"0";},NF,true);
-    row("EBITDA","EBITDA",(i,X)=>`${X}${rr("MB")}+${X}${rr("FGT")}`,NF,true);
+    if(H.autresProd){ blank();
+      sst("Autres produits d'exploitation — hypothèse (FCFA/an) puis produit de l'année");
+      row("API","   Autres produits — hypothèse (FCFA/an)",(i,X)=>`INDEX(${rng(H.autresProd)},${OI(X)})`,NF);
+      row("AP","   Autres produits",(i,X)=>`${X}${rr("FO")}*${X}${rr("API")}/${X}${rr("R_DIV")}`,NF);
+      blank(); }
+    row("EBITDA","EBITDA",(i,X)=>`${X}${rr("MB")}${H.autresProd?`+${X}${rr("AP")}`:""}+${X}${rr("FGT")}`,NF,true);
 
     /* ---- INVESTISSEMENTS, AMORTISSEMENTS & VNC (pour le bilan) ---- */
     sec2("INVESTISSEMENTS, AMORTISSEMENTS & VALEUR NETTE COMPTABLE");
@@ -2137,7 +2157,9 @@ async function exporterExcelModele(){
     row("IDCTOT","   IDC cumulés (à amortir dès la mise en service)",(i,X)=>`${pRef("IDCTOT",i)}+${X}${rr("IDC")}`,NF);
     row("REMB","Remboursement du capital (après mise en service + différé)",(i,X)=>`IF(AND(${X}${rr("FO")}=1,${X}${rr("IDX")}>=${X}${rr("R_NC")}+1+${X}${rr("R_GRA")}),MIN(${amAn(X)},${pRef("DETTE",i)}+${X}${rr("TIR")}+${X}${rr("IDC")}),0)`,NF);
     row("DETTE","Dette financière — solde de clôture",(i,X)=>`${pRef("DETTE",i)}+${X}${rr("TIR")}+${X}${rr("IDC")}-${X}${rr("REMB")}`,NF,true);
-    row("INT","Intérêts sur emprunt (exploitation)",(i,X)=>`${X}${rr("FO")}*${X}${rr("R_TXD")}*(${pRef("DETTE",i)}+${X}${rr("DETTE")})/2`,NF);
+    /* encours moyen = (ouverture + tirage de l'année + IDC + clôture) / 2 : sans le tirage, l'année du
+       tirage ne porterait d'intérêts que sur la moitié de la moitié de la dette (moteur : idem) */
+    row("INT","Intérêts sur emprunt (exploitation)",(i,X)=>`${X}${rr("FO")}*${X}${rr("R_TXD")}*(${pRef("DETTE",i)}+${X}${rr("TIR")}+${X}${rr("IDC")}+${X}${rr("DETTE")})/2`,NF);
     row("INTCT","Intérêts du découvert (ligne court terme)",(i,X)=>`${X}${rr("R_DEC")}*${pRef("LCT",i)}`,NF);
     blank();
     sst("Comptes courants d'associés (CCA) — dette financière, quasi-fonds propres");
@@ -2271,6 +2293,7 @@ async function exporterExcelModele(){
     }
     plDefs.push(["Coûts directs (total)","CD"]);
     plDefs.push(["Marge brute","MB",1]);
+    if(H.autresProd)plDefs.push(["Autres produits d'exploitation","AP"]);
     /* frais généraux = postes hors personnel dépliés + UNE ligne « Charges du personnel », un seul total */
     if(H.opex.length||(H.persPostes||[]).length){
       plDefs.push([]);
@@ -2460,10 +2483,13 @@ async function exporterExcelModele(){
 
     /* ================= ACCUEIL (navigation) — rempli maintenant, feuille déjà en 1er ================= */
     wsA.getCell("B2").value=DOSSIER.societe;wsA.getCell("B2").font={bold:true,size:18,color:{argb:"FF172554"}};
-    wsA.getCell("B3").value="Business plan — projet — modèle financier";wsA.getCell("B3").font={size:11,color:{argb:"FF6B7280"}};
+    wsA.getCell("B3").value="Business plan — projet — modèle financier"+(sansFormule?" (version en valeurs)":"");wsA.getCell("B3").font={size:11,color:{argb:"FF6B7280"}};
     wsA.getCell("B4").value="Généré le "+new Date().toLocaleDateString("fr-FR",{day:"numeric",month:"long",year:"numeric"})+" · "+(cabinetExport()||"Findalyx Advisory");wsA.getCell("B4").font={size:9,color:{argb:"FF808080"}};
+    if(sansFormule){const cN=wsA.getCell("B5");
+      cN.value="Version en valeurs : toutes les formules ont été remplacées par leur résultat. Le classeur ne se recalcule pas — modifier une hypothèse n'a aucun effet. Demandez la version avec formules pour retravailler le modèle.";
+      cN.font={size:9,italic:true,color:{argb:"FFB45309"}};}
     wsA.getCell("B6").value="Feuilles du classeur";wsA.getCell("B6").font={bold:true,color:{argb:"FF224289"}};
-    const nav=[["Hypothèses",nH,"Valeurs saisies en bleu (modifiables) — tout le classeur se recalcule."],
+    const nav=[["Hypothèses",nH,sansFormule?"Hypothèses retenues — valeurs figées (aucun recalcul).":"Valeurs saisies en bleu (modifiables) — tout le classeur se recalcule."],
       ["Modèle",nC,"Modèle financier détaillé par section (CA, coûts, charges, amortissements & VNC, dette, résultat, BFR, bilan, trésorerie)."],
       ["P&L prévisionnel",nP,"Compte de résultat sur l'horizon du plan."],
       ["Bilan prévisionnel",nB,"Grandes masses, bouclé par la trésorerie."],
@@ -2477,11 +2503,19 @@ async function exporterExcelModele(){
     wsA.columns=[{width:3},{width:24},{width:2},{width:60}];
 
     finaliserClasseur(wb);
+    let nbF=0;
+    if(sansFormule){
+      const r=xlValoriser(wb);nbF=r.formules;
+      if(r.soucis.length){
+        try{console.error("xlValoriser",r.soucis);}catch(_){}
+        throw new Error(r.soucis.length+" formule(s) non évaluable(s) — export en valeurs abandonné (voir la console)");
+      }
+    }
     const buf=await wb.xlsx.writeBuffer();
     const blob=new Blob([buf],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
     const a=document.createElement("a");a.href=URL.createObjectURL(blob);
-    a.download="BP_Modele_"+DOSSIER.societe.replace(/\W+/g,"_")+".xlsx";a.click();
-    toast("Classeur du modèle téléchargé");
+    a.download=(sansFormule?"BP_Modele_valeurs_":"BP_Modele_")+DOSSIER.societe.replace(/\W+/g,"_")+".xlsx";a.click();
+    toast(sansFormule?("Classeur en valeurs téléchargé ("+nbF+" formules calculées)"):"Classeur du modèle téléchargé");
   }catch(err){toast("Export impossible : "+((err&&err.message)||err));try{console.error("exporterExcelModele",err);}catch(_){}}
 }
 

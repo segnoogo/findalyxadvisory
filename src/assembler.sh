@@ -9,7 +9,7 @@ cat tete.html libs.js > "$OUT"
 echo "</script><script>" >> "$OUT"
 cat moteur.js >> "$OUT"
 echo "</script><script>" >> "$OUT"
-cat logo.js licence.js bp.js databook.js rapports.js pdf.js ui.js bpui.js bpxl.js etatsxl.js >> "$OUT"
+cat logo.js licence.js bp.js databook.js rapports.js pdf.js xlcalc.js ui.js bpui.js bpxl.js etatsxl.js >> "$OUT"
 cat pied.html >> "$OUT"
 
 echo "OK - index.html regenere ($(wc -c < "$OUT" | tr -d ' ') octets)."
