@@ -1865,12 +1865,12 @@ async function exporterExcelModele(sansFormule){
       (L.rows||[]).forEach((r,j)=>{
         const pct=String(r.unit||"").indexOf("%")>=0;
         const nm=(r.name||("Inducteur "+(j+1)))+(pct?" (ratio %)":""), lib="   "+((r.op==='d')?"÷ ":"× ")+nm;
-        if(r.mode==='yearly'){ const vals=[]; for(let y=0;y<N;y++){ let v=(+((r.vals||[])[y])||0); if(pct)v/=100; vals.push(v); } inds.push({row:ser(lib,vals,pct?RF:QF),op:(r.op==='d'?'d':'x'),name:nm,pct:pct}); }
+        if(r.mode==='yearly'){ const vals=[]; for(let y=0;y<N;y++){ let v=valSerie(r.vals,y); if(pct)v/=100; vals.push(v); } inds.push({row:ser(lib,vals,pct?RF:QF),op:(r.op==='d'?'d':'x'),name:nm,pct:pct}); }
         else { let base=(+r.val||0); if(pct)base/=100; const gg=grow2(lib,base,(+r.g||0)/100,pct?RF:QF); inds.push({row:gg.row,op:(r.op==='d'?'d':'x'),name:nm,pct:pct}); }
       });
       if(!inds.length){ const gg=grow2("   Quantité (volume)",0,0); inds.push({row:gg.row,op:'x',name:"Quantité (volume)"}); }
       let prixInfo;
-      if((L.prix&&L.prix.mode)==='yearly'){ const pv=[]; for(let y=0;y<N;y++)pv.push(+((L.prix.vals||[])[y])||0); prixInfo={row:ser("   Prix unitaire (FCFA)",pv,QF)}; }
+      if((L.prix&&L.prix.mode)==='yearly'){ const pv=[]; for(let y=0;y<N;y++)pv.push(valSerie(L.prix.vals,y)); prixInfo={row:ser("   Prix unitaire (FCFA)",pv,QF)}; }
       else { const gg=grow2("   Prix unitaire (FCFA)",(+((L.prix||{}).val)||0),(+((L.prix||{}).g||0))/100,QF); prixInfo={row:gg.row}; }
       H.rev[k]={inds:inds,prix:prixInfo};
     });
@@ -1888,10 +1888,10 @@ async function exporterExcelModele(sansFormule){
         else { const inds=[];
           (cl.rows||[]).forEach((r,j)=>{ const pct=String(r.unit||"").indexOf("%")>=0, nm=(r.name||("Inducteur "+(j+1)))+(pct?" (ratio %)":""), lib="   "+((r.op==='d')?"÷ ":"× ")+nm;
             if(r.refLigne){ inds.push({ref:idToK[r.refLigne],op:(r.op==='d'?'d':'x'),name:(r.name||"Effectif — référence"),pct:false,ceil:!!r.ceil}); return; }   /* référence : rien à saisir ici, calculé dans le Modèle */
-            if(r.mode==='yearly'){ const vals=[];for(let y=0;y<N;y++){let v=(+((r.vals||[])[y])||0);if(pct)v/=100;vals.push(v);} inds.push({row:ser(lib,vals,pct?RF:QF),op:(r.op==='d'?'d':'x'),name:nm,pct:pct,ceil:!!r.ceil}); }
+            if(r.mode==='yearly'){ const vals=[];for(let y=0;y<N;y++){let v=valSerie(r.vals,y);if(pct)v/=100;vals.push(v);} inds.push({row:ser(lib,vals,pct?RF:QF),op:(r.op==='d'?'d':'x'),name:nm,pct:pct,ceil:!!r.ceil}); }
             else { let base=(+r.val||0); if(pct)base/=100; const gg=grow2(lib,base,(+r.g||0)/100,pct?RF:QF); inds.push({row:gg.row,op:(r.op==='d'?'d':'x'),name:nm,pct:pct,ceil:!!r.ceil}); } });
           if(!inds.length){ const gg=grow2("   Quantité",0,0); inds.push({row:gg.row,op:'x',name:"Quantité"}); }
-          let taux; if((cl.prix&&cl.prix.mode)==='yearly'){ const tv=[];for(let y=0;y<N;y++)tv.push((+((cl.prix.vals||[])[y])||0)); taux={row:ser("   Taux unitaire (FCFA)",tv,QF)}; }
+          let taux; if((cl.prix&&cl.prix.mode)==='yearly'){ const tv=[];for(let y=0;y<N;y++)tv.push(valSerie(cl.prix.vals,y)); taux={row:ser("   Taux unitaire (FCFA)",tv,QF)}; }
             else { const gg=grow2("   Taux unitaire (FCFA)",(+((cl.prix||{}).val)||0),(+((cl.prix||{}).g||0))/100,QF); taux={row:gg.row}; }
           info.inds=inds; info.taux=taux; }
         H.cd[k]=info;
@@ -1901,14 +1901,14 @@ async function exporterExcelModele(sansFormule){
        montant + croissance, exactement comme le moteur (valAnnee sur M.autresProd) */
     if(M.autresProd&&(M.autresProd.mode==="yearly"||(+M.autresProd.val||0))){
       sec("AUTRES PRODUITS D'EXPLOITATION");
-      if(M.autresProd.mode==="yearly"){const vals=[];for(let j=0;j<N;j++)vals.push(+((M.autresProd.vals||[])[j])||0);
+      if(M.autresProd.mode==="yearly"){const vals=[];for(let j=0;j<N;j++)vals.push(valSerie(M.autresProd.vals,j));
         H.autresProd=ser("   Autres produits (FCFA/an)",vals,NF);}
       else H.autresProd=grow2("   Autres produits (FCFA/an)",(+M.autresProd.val||0),(+M.autresProd.g||0)/100,NF).row;
     }
     sec("FRAIS GÉNÉRAUX — charges fixes annuelles (hors personnel)");
     H.opex=[];
     (M.chargesFixes||[]).forEach(c=>{ if(c.personnel)return;
-      if(c.mode==='yearly'){ const vals=[];for(let j=0;j<N;j++)vals.push(+((c.vals||[])[j])||0); H.opex.push({row:ser("   "+(c.name||"Charge")+" (FCFA)",vals,NF),name:c.name||"Charge"}); }
+      if(c.mode==='yearly'){ const vals=[];for(let j=0;j<N;j++)vals.push(valSerie(c.vals,j)); H.opex.push({row:ser("   "+(c.name||"Charge")+" (FCFA)",vals,NF),name:c.name||"Charge"}); }
       else { const gg=grow2("   "+(c.name||"Charge")+" (FCFA)",(+(c.montant!=null?c.montant:c.val)||0),(+c.g||0)/100,NF); H.opex.push({row:gg.row,name:c.name||"Charge"}); }
     });
     /* personnel granulaire : par poste = effectif × salaire mensuel × 12 (cellules jaunes vivantes) */
@@ -2177,7 +2177,9 @@ async function exporterExcelModele(sansFormule){
     row("TIRCCA","Apport en CCA (année 1)",(i,X)=>`IF(${X}${rr("IDX")}=1,${X}${rr("R_CCA0")},0)`,NF);
     row("REMCCA","Remboursement du CCA (−)",(i,X)=>`-${X}${rr("R_RCCA")}`,NF);
     row("CCAS","CCA — solde de clôture",(i,X)=>`${pRef("CCAS",i)}+${X}${rr("TIRCCA")}-${X}${rr("R_RCCA")}`,NF,true);
-    row("INTCCA","Intérêts sur CCA",(i,X)=>`${X}${rr("R_TXCCA")}*(${pRef("CCAS",i)}+${X}${rr("CCAS")})/2`,NF);
+    /* l'apport de l'année 1 porte intérêt sur l'année entière : il entre dans l'encours moyen
+       (même convention que le moteur et que la dette bancaire) */
+    row("INTCCA","Intérêts sur CCA",(i,X)=>`${X}${rr("R_TXCCA")}*(${pRef("CCAS",i)}+${X}${rr("TIRCCA")}+${X}${rr("CCAS")})/2`,NF);
 
     /* ---- COMPTE DE RÉSULTAT : cascade EBIT → résultat net ---- */
     sec2("COMPTE DE RÉSULTAT — cascade");
@@ -2284,7 +2286,10 @@ async function exporterExcelModele(sansFormule){
         if(!d.length){ws.addRow([]);return;}   /* ligne vide de séparation entre sections */
         const r=ws.addRow([null,d[0]]);
         if(d[1]==null){r.getCell(2).font={bold:true,italic:true,color:{argb:"FF224289"}};return;}   /* en-tête de section */
-        for(let i=0;i<N;i++){const c=r.getCell(3+i);c.value={formula:`${rC}!${CL(i)}${rr(d[1])}`};c.numFmt=d[3]||NF;}
+        /* d[4] = −1 : la ligne du Modèle porte un montant positif qu'il faut présenter en sortie
+           (un tableau de flux doit s'additionner colonne par colonne jusqu'à son total) */
+        const sg=(d[4]===-1)?"-":"";
+        for(let i=0;i<N;i++){const c=r.getCell(3+i);c.value={formula:`${sg}${rC}!${CL(i)}${rr(d[1])}`};c.numFmt=d[3]||NF;}
         if(d[2]){r.font={bold:true,color:{argb:"FF172554"}};for(let c=2;c<3+N;c++)r.getCell(c).fill=FOND_TOTAL;}
       });
       if(note){ws.addRow([]);const r2=ws.addRow([null,note]);r2.getCell(2).font={italic:true,size:9,color:{argb:"FF808080"}};}
@@ -2357,7 +2362,7 @@ async function exporterExcelModele(sansFormule){
       ["Variation des créances","VCR"],["Variation des stocks","VST"],["Variation des dettes d'exploitation","VFR"],
       ["Encaissement des créances antérieures et règlement des dettes d'ouverture","VOUV"],
       ["Flux opérationnels","ZB",1],["Flux d'investissement","ZC",1],["Augmentation de capital","FK"],
-      ["Subvention","FL"],["Emprunts nouveaux","TIR"],["Remboursements","REMB"],
+      ["Subvention","FL"],["Emprunts nouveaux","TIR"],["Remboursements","REMB",0,null,-1],
       ["Apport en comptes courants d'associés","TIRCCA"],["Remboursement des comptes courants","REMCCA"],
       ["Dividendes versés","DIVN"],["Flux de financement","ZFIN",1],
       ["Variation nette de trésorerie","ZF",1],["Trésorerie nette à la clôture","ZG",1]],
@@ -2368,7 +2373,8 @@ async function exporterExcelModele(sansFormule){
       ["Remboursements","REMB"],["Intérêts payés","INT"],["Encours à la clôture","DETTE",1],
       [],
       ["Comptes courants d'associés (CCA)",null],
-      ["Apport (année 1)","TIRCCA"],["Remboursements","REMCCA"],["Intérêts sur CCA","INTCCA"],["Solde à la clôture","CCAS",1]],
+      /* échéancier : tous les montants en positif (la ligne REMCCA du Modèle est signée) */
+      ["Apport (année 1)","TIRCCA"],["Remboursements","REMCCA",0,null,-1],["Intérêts sur CCA","INTCCA"],["Solde à la clôture","CCAS",1]],
       "IDC = intérêts capitalisés pendant la construction. Le CCA est une dette financière (quasi-fonds propres) : rémunération optionnelle, remboursement selon le mode choisi (maintenu / in fine / linéaire), série modifiable dans les Hypothèses.");
 
     /* Sources & Emplois (valeurs de synthèse) */
@@ -2382,8 +2388,11 @@ async function exporterExcelModele(sansFormule){
     wsSU.addRow([null,"EMPLOIS"]).getCell(2).font={bold:true,color:{argb:"FF224289"}};
     const rCapexF=suF("Investissements (jusqu'à la mise en service)",
       (M.capex||[]).length?("("+(M.capex||[]).map((_,k)=>`IF(${rH}!${H.capAn[k]}<=${rH}!${H.nc}+1,${rH}!${H.capM[k]},0)`).join("+")+`)/${DIV}`):"0");
+    /* charges de la PREMIÈRE ANNÉE D'EXPLOITATION (et non de la première année du plan : en
+       période de construction elle est vide, le BFR de démarrage ressortait à zéro) */
     const rBfrD=suF("BFR de démarrage (mois × charges de l'année 1)",
-      `${rH}!${H.moisBFR}/12*(-(${rC}!C${rr("CD")}+${rC}!C${rr("FGT")}))`);
+      `${rH}!${H.moisBFR}/12*(-(INDEX(${rC}!$C$${rr("CD")}:$${CL(N-1)}$${rr("CD")},${rH}!${H.nc}+1)`+
+      `+INDEX(${rC}!$C$${rr("FGT")}:$${CL(N-1)}$${rr("FGT")},${rH}!${H.nc}+1)))`);
     if(Pf.idc>0.01)suRow("Intérêts de construction (IDC)",Pf.idc);
     const rEmp=suF("Total emplois",`SUM(C${rCapexF}:C${wsSU.rowCount})`,true);
     wsSU.addRow([]);
@@ -2472,10 +2481,13 @@ async function exporterExcelModele(sansFormule){
     /* fourchette DCF = coins de la grille de sensibilité (WACC ± amplitude, g ∓ amplitude), en formules vivantes */
     const AMP=`${rH}!${H.sensAmp}`, GG=`${rH}!${H.g}`, fRng=`C${rFCFF}:${CL(N-1)}${rFCFF}`;
     const MY=`${rH}!${H.my}`, TVX=`${rH}!${H.tvx}`;
+    /* axe des colonnes : la croissance g en mode Gordon, le MULTIPLE DE SORTIE en mode exit
+       (faire varier g serait sans effet sur la valeur terminale) — comme dans l'application */
+    const axeCol=(dMult,dG)=>`IF(${TVX}>0,${TVX}${dMult},${GG}${dG})`;
     /* mêmes conventions que la valeur centrale : exposant mi-année et multiple de sortie éventuel */
-    const dcfCoin=(sW,sG)=>{const W=`(C${rWacc}${sW}${AMP})`,G=`(${GG}${sG}${AMP})`;
+    const dcfCoin=(sW,sG)=>{const W=`(C${rWacc}${sW}${AMP})`,X=`(${axeCol(sG+"1",sG+AMP)})`;
       return `SUMPRODUCT(${fRng}/(1+${W})^(COLUMN(${fRng})-2-${MY}*0.5))`+
-        `+IF(${TVX}>0,(${TVX}*C${rEbT})/(1+${W})^${N},IF(${W}>${G},(${CL(N-1)}${rFCFF}*(1+${G})/(${W}-${G}))/(1+${W})^(${N}-${MY}*0.5),0))`+
+        `+IF(${TVX}>0,(${X}*C${rEbT})/(1+${W})^${N},IF(${W}>${X},(${CL(N-1)}${rFCFF}*(1+${X})/(${W}-${X}))/(1+${W})^(${N}-${MY}*0.5),0))`+
         `+C${rDN}+C${rBR}`;};
     const dcfRow=wsV.rowCount+1;{const r=wsV.getRow(dcfRow);r.getCell(2).value="DCF (flux actualisés)";r.getCell(3).value={formula:dcfCoin("+","-")};r.getCell(4).value={formula:`C${rEq}`};r.getCell(5).value={formula:dcfCoin("-","+")};[3,4,5].forEach(c=>r.getCell(c).numFmt=NF);}
     const compRow=wsV.rowCount+1;{const r=wsV.getRow(compRow);r.getCell(2).value="Multiples boursiers (× EBITDA)";[[3,H.mcMin],[4,H.mc],[5,H.mcMax]].forEach(([c,hh])=>{r.getCell(c).value={formula:`${rH}!${hh}*C${rEbRef}+C${rDN}+C${rBR}`};r.getCell(c).numFmt=NF;});}
@@ -2491,8 +2503,10 @@ async function exporterExcelModele(sansFormule){
     vLab("Sensibilité — valeur des fonds propres (WACC en ligne × croissance g en colonne)");
     const OFFS=[`-${rH}!${H.sensAmp}`,`-${rH}!${H.sensAmp}/2`,`+0`,`+${rH}!${H.sensAmp}/2`,`+${rH}!${H.sensAmp}`];
     const rAx=wsV.rowCount+1;
-    { const r=wsV.getRow(rAx);r.getCell(2).value="WACC \\ g";
-      OFFS.forEach((dx,k)=>{const c=r.getCell(3+k);c.value={formula:`${rH}!${H.g}${dx}`};c.numFmt=PCT2;});
+    const OFFM=["-1","-0.5","+0","+0.5","+1"];   /* axe en multiple de sortie (mode exit) */
+    { const r=wsV.getRow(rAx);r.getCell(2).value="WACC \\ g (ou multiple de sortie)";
+      OFFS.forEach((dx,k)=>{const c=r.getCell(3+k);c.value={formula:axeCol(OFFM[k],dx)};
+        c.numFmt='[<1]0.00%;0.0"×"';});
       for(let c2=2;c2<=7;c2++){const cc=r.getCell(c2);cc.fill={type:"pattern",pattern:"solid",fgColor:{argb:"FF213768"}};cc.font={bold:true,color:{argb:"FFFFFFFF"},size:10};} }
     const FRABS=`$C$${rFCFF}:$${CL(N-1)}$${rFCFF}`;
     OFFS.forEach((dw,j)=>{
@@ -2500,7 +2514,7 @@ async function exporterExcelModele(sansFormule){
       r.getCell(2).value={formula:`$C$${rWacc}${dw}`};r.getCell(2).numFmt=PCT2;r.getCell(2).font={bold:true,color:{argb:"FF224289"}};
       OFFS.forEach((dx,k)=>{const Lk=CL(k), c=r.getCell(3+k);
         c.value={formula:`SUMPRODUCT(${FRABS}/(1+$B${rw})^(COLUMN(${FRABS})-COLUMN($C$${rFCFF})+1-${MY}*0.5))`
-          +`+IF(${TVX}>0,(${TVX}*$C$${rEbT})/(1+$B${rw})^${N},`
+          +`+IF(${TVX}>0,(${Lk}$${rAx}*$C$${rEbT})/(1+$B${rw})^${N},`
           +`IF($B${rw}>${Lk}$${rAx},($${CL(N-1)}$${rFCFF}*(1+${Lk}$${rAx})/($B${rw}-${Lk}$${rAx}))/(1+$B${rw})^(${N}-${MY}*0.5),0))`
           +`+$C$${rDN}+$C$${rBR}`};
         c.numFmt=NF; if(j===2&&k===2){c.font={bold:true,color:{argb:"FF172554"}};c.fill=FOND_TOTAL;} });

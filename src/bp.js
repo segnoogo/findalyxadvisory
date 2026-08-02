@@ -66,7 +66,7 @@ function hypothesesBP(etats, lignesPerso){
     amort_taux:born(brut>0?dotHist/brut:0.1,0.02,0.4,0.10),
     /* BFR en jours. DSO/DPO exprimés en jours de CA/achats TTC (TVA 18 %), cohérents avec
        les ratios affichés et l'ancien moteur ; DIO en jours de coûts HT (stocks au coût). */
-    convTTC:true,
+    convTTC:true, tva:0.18,
     dso:born(v.CLIENTS[a1]/(ca1*1.18)*360,0,360,45),
     dio:born(cd?v.STOCKS[a1]/Math.abs(cd)*360:0,0,360,30),
     dpo:born((cd+op)?-v.FOURNISSEURS[a1]/(Math.abs(cd+op)*1.18)*360:0,0,360,30),
@@ -211,9 +211,10 @@ function projeterBP(etats,H,scenario){
     deficits=deficits.filter(d=>d.resteAns>0);
     if(ebt<0)deficits.push({montant:-ebt,resteAns:horizonDef});
     /* --- BFR --- */
-    const clients=caP*1.18*(H.dso+sc.dJours)/360;                    /* DSO en jours de CA TTC (TVA 18 %) */
+    const ttc=1+((H.tva!=null&&isFinite(+H.tva))?+H.tva:0.18);        /* TVA paramétrable (défaut 18 %) */
+    const clients=caP*ttc*(H.dso+sc.dJours)/360;                     /* DSO en jours de CA TTC */
     const stocks=Math.abs(cd)*H.dio/360;                             /* DIO en jours de coûts HT (stocks au coût) */
-    const fournisseurs=-(Math.abs(cd)+Math.abs(opexTot))*1.18*H.dpo/360;  /* DPO en jours d'achats TTC */
+    const fournisseurs=-(Math.abs(cd)+Math.abs(opexTot))*ttc*H.dpo/360;   /* DPO en jours d'achats TTC */
     const dettesFiscSoc=-caP*H.dettesFiscSoc_pct;   /* exploitation : croît avec le CA */
     const autresCr=H.autresCreances_fixe;            /* hors exploitation : figé (HAO inclus) */
     const autresDet=H.autresDettes_fixe;             /* hors exploitation : figé (HAO inclus) */

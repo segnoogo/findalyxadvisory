@@ -113,6 +113,32 @@ Ils encodent les garanties « au franc près » :
 
 Un développeur relance `npm test` après toute modif du moteur.
 
+### 6.1 Conformité des livrables (`npm run verif`)
+
+Les tests ci-dessus valident le **moteur**. Mais les classeurs Excel exportés
+**réimplémentent** ses calculs en formules, et le rapport PowerPoint en redérive
+certains : un écart y est invisible à l'œil, le fichier restant cohérent en
+interne, simplement faux. Plusieurs bugs de ce type ont été livrés avant que ce
+contrôle n'existe (poids de la dette écrasé par un défaut, TVA absente du BFR
+projeté, intérêts de l'année de tirage, séries non prolongées au-delà des années
+saisies).
+
+`tools/verif-conformite.js` compare donc **ligne à ligne, année par année**, ce
+que produit chaque classeur à ce que produit le moteur, sur une quinzaine de
+variantes de dossier (dette nulle, mi-année, multiple de sortie, construction,
+situation d'ouverture, découvert, CCA amorti, dividendes, séries annuelles,
+horizon à 7 ans…) construites depuis le dossier de démonstration intégré —
+**aucune donnée client**. Les lignes chiffrées non couvertes sont listées : la
+couverture doit rester explicite.
+
+Les formules sont évaluées par `src/xlcalc.js` (évaluateur du sous-ensemble Excel
+réellement produit). `npm run verif:excel` ferme la boucle : il fait recalculer
+le classeur par **Excel lui-même** (COM, Windows) et compare les deux résultats
+cellule par cellule.
+
+Après toute modification d'un export (`ui.js`, `bpxl.js`, `etatsxl.js`,
+`databook.js`) ou du moteur : `npm test && npm run verif`.
+
 ## 7. Conventions
 
 - **Unités** : montants en **K** dans la TBAGR et les états ; **crédits en négatif**.

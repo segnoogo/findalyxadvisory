@@ -6,8 +6,8 @@
    Périmètre = ce que l'export produit réellement, et rien de plus : opérateurs
    + - * / ^ & et comparaisons, références et plages (inter-feuilles incluses),
    arithmétique matricielle (SUMPRODUCT sur des plages), et les fonctions IF,
-   IFERROR, AND, OR, NOT, MAX, MIN, SUM, SUMPRODUCT, INDEX, VLOOKUP, ROUND,
-   ROUNDUP, ROUNDDOWN, ABS, COLUMN, ROW. Toute formule hors périmètre LÈVE :
+   IFERROR, AND, OR, NOT, MAX, MIN, SUM, SUMPRODUCT, SUMIF, AVERAGE, INDEX,
+   VLOOKUP, ROUND, ROUNDUP, ROUNDDOWN, ABS, SIGN, COLUMN, ROW. Toute formule hors périmètre LÈVE :
    un export qui échoue vaut mieux qu'un classeur silencieusement faux.
    ========================================================================= */
 
@@ -231,12 +231,35 @@ function xlcMoteur(wb){
       case "MAX":{const n2=nums(a);return n2.length?Math.max.apply(null,n2):0;}
       case "MIN":{const n2=nums(a);return n2.length?Math.min.apply(null,n2):0;}
       case "ABS":return Math.abs(xlcNombre(a[0]));
+      case "SIGN":{const x=xlcNombre(a[0]);return x>0?1:(x<0?-1:0);}
       case "ROUND":return arrondi(a[0],xlcNombre(a[1]),Math.round);
       case "ROUNDUP":return arrondi(a[0],xlcNombre(a[1]),Math.ceil);
       case "ROUNDDOWN":return arrondi(a[0],xlcNombre(a[1]),Math.floor);
       case "AND":return nums(a).every(x=>x!==0)&&nums(a).length>0;
       case "OR":return nums(a).some(x=>x!==0);
       case "NOT":return !xlcVrai(a[0]);
+      case "AVERAGE":{const n2=nums(a);return n2.length?n2.reduce((s,x)=>s+x,0)/n2.length:xlcErr("#DIV/0!");}
+      case "SUMIF":{
+        /* SUMIF(plage ; critère ; [plage_somme]) — critère exact ou comparaison (>=, <>, …).
+           Les jokers * et ? ne sont pas pris en charge : mieux vaut lever que sommer à faux. */
+        const pl=xlcPlat(a[0]), sm=(a.length>2?xlcPlat(a[2]):pl);
+        let cr=a[1], op="=";
+        if(typeof cr==="string"){const m=/^(<=|>=|<>|<|>|=)?\s*(.*)$/.exec(cr.trim());
+          op=m[1]||"="; cr=m[2];
+          if(/[*?]/.test(cr))throw new Error("SUMIF() avec joker non pris en charge");
+          const num=parseFloat(String(cr).replace(",",".")); if(!isNaN(num)&&String(cr).trim()!=="")cr=num;}
+        const test=v=>{
+          if(op==="="||op==="<>"){
+            const eg=(typeof cr==="string"||typeof v==="string")
+              ? xlcTexte(v).toUpperCase()===xlcTexte(cr).toUpperCase() : xlcNombre(v)===xlcNombre(cr);
+            return op==="="?eg:!eg;}
+          const x=xlcNombre(v),y=xlcNombre(cr);
+          return op==="<"?x<y:op===">"?x>y:op==="<="?x<=y:x>=y;};
+        let s=0;
+        for(let k=0;k<pl.length;k++){const v=pl[k];
+          if(xlcEstErr(v))throw v;
+          if(test(v)){const w=sm[k]; if(xlcEstErr(w))throw w; if(typeof w==="number")s+=w;}}
+        return s;}
       case "SUMPRODUCT":{
         const t=a.map(x=>xlcPlat(x).map(v=>{if(xlcEstErr(v))throw v;return typeof v==="number"?v:0;}));
         const n2=Math.max.apply(null,t.map(x=>x.length));
