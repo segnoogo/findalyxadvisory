@@ -6469,6 +6469,7 @@ async function exporterExcelModele(){
     titreLiasse(wsH,"Hypothèses du modèle — cellules jaunes modifiables — scénario "+((M.scenarios&&M.scenario&&M.scenarios[M.scenario]&&M.scenarios[M.scenario].lab)||"Central")+" intégré");
     const GC=CL(N);   /* colonne « Croissance %/an » (juste après les N colonnes d'années) */
     styliserEntete(wsH.addRow([null,"Hypothèse",...fyp,"Croiss. %/an"]),2);
+    wsH.views=[{state:"frozen",xSplit:2,ySplit:wsH.rowCount}];   /* titre + années figés, libellés figés */
     let hr=wsH.rowCount, hSecFirst=true;   /* dernière ligne écrite */
     const H={};            /* adresses des cellules d'hypothèses */
     /* en-tête de section : bandeau + 2 lignes vides avant (blocs bien séparés) */
@@ -6645,7 +6646,7 @@ async function exporterExcelModele(){
     /* ================= MODÈLE (feuille financière détaillée, par section) ================= */
     const wsC=wb.addWorksheet(nC);
     titreLiasse(wsC,"Modèle financier — dérivation par section (construction → exploitation, IDC capitalisés)");
-    { const cHdr=wsC.addRow([null,"",...fyp]); styliserEntete(cHdr,1); cHdr.getCell(2).value={formula:`${rH}!${H.unite}`}; }
+    { const cHdr=wsC.addRow([null,"",...fyp]); styliserEntete(cHdr,1); cHdr.getCell(2).value={formula:`${rH}!${H.unite}`}; wsC.views=[{state:"frozen",xSplit:2,ySplit:cHdr.number}]; }
     let cr=wsC.rowCount;
     const R={};   /* n° de ligne par code */
     /* collecte les lignes ; on écrira en DEUX PASSES pour que toute réf croisée (avant/arrière) résolve.
@@ -6847,7 +6848,7 @@ async function exporterExcelModele(){
     const feuille=(nom,sousTitre,defs,note)=>{
       const ws=wb.addWorksheet(nom);
       titreLiasse(ws,sousTitre);
-      { const hdr=ws.addRow([null,"",...fypPh]); styliserEntete(hdr,1); hdr.getCell(2).value={formula:`${rH}!${H.unite}`}; }
+      { const hdr=ws.addRow([null,"",...fypPh]); styliserEntete(hdr,1); hdr.getCell(2).value={formula:`${rH}!${H.unite}`}; ws.views=[{state:"frozen",xSplit:2,ySplit:hdr.number}]; }
       defs.forEach(d=>{
         if(!d.length){ws.addRow([]);return;}   /* ligne vide de séparation entre sections */
         const r=ws.addRow([null,d[0]]);
@@ -6926,7 +6927,7 @@ async function exporterExcelModele(){
     /* Sources & Emplois (valeurs de synthèse) */
     const Pf=P.financement, wsSU=wb.addWorksheet(nSU);
     titreLiasse(wsSU,"Sources & Emplois du montage");
-    { const suHdr=wsSU.addRow([null,"Rubrique",""]); styliserEntete(suHdr,1); suHdr.getCell(3).value={formula:`"Montant ("&${rH}!${H.unite}&")"`}; }
+    { const suHdr=wsSU.addRow([null,"Rubrique",""]); styliserEntete(suHdr,1); suHdr.getCell(3).value={formula:`"Montant ("&${rH}!${H.unite}&")"`}; wsSU.views=[{state:"frozen",xSplit:2,ySplit:suHdr.number}]; }
     const suRow=(lib,x,tot)=>{const r=wsSU.addRow([null,lib]);r.getCell(3).value={formula:`${Math.round((x||0)*1000)}/${DIV}`};r.getCell(3).numFmt=NF;if(tot){r.font={bold:true,color:{argb:"FF172554"}};r.getCell(2).fill=FOND_TOTAL;r.getCell(3).fill=FOND_TOTAL;}return r;};
     wsSU.addRow([null,"EMPLOIS"]).getCell(2).font={bold:true,color:{argb:"FF224289"}};
     suRow("Investissements (jusqu'à la mise en service)",Pf.capexFinance);
@@ -6947,6 +6948,7 @@ async function exporterExcelModele(){
     /* Valorisation (build-up en formules ref. Hypothèses ; FCFF ref. Calculs ; synthèse par méthode) */
     const wsV=wb.addWorksheet(nV);
     titreLiasse(wsV,"Évaluation des fonds propres (multi-méthodes)");
+    wsV.views=[{state:"frozen",xSplit:2,ySplit:0}];   /* colonnes de libellés figées (l'en-tête d'années est en milieu de feuille) */
     const vLab=(l)=>{const r=wsV.addRow([null,l]);r.getCell(2).font={bold:true,color:{argb:"FF224289"}};return r;};
     const vF=(l,f,fmt,tot)=>{const r=wsV.addRow([null,l]);const c=r.getCell(3);c.value={formula:f};c.numFmt=fmt||NF;if(tot){r.font={bold:true,color:{argb:"FF172554"}};r.getCell(2).fill=FOND_TOTAL;c.fill=FOND_TOTAL;}return r.number;};
     vLab("Coût du capital (CAPM)");
