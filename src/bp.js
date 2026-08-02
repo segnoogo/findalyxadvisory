@@ -566,6 +566,7 @@ function projeterModele(M,scenario){
     bfrP=bfr;tresoP=treso;rnPrec=rn;
   });
   /* synthèse Sources & Emplois (base KFCFA) — pas de bilan d'ouverture */
+  P.modeProjet=true;   /* BP sans historique : les états sont synthétiques (dernière année projetée) */
   P.financement={mode:(fin.mode||"manuel"),partFP:partFP,moisBFR:moisBFR,dureeConstruction:Nc,anneeExploit:anneeExploit,
     capexFinance:capexFinance,bfrDemarrage:bfrDem,idc:idcTotal,subvention:subv,
     capital:capital,primes:primes,cca:cca0,ccaTaux:ccaTaux,ccaMode:ccaMode,ccaDuree:ccaDuree,
@@ -616,7 +617,15 @@ function valoriserBP(etats,H,P){
   const tvExp=(my&&tvMode!=="exit")?N-0.5:N;
   const vtPv=vt/Math.pow(1+wacc,tvExp);
   const ev=sommePv+vtPv;
-  const detteNette=-v.DETTES_FINANCIERES[a1]-v.TRESORERIE_NETTE[a1];
+  /* DETTE NETTE À LA DATE DE VALORISATION — et non en fin de plan. La valeur d'entreprise issue
+     du DCF est une valeur d'aujourd'hui : les flux actualisés PRODUISENT la trésorerie de fin de
+     plan, l'ajouter au pont la compterait deux fois. En BP « projet », la référence est donc la
+     situation d'ouverture (trésorerie déjà en caisse, emprunts déjà tirés) ; en BP sur historique,
+     le dernier exercice réel EST la date de valorisation. */
+  const projet=!!(P&&P.modeProjet), ouvF=(P&&P.financement&&P.financement.ouverture)||{};
+  const detteNette=projet
+    ? (0-(+ouvF.treso||0))                                  /* aucun emprunt tiré avant le plan */
+    : (-v.DETTES_FINANCIERES[a1]-v.TRESORERIE_NETTE[a1]);
   /* pont EV → fonds propres : ajustements hors dette nette (minoritaires, provisions, actifs hors exploitation…) */
   const bridgeAjust=(V.bridge||[]).reduce((s,x)=>s+(+x.montant||0),0);
   const equityDcf=ev-detteNette+bridgeAjust;
@@ -642,29 +651,50 @@ function valoriserBP(etats,H,P){
   const sensiAxes={wacc:dwAxis.map(d=>wacc+d),colType:tvMode==="exit"?"multiple":"g",
     col:colAxis.map(d=>tvMode==="exit"?(V.exitMultiple||0)+d:V.g+d)};
   /* méthodes analogiques */
-  const ebitdaRef=v.EBITDA[a1]+((V.useAdj&&isFinite(V.adjEbitda))?V.adjEbitda:0);
+  /* EBITDA DE RÉFÉRENCE DES MULTIPLES — courant, pas celui de la fin du plan. Un multiple de
+     marché s'applique à la performance observée aujourd'hui ; l'appliquer à l'EBITDA de l'année 5
+     ferait payer une seconde fois une croissance déjà actualisée dans le DCF. En BP « projet »,
+     la référence la plus proche d'aujourd'hui est la PREMIÈRE année du plan (surchargeable). */
+  const ebitdaAuto=projet?P.pl.EBITDA[AP[0]]:v.EBITDA[a1];
+  const ebitdaRef=((V.ebitdaRefManuel!=null&&isFinite(+V.ebitdaRefManuel))?+V.ebitdaRefManuel:ebitdaAuto)
+    +((V.useAdj&&isFinite(V.adjEbitda))?V.adjEbitda:0);
+  /* un EBITDA de référence négatif ou insignifiant rend les méthodes analogiques inapplicables :
+     on les neutralise au lieu d'afficher une valeur négative ou absurde */
+  const refCA=projet?P.pl.CA[AP[0]]:v.CA[a1];
+  const multOk=ebitdaRef>0.02*Math.abs(refCA||0);
   const ebitRef=v.EBIT[a1], caRef=v.CA[a1], rnRef=v.RESULTAT_NET[a1];
   const mc=V.multiplesComparables, mt=V.multiplesTransactions;
   const eqEV=(m,ref)=>m*ref-detteNette+bridgeAjust;   /* multiple d'EV → fonds propres */
   const eqComp=m=>eqEV(m,ebitdaRef);
   const band=(f,c)=>({min:f(c*0.85),central:f(c),max:f(c*1.15)});
-  const anrBase=v.CAPITAUX_PROPRES[a1];
+  /* ACTIF NET À LA DATE DE VALORISATION : la situation nette apportée à l'ouverture en BP
+     « projet » (et non les capitaux propres reconstitués après cinq ans de résultats), le dernier
+     exercice réel sinon. Sans bilan d'ouverture, la méthode patrimoniale n'a pas de base. */
+  const anrBase=projet?(+ouvF.net||0):v.CAPITAUX_PROPRES[a1];
+  const anrOk=projet?!!(ouvF.actif||ouvF.passif):true;
   const anrAjust=(V.anrAjustements||[]).reduce((s,x)=>s+(+x.montant||0),0);
   /* méthodes retenues = les plus utilisées : DCF, multiples boursiers, multiples de transactions, actif net */
   const methodes=[
-    {id:"dcf",lib:"DCF (flux actualisés)",min:Math.min(...sensi.flat()),max:Math.max(...sensi.flat()),central:equityDcf},
-    {id:"comp",lib:"Multiples boursiers ("+mc.min+"–"+mc.max+"× EBITDA)",min:eqComp(mc.min),max:eqComp(mc.max),central:eqComp(mc.central)},
-    {id:"trans",lib:"Multiples de transactions ("+mt.min+"–"+mt.max+"× EBITDA)",min:eqComp(mt.min),max:eqComp(mt.max),central:eqComp(mt.central)},
-    {id:"anr",lib:"Actif net "+(anrAjust?"réévalué":"comptable"),min:anrBase+Math.min(0,anrAjust),max:anrBase+Math.max(0,anrAjust),central:anrBase+anrAjust}
+    {id:"dcf",lib:"DCF (flux actualisés)",min:Math.min(...sensi.flat()),max:Math.max(...sensi.flat()),central:equityDcf,applicable:true},
+    {id:"comp",lib:"Multiples boursiers ("+mc.min+"–"+mc.max+"× EBITDA)",min:eqComp(mc.min),max:eqComp(mc.max),central:eqComp(mc.central),
+     applicable:multOk,motif:multOk?null:"EBITDA de référence négatif ou non significatif"},
+    {id:"trans",lib:"Multiples de transactions ("+mt.min+"–"+mt.max+"× EBITDA)",min:eqComp(mt.min),max:eqComp(mt.max),central:eqComp(mt.central),
+     applicable:multOk,motif:multOk?null:"EBITDA de référence négatif ou non significatif"},
+    {id:"anr",lib:"Actif net "+(anrAjust?"réévalué":"comptable"),min:anrBase+Math.min(0,anrAjust),max:anrBase+Math.max(0,anrAjust),central:anrBase+anrAjust,
+     applicable:anrOk,motif:anrOk?null:"aucune situation d'ouverture renseignée"}
   ];
-  /* valeur retenue = moyenne pondérée des valeurs centrales (poids en %) */
+  /* valeur retenue = moyenne pondérée des valeurs centrales (poids en %). Une méthode non
+     applicable est EXCLUE de la moyenne : son poids est redistribué, jamais appliqué à une
+     valeur qui n'a pas de sens. */
   const poids=V.poids||{dcf:40,comp:20,trans:15,ebit:5,ca:0,per:5,anr:15};
-  const wsum=methodes.reduce((s,m)=>s+(poids[m.id]||0),0);
-  const retenue=wsum>0?methodes.reduce((s,m)=>s+(poids[m.id]||0)*m.central,0)/wsum:(equityDcf+eqComp(mc.central))/2;
-  const ponderees=methodes.filter(m=>(poids[m.id]||0)>0).map(m=>m.central);
-  const centrauxAll=methodes.map(m=>m.central);
+  const retenues=methodes.filter(m=>m.applicable);
+  const wsum=retenues.reduce((s,m)=>s+(poids[m.id]||0),0);
+  const retenue=wsum>0?retenues.reduce((s,m)=>s+(poids[m.id]||0)*m.central,0)/wsum:equityDcf;
+  const ponderees=retenues.filter(m=>(poids[m.id]||0)>0).map(m=>m.central);
+  const centrauxAll=retenues.map(m=>m.central);
   return {ke,kd,wacc,g:V.g,primeSpe,fcff,detailFcff,pv,sommePv,vt,vtGordon,vtExit,tvMode,ebitdaTerm,vtPv,ev,detteNette,bridgeAjust,
-    equityDcf,ebitdaRef,ebitRef,caRef,rnRef,sensi,sensiAxes,methodes,poids,
+    equityDcf,ebitdaRef,ebitdaAuto,multOk,anrBase,anrOk,dateValo:(projet?"ouverture":"dernier exercice réel"),
+    ebitRef,caRef,rnRef,sensi,sensiAxes,methodes,poids,
     multiple:mc.central,equityMult:eqComp(mc.central),
     eqMin:Math.min(...centrauxAll),eqMax:Math.max(...centrauxAll),
     fourchette:{min:Math.min(...(ponderees.length?ponderees:centrauxAll)),max:Math.max(...(ponderees.length?ponderees:centrauxAll)),retenue}};

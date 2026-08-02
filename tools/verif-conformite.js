@@ -286,16 +286,25 @@ async function verifModele(app,G,ctx,dossier){
     L("Somme des FCFF actualisés",[VAL.sommePv]);
     L("Valeur terminale actualisée (Gordon g, ou multiple de sortie)",[VAL.vtPv]);
     L("= Valeur d'entreprise (EV)",[VAL.ev]);
-    L("(−) Dette nette fin de plan (dette + CCA − trésorerie, Modèle)",[-VAL.detteNette]);
+    L("(−) Dette nette à la date de valorisation (situation d'ouverture)",[-VAL.detteNette]);
     L("Valeur des fonds propres (DCF)",[VAL.equityDcf]);
-    L("EBITDA de référence (dernière année du plan, Modèle)",[VAL.ebitdaRef]);
+    L("EBITDA de référence (1re année du plan, Modèle)",[VAL.ebitdaRef]);
     const prefix={comp:"Multiples boursiers",trans:"Multiples de transactions",anr:"Actif net"};
     (VAL.methodes||[]).forEach(me=>{
       let cible=(me.id==="dcf")?"DCF (flux actualisés)":null;
       if(!cible){const p=prefix[me.id]; if(p){const t=ix.ordre.filter(o=>o.lib.indexOf(p)===0)[0]; cible=t&&t.lib;}}
-      if(cible)ligne(ctx,ws,ix,cible,C0,[me.min,me.central,me.max],uf);
+      if(!cible)return;
+      /* une méthode écartée par le moteur doit l'être aussi dans le classeur : « n.a. », pas un montant */
+      if(!me.applicable){
+        const rn=ix.idx[cible]; ix.vus[cible]=true; nbLignes++;
+        const v=ws.getCell(rn,C0+1).value;
+        if(typeof v==="number") pb(ctx,"méthode écartée par le moteur ("+me.id+") mais chiffrée dans le classeur : "+v);
+        else nbOk++;
+        return;
+      }
+      ligne(ctx,ws,ix,cible,C0,[me.min,me.central,me.max],uf);
     });
-    if(VAL.fourchette)ligne(ctx,ws,ix,"Valeur retenue (moyenne pondérée — poids en Hypothèses)",C0+1,[VAL.fourchette.retenue],uf);
+    if(VAL.fourchette)ligne(ctx,ws,ix,"Valeur retenue (moyenne pondérée des méthodes applicables)",C0+1,[VAL.fourchette.retenue],uf);
     /* grille de sensibilité 5 × 5 : lignes = WACC, colonnes = g ou multiple de sortie */
     if(VAL.sensi&&VAL.sensiAxes){
       const rAx=(ix.ordre.filter(o=>o.lib.indexOf("WACC \\ g")===0)[0]||{}).n;
@@ -321,7 +330,8 @@ async function verifModele(app,G,ctx,dossier){
     }
     couverture(ctx,ws,ix,C0,Math.max(N,5),[/^Coût du capital/,/^Construction des flux/,/^Passage à la valeur/,
       /^Synthèse par méthode$/,/^Sensibilité/,UNI,/^L'amplitude/,/^Méthode$/,/^WACC/,/^\d/,/^Taux sans risque/,
-      /^Prime de/,/^EBITDA de la dernière année/,/^\(\+\) Ajustements/,/^Évaluation des fonds propres/,soc]);
+      /^Prime de/,/^EBITDA de la dernière année/,/^\(\+\) Ajustements/,/^Évaluation des fonds propres/,
+      /^Méthodes analogiques applicables/,/^Méthode patrimoniale applicable/,soc]);
   }
   /* --- Sources & Emplois --- */
   {

@@ -516,19 +516,30 @@ function construireFeuillesBP(wb){
   const nAdj=(H.valo.anrAjustements||[]).length;
   const rAnr=rm+6;                                        /* liste des ajustements ANR (4 méthodes) */
   const anrCentral=`${rB}!${L(cHL)}${rb.CP}${nAdj?`+SUM($C$${rAnr+1}:$C$${rAnr+nAdj})`:""}`;
+  /* un EBITDA de référence négatif ou insignifiant rend les méthodes analogiques inapplicables :
+     « n.a. » plutôt qu'une valeur négative, et poids retiré de la moyenne (comme le moteur) */
+  const mOK=`IF(${ebR}>0.02*ABS(${caR}),1,0)`;
+  const mult=(cel)=>`IF(${mOK}=1,${cel},"n.a.")`;
   const meth=[
     ["DCF (sensibilité min/central/max)",`MIN(${L(3)}${rs+1}:${L(7)}${rs+5})`,`C${rv.EQ}`,`MAX(${L(3)}${rs+1}:${L(7)}${rs+5})`,hy.pdcf],
-    ["Multiples boursiers (× EBITDA)",`${rH}!$C$${hy.mc}*${ebR}${dnB}`,`${rH}!$D$${hy.mc}*${ebR}${dnB}`,`${rH}!$E$${hy.mc}*${ebR}${dnB}`,hy.pcomp],
-    ["Multiples de transactions (× EBITDA)",`${rH}!$C$${hy.mt}*${ebR}${dnB}`,`${rH}!$D$${hy.mt}*${ebR}${dnB}`,`${rH}!$E$${hy.mt}*${ebR}${dnB}`,hy.ptrans],
+    ["Multiples boursiers (× EBITDA)",mult(`${rH}!$C$${hy.mc}*${ebR}${dnB}`),mult(`${rH}!$D$${hy.mc}*${ebR}${dnB}`),mult(`${rH}!$E$${hy.mc}*${ebR}${dnB}`),hy.pcomp],
+    ["Multiples de transactions (× EBITDA)",mult(`${rH}!$C$${hy.mt}*${ebR}${dnB}`),mult(`${rH}!$D$${hy.mt}*${ebR}${dnB}`),mult(`${rH}!$E$${hy.mt}*${ebR}${dnB}`),hy.ptrans],
     ["Actif net réévalué (CP + ajustements)","",anrCentral,"",hy.panr]];
   meth.forEach((row,i)=>{const rn=rm+1+i;cellV(wsV,rn,2,row[0]);
     if(row[1])cellF(wsV,rn,3,row[1],NF); if(row[2])cellF(wsV,rn,4,row[2],NF); if(row[3])cellF(wsV,rn,5,row[3],NF);
     cellF(wsV,rn,6,h1(row[4]),PCT);});
   const rF2=rm+5, cD=`D${rm+1}:D${rm+4}`, cW=`F${rm+1}:F${rm+4}`;
   cellV(wsV,rF2,2,"Valeur retenue (fourchette pondérée min / moyenne / max)");
-  cellF(wsV,rF2,3,`MIN(${cD})`,NF);
-  cellF(wsV,rF2,4,`IF(SUM(${cW})=0,AVERAGE(${cD}),SUMPRODUCT(${cD},${cW})/SUM(${cW}))`,NF);
-  cellF(wsV,rF2,5,`MAX(${cD})`,NF);
+  /* SUMPRODUCT sur une plage contenant « n.a. » traiterait le texte comme 0 et fausserait la
+     moyenne : on somme méthode par méthode, en écartant les non applicables du numérateur ET du
+     dénominateur (poids redistribué). */
+  const dcfD=`D${rm+1}`, cmpD=`D${rm+2}`, trsD=`D${rm+3}`, anrD=`D${rm+4}`;
+  const wD=`F${rm+1}`, wC=`F${rm+2}`, wT=`F${rm+3}`, wA=`F${rm+4}`;
+  const num=`${dcfD}*${wD}+IF(${mOK}=1,${cmpD}*${wC}+${trsD}*${wT},0)+${anrD}*${wA}`;
+  const den=`${wD}+IF(${mOK}=1,${wC}+${wT},0)+${wA}`;
+  cellF(wsV,rF2,3,`IF(${mOK}=1,MIN(${cD}),MIN(${dcfD},${anrD}))`,NF);
+  cellF(wsV,rF2,4,`IFERROR(IF(${den}=0,${dcfD},(${num})/(${den})),${dcfD})`,NF);
+  cellF(wsV,rF2,5,`IF(${mOK}=1,MAX(${cD}),MAX(${dcfD},${anrD}))`,NF);
   totalRow(wsV,rF2,5);
   if(nAdj){
     cellV(wsV,rAnr,2,"Ajustements ANR (modifiables) :").font={italic:true};

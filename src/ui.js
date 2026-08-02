@@ -2471,15 +2471,20 @@ async function exporterExcelModele(sansFormule){
       `IFERROR((${CL(N-1)}${rFCFF}*(1+${rH}!${H.g})/(C${rWacc}-${rH}!${H.g}))/(1+C${rWacc})^(${N}-${rH}!${H.my}*0.5),0))`,NF);
     const rEV=wsV.rowCount+1; vF("= Valeur d'entreprise (EV)",`C${rSum}+C${rVT}`,NF,true);
     /* dette nette & pont : formules vivantes (Modèle + Hypothèses), plus aucune valeur figée */
-    /* dette nette = dettes financières + comptes courants d'associés − trésorerie nette : les CCA
-       sont de la dette pour l'acquéreur, l'application les compte ainsi */
-    const rDN=wsV.rowCount+1; vF("(−) Dette nette fin de plan (dette + CCA − trésorerie, Modèle)",
-      `-(${rC}!${CL(N-1)}${rr("DETTE")}+${rC}!${CL(N-1)}${rr("CCAS")}-${rC}!${CL(N-1)}${rr("TRES")})`,NF);
+    /* DETTE NETTE À LA DATE DE VALORISATION — et non en fin de plan : la valeur d'entreprise issue
+       du DCF est une valeur d'aujourd'hui, et les flux actualisés PRODUISENT déjà la trésorerie de
+       fin de plan. En BP « projet », la référence est la situation d'ouverture (aucun emprunt tiré). */
+    const rDN=wsV.rowCount+1; vF("(−) Dette nette à la date de valorisation (situation d'ouverture)",
+      `${rC}!C${rr("R_OUVTR")}`,NF);
     const rBR=wsV.rowCount+1; vF("(+) Ajustements du pont EV → fonds propres (Hypothèses)",`${rH}!${H.bridge}/${DIV}`,NF);
     const rEq=wsV.rowCount+1; vF("Valeur des fonds propres (DCF)",`C${rEV}+C${rDN}+C${rBR}`,NF,true);
     wsV.addRow([]);
     vLab("Synthèse par méthode");
-    const rEbRef=wsV.rowCount+1; vF("EBITDA de référence (dernière année du plan, Modèle)",`${rC}!${CL(N-1)}${rr("EBITDA")}`,NF);
+    /* EBITDA DE RÉFÉRENCE DES MULTIPLES : la première année du plan, la plus proche d'aujourd'hui.
+       Un multiple appliqué à l'EBITDA de l'année 5 ferait payer une croissance déjà actualisée. */
+    const rEbRef=wsV.rowCount+1; vF("EBITDA de référence (1re année du plan, Modèle)",`${rC}!C${rr("EBITDA")}`,NF);
+    const rMOK=wsV.rowCount+1; vF("Méthodes analogiques applicables (1 = EBITDA significatif)",
+      `IF(C${rEbRef}>0.02*ABS(${rC}!C${rr("CA")}),1,0)`,"0");
     styliserEntete(wsV.addRow([null,"Méthode","Bas","Central","Haut"]),1);
     /* fourchette DCF = coins de la grille de sensibilité (WACC ± amplitude, g ∓ amplitude), en formules vivantes */
     const AMP=`${rH}!${H.sensAmp}`, GG=`${rH}!${H.g}`, fRng=`C${rFCFF}:${CL(N-1)}${rFCFF}`;
@@ -2493,13 +2498,27 @@ async function exporterExcelModele(sansFormule){
         `+IF(${TVX}>0,(${X}*C${rEbT})/(1+${W})^${N},IF(${W}>${X},(${CL(N-1)}${rFCFF}*(1+${X})/(${W}-${X}))/(1+${W})^(${N}-${MY}*0.5),0))`+
         `+C${rDN}+C${rBR}`;};
     const dcfRow=wsV.rowCount+1;{const r=wsV.getRow(dcfRow);r.getCell(2).value="DCF (flux actualisés)";r.getCell(3).value={formula:dcfCoin("+","-")};r.getCell(4).value={formula:`C${rEq}`};r.getCell(5).value={formula:dcfCoin("-","+")};[3,4,5].forEach(c=>r.getCell(c).numFmt=NF);}
-    const compRow=wsV.rowCount+1;{const r=wsV.getRow(compRow);r.getCell(2).value="Multiples boursiers (× EBITDA)";[[3,H.mcMin],[4,H.mc],[5,H.mcMax]].forEach(([c,hh])=>{r.getCell(c).value={formula:`${rH}!${hh}*C${rEbRef}+C${rDN}+C${rBR}`};r.getCell(c).numFmt=NF;});}
-    const transRow=wsV.rowCount+1;{const r=wsV.getRow(transRow);r.getCell(2).value="Multiples de transactions (× EBITDA)";[[3,H.mtMin],[4,H.mt],[5,H.mtMax]].forEach(([c,hh])=>{r.getCell(c).value={formula:`${rH}!${hh}*C${rEbRef}+C${rDN}+C${rBR}`};r.getCell(c).numFmt=NF;});}
-    const anrRow=wsV.rowCount+1;{const anrF=`${rC}!${CL(N-1)}${rr("CP")}+${rH}!${H.anrAdj}/${DIV}`;const r=wsV.getRow(anrRow);r.getCell(2).value="Actif net (capitaux propres fin de plan + ajustements)";[3,4,5].forEach(c=>{r.getCell(c).value={formula:anrF};r.getCell(c).numFmt=NF;});}
+    /* une méthode analogique dont l'EBITDA de référence n'est pas significatif ne produit pas de
+       valeur : la cellule reste vide plutôt que d'afficher un montant négatif */
+    const mult=hh=>`IF(C${rMOK}=1,${rH}!${hh}*C${rEbRef}+C${rDN}+C${rBR},"n.a.")`;
+    const compRow=wsV.rowCount+1;{const r=wsV.getRow(compRow);r.getCell(2).value="Multiples boursiers (× EBITDA)";[[3,H.mcMin],[4,H.mc],[5,H.mcMax]].forEach(([c,hh])=>{r.getCell(c).value={formula:mult(hh)};r.getCell(c).numFmt=NF;});}
+    const transRow=wsV.rowCount+1;{const r=wsV.getRow(transRow);r.getCell(2).value="Multiples de transactions (× EBITDA)";[[3,H.mtMin],[4,H.mt],[5,H.mtMax]].forEach(([c,hh])=>{r.getCell(c).value={formula:mult(hh)};r.getCell(c).numFmt=NF;});}
+    /* ACTIF NET À LA DATE DE VALORISATION : situation nette apportée à l'ouverture, et non les
+       capitaux propres reconstitués après cinq ans de résultats accumulés */
+    const ouvSum=`(${rC}!C${rr("R_OUVTR")}+${rC}!C${rr("R_OUVCR")}+${rC}!C${rr("R_OUVDT")})`;
+    const rANOK=wsV.rowCount+1; vF("Méthode patrimoniale applicable (1 = situation d'ouverture renseignée)",`IF(${ouvSum}<>0,1,0)`,"0");
+    const anrRow=wsV.rowCount+1;{const anrF=`IF(C${rANOK}=1,${rC}!C${rr("OUVNET")}+${rH}!${H.anrAdj}/${DIV},"n.a.")`;
+      const r=wsV.getRow(anrRow);r.getCell(2).value="Actif net à la date de valorisation (situation d'ouverture + ajustements)";
+      [3,4,5].forEach(c=>{r.getCell(c).value={formula:anrF};r.getCell(c).numFmt=NF;});}
     const rRet=wsV.rowCount+1;{
-      const wsumF=`(${rH}!${H.wDcf}+${rH}!${H.wComp}+${rH}!${H.wTrans}+${rH}!${H.wAnr})`;
-      const r=wsV.getRow(rRet);r.getCell(2).value="Valeur retenue (moyenne pondérée — poids en Hypothèses)";
-      r.getCell(4).value={formula:`IFERROR((D${dcfRow}*${rH}!${H.wDcf}+D${compRow}*${rH}!${H.wComp}+D${transRow}*${rH}!${H.wTrans}+D${anrRow}*${rH}!${H.wAnr})/${wsumF},0)`};
+      /* Les méthodes écartées sortent du numérateur ET du dénominateur : leur poids est redistribué.
+         Les tests d'applicabilité encadrent les cellules « n.a. » : aucune arithmétique sur du texte. */
+      const numer=`D${dcfRow}*${rH}!${H.wDcf}`
+        +`+IF(C${rMOK}=1,D${compRow}*${rH}!${H.wComp}+D${transRow}*${rH}!${H.wTrans},0)`
+        +`+IF(C${rANOK}=1,D${anrRow}*${rH}!${H.wAnr},0)`;
+      const denom=`${rH}!${H.wDcf}+IF(C${rMOK}=1,${rH}!${H.wComp}+${rH}!${H.wTrans},0)+IF(C${rANOK}=1,${rH}!${H.wAnr},0)`;
+      const r=wsV.getRow(rRet);r.getCell(2).value="Valeur retenue (moyenne pondérée des méthodes applicables)";
+      r.getCell(4).value={formula:`IFERROR((${numer})/(${denom}),0)`};
       r.getCell(4).numFmt=NF;r.font={bold:true,color:{argb:"FF172554"}};for(let c=2;c<=5;c++)r.getCell(c).fill=FOND_TOTAL;}
     /* ---- sensibilité : valeur des fonds propres selon WACC (lignes) × croissance g (colonnes) ---- */
     wsV.addRow([]);

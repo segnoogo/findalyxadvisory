@@ -1236,7 +1236,7 @@ function vueValoCorps(H,P,V){
     <span class="chip ok">Coût de la dette net ${pc(V.kd)}</span>
     <span class="chip" style="background:#172554;color:#fff">WACC ${pc(V.wacc)}</span>
     <span class="chip">g ${pc(V.g)}</span>
-    <span class="chip">Multiples ${Vh.multiplesComparables.central}x / ${Vh.multiplesTransactions.central}x — EBITDA ${Vh.useAdj?"ajusté":"reporté"} ${fmt(V.ebitdaRef)}</span>
+    <span class="chip">Multiples ${Vh.multiplesComparables.central}x / ${Vh.multiplesTransactions.central}x — EBITDA de référence ${fmt(V.ebitdaRef)}${V.multOk?"":" · non significatif"}</span>
     <button class="btn sm ${VALO_HYP_OUVERT?"primary":""}" style="margin-left:auto"
       onclick="VALO_HYP_OUVERT=!VALO_HYP_OUVERT;rendre()">${VALO_HYP_OUVERT?"Masquer les hypothèses":"Modifier les hypothèses"}</button></div>`;
   const capm=`<div class="deux"><div class="card">
@@ -1295,9 +1295,14 @@ function vueValoCorps(H,P,V){
   const evLbl=V.tvMode==="exit"?"Valeur terminale ("+(Vh.exitMultiple||0)+"× EBITDA terminal)":"Valeur terminale (g = "+pc(V.g)+")";
   const pontRows=[["Somme des FCFF actualisés",V.sommePv],[evLbl,V.vt],
      ["Valeur terminale actualisée",V.vtPv],["Valeur d'entreprise (EV)",V.ev],
-     ["(–) Dette nette au "+ETATS.annees[ETATS.annees.length-1],-V.detteNette]];
+     ["(–) Dette nette à la date de valorisation"+(V.dateValo==="ouverture"?" (situation d'ouverture)":" ("+ETATS.annees[ETATS.annees.length-1]+")"),-V.detteNette]];
   if(Math.abs(V.bridgeAjust)>0.5)pontRows.push(["± Ajustements du pont",V.bridgeAjust]);
   pontRows.push(["Valeur des fonds propres (DCF)",V.equityDcf]);
+  /* rappel de méthode : la valeur d'entreprise est une valeur d'AUJOURD'HUI ; ajouter la
+     trésorerie de fin de plan la compterait deux fois (elle est déjà dans les flux actualisés) */
+  const noteDate=V.dateValo==="ouverture"
+    ?"Dette nette prise à la date de valorisation (trésorerie déjà en caisse et emprunts déjà tirés) : la trésorerie générée par le plan est déjà contenue dans les flux actualisés, l'ajouter ici la compterait deux fois."
+    :"Dette nette prise au dernier exercice réel, qui est la date de valorisation.";
   const bridge=`<div class="deux"><div class="card">
     <div class="sec-titre" style="margin-top:0">De la valeur d'entreprise à la valeur des fonds propres</div>
     <table class="tb">${pontRows.map(([l,x])=>{const tot=/entreprise|fonds propres/.test(l);return `<tr class="${tot?"total":""}"${/fonds propres/.test(l)?' style="font-weight:700"':""}><td>${l}</td><td class="num">${fmt(x)}</td></tr>`;}).join("")}</table>
@@ -1307,7 +1312,8 @@ function vueValoCorps(H,P,V){
        <input type="text" inputmode="decimal" class="nin large" value="${Math.round((x.montant||0)*u.f*100)/100}" step="any" onchange="majBridge(${i},'montant',this.value)">
        <span class="mut">${u.lib}</span><button class="btn sm" onclick="supBridge(${i})">✕</button></div>`).join("")}
     <button class="btn sm" onclick="ajBridge()">+ Ajouter un ajustement</button>
-    <div class="mut" style="margin-top:6px">Ex. : − intérêts minoritaires, − provisions (retraite, litiges), + actifs hors exploitation. VT Gordon ${fmt(V.vtGordon)} · VT multiple de sortie ${fmt(V.vtExit)} ${u.suf}.</div></div>
+    <div class="mut" style="margin-top:6px">Ex. : − intérêts minoritaires, − provisions (retraite, litiges), + actifs hors exploitation. VT Gordon ${fmt(V.vtGordon)} · VT multiple de sortie ${fmt(V.vtExit)} ${u.suf}.</div>
+    <div class="mut" style="margin-top:6px;font-style:italic">${noteDate}</div></div>
     <div class="card"><div class="sec-titre" style="margin-top:0">Sensibilité — WACC × ${V.tvMode==="exit"?"multiple de sortie":"croissance g"}</div>
     <table class="tb"><tr><th>${u.lib}</th>${(V.sensiAxes?V.sensiAxes.col:[-0.01,-0.005,0,0.005,0.01].map(dg=>V.g+dg)).map(cv=>`<th class="num">${V.tvMode==="exit"?(Math.round(cv*10)/10)+"×":"g "+pc(cv)}</th>`).join("")}</tr>
     ${V.sensi.map((ligne,i)=>{const dw=[-0.01,-0.005,0,0.005,0.01][i];
@@ -1315,11 +1321,13 @@ function vueValoCorps(H,P,V){
     </table></div></div>`;
   /* football field */
   const methLabels={dcf:"DCF",comp:"Mult. boursiers",trans:"Mult. transactions",ebit:"EV/EBIT",ca:"EV/CA",per:"PER",anr:"Actif net"};
+  const horsJeu=V.methodes.filter(m=>!m.applicable);
   const poidsEd=`<div class="sec-titre">Pondération des méthodes (valeur retenue)</div>
-    <div class="row" style="flex-wrap:wrap;gap:10px">${V.methodes.map(m=>`<span class="ctl-h"><span class="mut" style="margin-right:4px">${methLabels[m.id]||m.id}</span><input type="text" inputmode="decimal" class="nin" style="width:48px" value="${V.poids[m.id]||0}" onchange="hValoM('poids','${m.id}',this.value,1)"><span class="mut">%</span></span>`).join("")}</div>`;
+    <div class="row" style="flex-wrap:wrap;gap:10px">${V.methodes.map(m=>`<span class="ctl-h" ${m.applicable?"":'style="opacity:.45" title="Méthode écartée : '+esc(m.motif||"")+'"'}><span class="mut" style="margin-right:4px">${methLabels[m.id]||m.id}</span><input type="text" inputmode="decimal" class="nin" style="width:48px" value="${V.poids[m.id]||0}" ${m.applicable?"":"disabled"} onchange="hValoM('poids','${m.id}',this.value,1)"><span class="mut">%</span></span>`).join("")}</div>
+    ${horsJeu.length?`<div class="mut" style="margin-top:6px;font-style:italic">Méthode(s) écartée(s) de la valeur retenue : ${horsJeu.map(m=>(methLabels[m.id]||m.id)+" — "+esc(m.motif||"")).join(" · ")}. Leur poids est redistribué sur les méthodes applicables.</div>`:""}`;
   const ff=`<div class="card">
     <div class="sec-titre" style="margin-top:0">Synthèse des méthodes — fourchette de valorisation</div>
-    <div style="height:${60+V.methodes.length*46}px"><canvas id="gFF"></canvas></div>
+    <div style="height:${60+V.methodes.filter(m=>m.applicable).length*46}px"><canvas id="gFF"></canvas></div>
     ${poidsEd}
     <div class="row" style="margin-top:10px">
       <span class="chip" style="background:#172554;color:#fff">Fourchette (méthodes pondérées) : ${fmt(V.fourchette.min)} – ${fmt(V.fourchette.max)} ${u.suf}</span>
@@ -1333,6 +1341,9 @@ function dessinerFootball(){
   const V=VALO_CACHE,u=uni();
   const fmtFF=x=>Math.round(x).toLocaleString("fr-FR").replace(/\u202f|\u00a0/g," ");
   /* étiquettes min / central / max dessinées sur le graphique */
+  /* seules les méthodes applicables figurent dans le football-field : une méthode écartée
+     n'a pas de valeur à représenter (EBITDA de référence négatif, pas de bilan d'ouverture) */
+  const MFF=V.methodes.filter(m=>m.applicable);
   const etiquettesFF={id:"etiquettesFF",afterDatasetsDraw(chart){
     const {ctx}=chart;
     const meta=chart.getDatasetMeta(0);
@@ -1340,7 +1351,7 @@ function dessinerFootball(){
     ctx.font="600 11px Calibri, Arial";
     ctx.textBaseline="middle";
     meta.data.forEach((barre,i)=>{
-      const m=V.methodes[i], y=barre.y;
+      const m=MFF[i], y=barre.y;
       const largeur=barre.x-barre.base;
       const memeVal=Math.abs(m.max-m.min)<=Math.max(1,Math.abs(m.max)*0.005);
       ctx.fillStyle="#172554";
@@ -1363,10 +1374,10 @@ function dessinerFootball(){
     ctx.restore();
   }};
   charts.push(new Chart(el,{type:"bar",
-    data:{labels:V.methodes.map(m=>m.lib),
+    data:{labels:MFF.map(m=>m.lib),
       datasets:[
-        {data:V.methodes.map(m=>[m.min*u.f,m.max*u.f]),backgroundColor:"#4a6fb5",borderRadius:4,barPercentage:0.55},
-        {data:V.methodes.map(m=>[m.central*u.f*0.998,m.central*u.f*1.002]),backgroundColor:"#FA6706",barPercentage:0.75,grouped:false}
+        {data:MFF.map(m=>[m.min*u.f,m.max*u.f]),backgroundColor:"#4a6fb5",borderRadius:4,barPercentage:0.55},
+        {data:MFF.map(m=>[m.central*u.f*0.998,m.central*u.f*1.002]),backgroundColor:"#FA6706",barPercentage:0.75,grouped:false}
       ]},
     options:{indexAxis:"y",responsive:true,maintainAspectRatio:false,
       layout:{padding:{left:70,right:70,top:14}},
@@ -1374,9 +1385,9 @@ function dessinerFootball(){
         tooltip:{enabled:true,displayColors:false,
           backgroundColor:"#172554",titleFont:{weight:"700"},
           callbacks:{
-            title:items=>V.methodes[items[0].dataIndex].lib,
+            title:items=>MFF[items[0].dataIndex].lib,
             label:item=>{
-              const m=V.methodes[item.dataIndex];
+              const m=MFF[item.dataIndex];
               if(item.datasetIndex===0)
                 return "Fourchette : "+fmtFF(m.min*u.f)+" – "+fmtFF(m.max*u.f)+" "+u.lib;
               return "Valeur centrale : "+fmtFF(m.central*u.f)+" "+u.lib;

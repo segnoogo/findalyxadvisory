@@ -1095,20 +1095,31 @@ function construireValo(pptx,opts){
     rpEnTete(sl,B.societe,"Note de synthèse");
     rpTitre(sl,"Synthèse de valeur — fonds propres");
   }
+  /* une méthode écartée par le moteur n'affiche pas de montant : « n.a. » et le motif */
+  const carte=(m,def)=>(m&&m.applicable===false)?"n.a.":(rpFmt((m&&m.central)!==undefined?m.central:def)+" "+rpLib());
+  const sousC=(m,txt)=>(m&&m.applicable===false)?(m.motif||"méthode écartée"):txt;
   rpCartes(sl,[
     ["Fonds propres — DCF",rpFmt(val.equityDcf)+" "+rpLib(),"WACC "+rpPct(val.wacc),null,"neutre","coins","FA6706"],
-    ["Comparables (central)",rpFmt((mKey.comp&&mKey.comp.central)||val.equityMult)+" "+rpLib(),val.multiple.toFixed(1)+"× EBITDA",null,"neutre","chart","224289"],
-    ["Actif net",rpFmt((mKey.anr&&mKey.anr.central)||v.CAPITAUX_PROPRES[a1])+" "+rpLib(),"approche patrimoniale",null,"neutre","file","172554"],
-    ["Valeur retenue",rpFmt(val.fourchette.retenue)+" "+rpLib(),"moyenne pondérée",null,"neutre","wallet","16904E"],
+    ["Comparables (central)",carte(mKey.comp,val.equityMult),sousC(mKey.comp,val.multiple.toFixed(1)+"× EBITDA"),null,"neutre","chart","224289"],
+    ["Actif net",carte(mKey.anr,val.anrBase),sousC(mKey.anr,"approche patrimoniale"),null,"neutre","file","172554"],
+    ["Valeur retenue",rpFmt(val.fourchette.retenue)+" "+rpLib(),"moyenne des méthodes applicables",null,"neutre","wallet","16904E"],
   ],1.7);
-  const synth=mCles.map(m=>[m.lib,rpFmt(m.min),rpFmt(m.central),rpFmt(m.max)]);
+  /* le motif de l'écartement va en note : dans la cellule, il ferait passer la ligne sur deux
+     hauteurs et le tableau déborderait sur sa propre source */
+  const synth=mCles.map(m=>(m.applicable===false)
+    ?[m.lib+" — écartée","n.a.","n.a.","n.a."]
+    :[m.lib,rpFmt(m.min),rpFmt(m.central),rpFmt(m.max)]);
+  const ecartees=mCles.filter(m=>m.applicable===false);
+  const noteSynth="Source : valorisation multi-méthodes Findalyx Advisory."
+    +(ecartees.length?" Écartée(s) de la valeur retenue : "+ecartees.map(m=>COURT[m.id]+" ("+(m.motif||"")+")").join(" · ")+" ; poids redistribué.":"");
   synth.push(["Valeur retenue (pondérée)",rpFmt(val.fourchette.min),rpFmt(val.fourchette.retenue),rpFmt(val.fourchette.max)]);
   rpTable(sl,0.55,3.35,7.0,B.societe.toUpperCase()+" - Fourchettes de valeur par méthode",
     [rpLib(),"Bas","Central","Haut"],synth,[...mCles.map(()=>"detail"),"sous_total"],
-    new Set([2]),[3.4,1.2,1.2,1.2],9,"Source : valorisation multi-méthodes Findalyx Advisory");
+    new Set([2]),[3.4,1.2,1.2,1.2],9,noteSynth);
+  const mFF=mCles.filter(m=>m.applicable!==false);
   rpBarresH(sl,7.75,3.15,5.05,3.0,"Fourchette — valeur des fonds propres ("+rpLib()+")",
-    [...mCles.map(m=>COURT[m.id]),"Retenue"],
-    [...mCles.map(m=>m.central),val.fourchette.retenue],
+    [...mFF.map(m=>COURT[m.id]),"Retenue"],
+    [...mFF.map(m=>m.central),val.fourchette.retenue],
     {colors:["172554","2E5AAC","8FAADC","9E3A38","16904E"]});
   rpCadreComment(sl,0.55,5.5,7.0,1.35);
   rpPied(sl,mention,++page);
@@ -1139,7 +1150,7 @@ function construireValo(pptx,opts){
   const brg=[["Somme des FCFF actualisés",rpFmt(val.sommePv)],
     ["Valeur terminale actualisée ("+tvTxt+")",rpFmt(val.vtPv)],
     ["= Valeur d'entreprise (EV)",rpFmt(val.ev)],
-    ["(−) Dette nette au 31/12/"+a1,rpFmt(-val.detteNette)],
+    [(val.dateValo==="ouverture"?"(−) Dette nette à la date de valorisation (situation d'ouverture)":"(−) Dette nette au 31/12/"+a1),rpFmt(-val.detteNette)],
     (Math.abs(val.bridgeAjust)>0.5?["(±) Ajustements du pont (provisions, etc.)",rpFmt(val.bridgeAjust)]:null),
     ["= Valeur des fonds propres (DCF)",rpFmt(val.equityDcf)]].filter(Boolean);
   rpTable(sl,6.5,4.15,6.3,"Passage valeur d'entreprise → fonds propres",
@@ -1168,21 +1179,28 @@ function construireValo(pptx,opts){
   rpEnTete(sl,B.societe,"Approches de marché et patrimoniale");
   rpTitre(sl,"Multiples de marché et actif net");
   const mc=Vh.multiplesComparables, mt=Vh.multiplesTransactions;
+  const na=m=>(m&&m.applicable===false)?"n.a.":null;
+  const fm=(m,k)=>na(m)||rpFmt(m&&m[k]);
   const tMult=[
-    ["EBITDA de référence "+fy[fy.length-1],rpFmt(val.ebitdaRef),"",""],
+    [(val.dateValo==="ouverture"?"EBITDA de référence (1re année du plan)":"EBITDA de référence "+fy[fy.length-1]),rpFmt(val.ebitdaRef),"",""],
     ["Comparables — EV/EBITDA",mc.min.toFixed(1)+"×",mc.central.toFixed(1)+"×",mc.max.toFixed(1)+"×"],
-    ["→ fonds propres induits",rpFmt(mKey.comp&&mKey.comp.min),rpFmt(mKey.comp&&mKey.comp.central),rpFmt(mKey.comp&&mKey.comp.max)],
+    ["→ fonds propres induits",fm(mKey.comp,"min"),fm(mKey.comp,"central"),fm(mKey.comp,"max")],
     ["Transactions — EV/EBITDA",mt.min.toFixed(1)+"×",mt.central.toFixed(1)+"×",mt.max.toFixed(1)+"×"],
-    ["→ fonds propres induits",rpFmt(mKey.trans&&mKey.trans.min),rpFmt(mKey.trans&&mKey.trans.central),rpFmt(mKey.trans&&mKey.trans.max)]];
+    ["→ fonds propres induits",fm(mKey.trans,"min"),fm(mKey.trans,"central"),fm(mKey.trans,"max")]];
   rpTable(sl,0.55,1.7,8.2,B.societe.toUpperCase()+" - Multiples d'EBITDA et fonds propres induits",
     ["","Bas","Central","Haut"],tMult,["titre","detail","sous_total","detail","sous_total"],
-    new Set([2]),[3.9,1.2,1.2,1.2],9,"Fonds propres = multiple × EBITDA de référence − dette nette + ajustements du pont.");
+    new Set([2]),[3.9,1.2,1.2,1.2],9,
+    "Fonds propres = multiple × EBITDA de référence − dette nette + ajustements du pont."
+    +((mKey.comp&&mKey.comp.applicable===false)?" Méthodes écartées de la valeur retenue : "+(mKey.comp.motif||"EBITDA de référence non significatif")+".":""));
+  const anrB=(val.anrBase!==undefined)?val.anrBase:v.CAPITAUX_PROPRES[a1];
+  const anrC=mKey.anr?mKey.anr.central:anrB;
   const tAnr=[
-    ["Actif net comptable au 31/12/"+a1,rpFmt(v.CAPITAUX_PROPRES[a1])],
-    ["Retraitements (réévaluations, actifs hors exploitation)",rpFmt((mKey.anr?mKey.anr.central:v.CAPITAUX_PROPRES[a1])-v.CAPITAUX_PROPRES[a1])],
-    ["= Actif net réévalué (ANR)",rpFmt(mKey.anr?mKey.anr.central:v.CAPITAUX_PROPRES[a1])]];
+    [(val.dateValo==="ouverture"?"Situation nette à la date de valorisation":"Actif net comptable au 31/12/"+a1),rpFmt(anrB)],
+    ["Retraitements (réévaluations, actifs hors exploitation)",rpFmt(anrC-anrB)],
+    ["= Actif net réévalué (ANR)",na(mKey.anr)||rpFmt(anrC)]];
   rpTable(sl,9.0,1.7,3.8,"Approche patrimoniale (ANR)",
-    [rpLib(),"Valeur"],tAnr,["detail","detail","sous_total"],new Set(),[2.6,1.2],8.5);
+    [rpLib(),"Valeur"],tAnr,["detail","detail","sous_total"],new Set(),[2.6,1.2],8.5,
+    (mKey.anr&&mKey.anr.applicable===false)?("Écartée : "+(mKey.anr.motif||"")+"."):null);
   rpCadreComment(sl,0.55,4.35,12.25,2.15);
   rpPied(sl,mention,++page);
   /* ---------- 4. Risques ---------- */
