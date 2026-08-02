@@ -7499,6 +7499,8 @@ function assurerModele(){
   return M;
 }
 function mScenario(k){assurerModele().scenario=k;sauverDossier();rendre();}
+function mScenDelta(k,champ,val){var s=assurerModele().scenarios[k];if(!s)return;var x=numFR(val);if(x!==null)s[champ]=x/100;sauverDossier();rendre();}
+function mScenLab(k,val){var s=assurerModele().scenarios[k];if(s&&String(val).trim()){s.lab=String(val).trim();sauverDossier();rendre();}}
 function mDivSeuil(v){var M=assurerModele();if(String(v).trim()==='')delete M.dividendes_seuilCash;else{var x=numFR(v);if(x!==null)M.dividendes_seuilCash=x;}sauverDossier();rendre();}
 function mHNb(n){var M=assurerModele();M.nb=Math.max(3,Math.min(10,Math.round(+n)||5));
   /* les séries « par année » suivent la nouvelle durée : la dernière valeur saisie est reconduite (modifiable) */
@@ -7853,7 +7855,17 @@ function vueModele(){
       +'<div class="hyp-g"><span>TVA</span><input class="sel" value="'+((M.tva||0)*100)+'" onchange="mSet(\'tva\',(numFR(this.value)||0)/100)"><span class="suf">%</span></div>'
       +'<div class="hyp-g"><span>Impôt sur les sociétés</span><input class="sel" value="'+((M.is_taux||0)*100)+'" onchange="mSet(\'is_taux\',(numFR(this.value)||0)/100)"><span class="suf">%</span></div>'
       +'<div class="hyp-g"><span>Impôt minimum forfaitaire (% du CA)</span><input class="sel" value="'+((M.imf_taux||0)*100)+'" onchange="mSet(\'imf_taux\',(numFR(this.value)||0)/100)"><span class="suf">%</span></div>'
-      +'<div class="hyp-g"><span>Inflation <span class="mut">· fait évoluer charges & coûts unitaires</span></span><input class="sel" value="'+((M.inflation||0)*100)+'" onchange="mSet(\'inflation\',(numFR(this.value)||0)/100)"><span class="suf">%</span></div></div>';
+      +'<div class="hyp-g"><span>Inflation <span class="mut">· fait évoluer charges & coûts unitaires</span></span><input class="sel" value="'+((M.inflation||0)*100)+'" onchange="mSet(\'inflation\',(numFR(this.value)||0)/100)"><span class="suf">%</span></div></div>'
+      /* paramètres des scénarios : jusqu'ici codés en dur (seul le classeur Excel les exposait) */
+      +'<div class="card"><div class="sec-titre" style="margin-top:0">Scénarios — sensibilité</div>'
+      +'<div class="mut" style="margin:-4px 0 10px">Écarts appliqués au scénario central : le volume agit sur le chiffre d\'affaires, la marge sur les coûts directs, les délais sur le BFR (DSO, DIO, DPO). Le scénario actif se choisit en haut de chaque vue.</div>'
+      +'<div class="tscroll"><table class="tb etat"><tr><th>Scénario</th><th class="num">Δ Volume / CA</th><th class="num">Δ Marge</th><th class="num">Δ Délais BFR</th></tr>'
+      +Object.keys(M.scenarios||{}).map(function(k){var s=M.scenarios[k];
+        var ch=function(champ){return '<td class="num"><input class="nin" style="width:76px" value="'+(Math.round((+s[champ]||0)*1000)/10)+'" onchange="mScenDelta(\''+k+'\',\''+champ+'\',this.value)"><span class="mut"> %</span></td>';};
+        return '<tr><td><input class="sel" value="'+esc(s.lab||k)+'" onchange="mScenLab(\''+k+'\',this.value)"'+(k==="central"?' ':'')+'></td>'
+          +ch('dCA')+ch('dMarge')+ch('dJours')+'</tr>';}).join("")
+      +'</table></div>'
+      +'<div class="mut" style="margin-top:8px">Un Δ marge positif <b>réduit</b> les coûts directs (marge améliorée) ; un Δ délais positif <b>allonge</b> les délais, donc alourdit le BFR. Le scénario central est habituellement laissé à 0.</div></div>';
   } else if(SOUS_MODELE==="pl"){ corps=vueBPPl(P);
   } else if(SOUS_MODELE==="bs"){ corps=vueBPBs(P);
   } else if(SOUS_MODELE==="tft"){ corps=vueBPTft(P);
