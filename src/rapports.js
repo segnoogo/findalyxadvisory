@@ -16,7 +16,8 @@ function rpFmt(v){if(v===null||v===undefined)return "-";
   const s=Math.abs(x).toLocaleString("fr-FR",{minimumFractionDigits:u.dec,maximumFractionDigits:u.dec}).replace(/[\u202f\u00a0]/g," ");
   return x<0?`(${s})`:s;}
 function rpPct(v){if(v===null||!isFinite(v))return "-";if(Math.abs(v)>9.99)return "n.s.";
-  const s=Math.round(Math.abs(v*100))+"%";return v<0?`(${s})`:s;}
+  /* espace avant le % (typographie française), comme dans les blocs de ratios */
+  const s=Math.round(Math.abs(v*100))+" %";return v<0?`(${s})`:s;}
 /* Échelle propre aux graphiques : les montants sont stockés en KFCFA. Les étiquettes de
    graphique doivent rester courtes quelle que soit l'unité d'affichage du dossier (F/K/M) :
    on choisit ici l'unité qui donne 3 ou 4 caractères (KFCFA, MFCFA, MdFCFA) et le titre du
@@ -78,22 +79,44 @@ function rpPied(sl,mention,page){
   sl.addText(String(page),{x:12.2,y:7.1,w:0.58,h:0.25,align:"right",fontSize:9,
     color:RP.G_TXT,fontFace:"Arial"});
 }
-function rpGarde(pptx, societe, titreR, sousTitre, dateTxt, cabinet){
+/* PAGE DE GARDE — pleine page bleu nuit, comme les couvertures de mémorandums et de pitchbooks :
+   le nom de la société occupe le tiers médian, le type de document et la période au-dessus, une
+   bande de faits marquants et la signature du conseil en bas. `faits` (optionnel) = [[lab,val]…] :
+   ce que le lecteur doit retenir avant d'ouvrir le document.
+   Rien de décoratif : un filet orange, un bloc de faits, deux logos. */
+function rpGarde(pptx, societe, titreR, sousTitre, dateTxt, cabinet, faits){
   const sl=pptx.addSlide();
-  {const _lg=logoCab();sl.addImage(_lg?{data:_lg.data,x:0.7,y:0.7,h:0.5,w:0.5*_lg.ratio}:{data:LOGO_FINDALYX_CLAIR,x:0.7,y:0.7,h:0.5,w:0.5*4.45});}
+  sl.addShape("rect",{x:0,y:0,w:13.333,h:7.5,fill:{color:RP.NAVY}});
+  /* voile plus clair en bas de page : sépare la signature sans ajouter de trait */
+  sl.addShape("rect",{x:0,y:6.1,w:13.333,h:1.4,fill:{color:"12204A"}});
+  {const _lg=logoCab();sl.addImage(_lg?{data:_lg.data,x:0.72,y:0.62,h:0.46,w:0.46*_lg.ratio}
+    :{data:LOGO_FINDALYX,x:0.72,y:0.62,h:0.46,w:0.46*4.45});}
+  sl.addText("STRICTEMENT CONFIDENTIEL",{x:8.6,y:0.7,w:4.0,h:0.3,align:"right",
+    fontSize:9,bold:true,color:"7E90BF",charSpacing:2,fontFace:"Arial"});
   if(typeof DOSSIER!=="undefined"&&DOSSIER&&DOSSIER.logo)
-    sl.addImage({data:DOSSIER.logo,x:11.4,y:1.45,w:1.25,h:1.25,sizing:{type:"contain",w:1.25,h:1.25}});
-  sl.addText("STRICTEMENT CONFIDENTIEL",{x:9.0,y:0.8,w:3.6,h:0.3,align:"right",
-    fontSize:9.5,bold:true,color:RP.G_CLAIR,charSpacing:2,fontFace:"Arial"});
-  sl.addText(dateTxt.toUpperCase(),{x:0.7,y:2.1,w:11.9,h:0.35,fontSize:11,bold:true,
-    color:RP.G_TXT,charSpacing:2,fontFace:"Arial"});
-  sl.addShape("rect",{x:0,y:3.1,w:13.333,h:4.4,fill:{color:RP.NAVY}});
-  sl.addShape("rect",{x:0.72,y:3.72,w:1.7,h:0.045,fill:{color:RP.ORANGE}});
-  sl.addText(societe,{x:0.7,y:3.95,w:11.9,h:0.95,fontSize:40,bold:true,color:RP.BLANC,fontFace:"Arial"});
-  sl.addText(titreR,{x:0.7,y:5.0,w:11.9,h:0.5,fontSize:19,color:"CADCFC",fontFace:"Arial"});
-  sl.addText(sousTitre,{x:0.7,y:5.6,w:11.9,h:0.35,fontSize:12.5,color:"9FB0D6",fontFace:"Arial"});
-  sl.addText("Projet de rapport — support de discussion  ·  Préparé par "+cabinet,
-    {x:0.7,y:6.8,w:11.9,h:0.3,fontSize:10.5,color:"9FB0D6",fontFace:"Arial"});
+    sl.addImage({data:DOSSIER.logo,x:11.35,y:1.5,w:1.3,h:1.3,sizing:{type:"contain",w:1.3,h:1.3}});
+  sl.addShape("rect",{x:0.72,y:2.28,w:1.7,h:0.05,fill:{color:RP.ORANGE}});
+  sl.addText(String(titreR).toUpperCase(),{x:0.72,y:2.5,w:10.4,h:0.3,fontSize:11,bold:true,
+    color:"9FB0D6",charSpacing:2.5,fontFace:"Arial"});
+  sl.addText(societe,{x:0.72,y:2.92,w:11.9,h:1.0,fontSize:42,bold:true,color:RP.BLANC,fontFace:"Arial"});
+  sl.addText(sousTitre,{x:0.72,y:4.02,w:11.0,h:0.4,fontSize:13,color:"CADCFC",fontFace:"Arial"});
+  /* bande de faits marquants : trois à quatre repères, séparés par un filet vertical */
+  const F=(faits||[]).filter(f=>f&&f[1]);
+  if(F.length){
+    const y0=4.8, wF=Math.min(3.1,(11.9)/F.length);
+    F.slice(0,4).forEach((f,i)=>{
+      const x=0.72+i*wF;
+      if(i) sl.addShape("rect",{x:x-0.22,y:y0+0.04,w:0.012,h:0.62,fill:{color:"2C3E6B"}});
+      sl.addText(String(f[0]).toUpperCase(),{x:x,y:y0,w:wF-0.3,h:0.22,fontSize:8,bold:true,
+        color:"7E90BF",charSpacing:1.2,fontFace:"Arial"});
+      sl.addText(String(f[1]),{x:x,y:y0+0.22,w:wF-0.3,h:0.48,fontSize:12.5,bold:true,
+        color:RP.BLANC,fontFace:"Arial",valign:"top"});
+    });
+  }
+  sl.addText(String(dateTxt).toUpperCase(),{x:0.72,y:6.42,w:6.0,h:0.3,fontSize:10.5,bold:true,
+    color:"9FB0D6",charSpacing:2,fontFace:"Arial"});
+  sl.addText("Préparé par "+cabinet+"  ·  Projet — support de discussion",
+    {x:6.3,y:6.42,w:6.3,h:0.3,align:"right",fontSize:10.5,color:"7E90BF",fontFace:"Arial"});
 }
 /* SOMMAIRE paginé, comme au début de tout pitchbook.
    Les pages des sections ne sont connues qu'une fois le rapport construit, et l'ordre des
@@ -836,10 +859,13 @@ function rpPageBridge(pptx,C,page){
     {lib:"Autres frais généraux",val:d("OPEX_TOTAL")}]
     .filter(it=>it.type==="borne"||Math.abs(it.val)>0.5);
   items.push({lib:"EBITDA "+fyp[fyp.length-1],val:proj.pl.EBITDA[aF],type:"borne"});
+  /* même échelle que le graphique (cf. page de trésorerie) */
+  const eBr=rpEch(items.map(it=>it.val));
+  const fmBr=x=>rpFmtE(x,eBr)+" "+eBr.lib;
   const yBr=rpTitreMsg(sl,"Passage de l'EBITDA "+fyp[0]+" à "+fyp[fyp.length-1],
-    "L'EBITDA gagne "+rpMsgFmt(proj.pl.EBITDA[aF]-eb1)+" : la croissance du chiffre d'affaires en apporte "
-    +rpMsgFmt(d("CA"))+", les coûts directs et les charges fixes en consomment "
-    +rpMsgFmt(Math.abs(d("ACHATS")+d("CHARGES_PERSONNEL")+d("OPEX_TOTAL")))+".");
+    "L'EBITDA gagne "+fmBr(proj.pl.EBITDA[aF]-eb1)+" : la croissance du chiffre d'affaires en apporte "
+    +fmBr(d("CA"))+", les coûts directs et les charges fixes en consomment "
+    +fmBr(Math.abs(d("ACHATS")+d("CHARGES_PERSONNEL")+d("OPEX_TOTAL")))+".");
   rpWaterfall(sl,0.55,yBr+0.2,12.23,3.75,"Bridge d'EBITDA",items,
     "Écart entre la première et la dernière année du plan. Bleu : contribution positive · rouge : consommation. La somme des colonnes reconstitue l'EBITDA de fin de plan.");
   rpCommentReste(sl,0.55,yBr+4.15,12.23);
@@ -862,9 +888,13 @@ function rpPageTreso(pptx,C,page){
     {lib:"Dividendes",val:som(t=>t.FN||0)}]
     .filter(it=>it.type==="borne"||Math.abs(it.val)>0.5);
   cfl.push({lib:"Trésorerie de clôture",val:clo,type:"borne"});
+  /* le message adopte l'échelle du GRAPHIQUE (le graphique s'échelonne seul pour rester lisible) :
+     annoncer « 53 834 KFCFA » sous un graphique gradué en MFCFA rendait la page incompréhensible */
+  const eCf=rpEch(cfl.map(it=>it.val).concat([clo]));
+  const fmCf=x=>rpFmtE(x,eCf)+" "+eCf.lib;
   const yCf=rpTitreMsg(sl,"Génération de trésorerie sur l'horizon du plan",
-    "Sur l'ensemble du plan, l'exploitation nette des investissements dégage "+rpMsgFmt(som(t=>t.ZB+t.ZC))
-    +" ; la trésorerie de clôture s'établit à "+rpMsgFmt(clo)+".");
+    "Sur l'ensemble du plan, l'exploitation nette des investissements dégage "+fmCf(som(t=>t.ZB+t.ZC))
+    +" ; la trésorerie de clôture s'établit à "+fmCf(clo)+".");
   rpWaterfall(sl,0.55,yCf+0.2,12.23,3.75,"Cumul "+fyp[0]+" – "+fyp[fyp.length-1],cfl,
     "Cumul des flux du tableau de trésorerie sur l'horizon. Bleu : ressources · rouge : emplois.");
   rpCommentReste(sl,0.55,yCf+4.15,12.23);
@@ -1813,6 +1843,73 @@ function rpCoupe(txt,max){
   return c.slice(0,Math.max(c.lastIndexOf(". ")+1,c.lastIndexOf(" ")))
     .replace(/[,;:]$/,"")+(/\.$/.test(c.trim())?"":" …");
 }
+/* ---------- prose et schémas de la partie « société » ----------
+   La fiche d'identité est une suite de champs ; un mémorandum demande des PHRASES. On compose
+   donc une amorce rédigée à partir des champs structurés (secteur, ville, création, effectifs),
+   puis les fragments de la description deviennent des puces. */
+function rpAnnee(txt){const m=String(txt||"").match(/\b(19|20)\d{2}\b/);return m?m[0]:null;}
+function rpListeFr(txt){
+  const p=String(txt||"").split(/\s*[·;]\s*/).map(s=>s.trim()).filter(Boolean);
+  if(!p.length) return "";
+  if(p.length===1) return p[0];
+  return p.slice(0,-1).join(", ")+" et "+p[p.length-1];
+}
+function rpProse(B,I){
+  I=I||{};
+  const soc=B.societe;
+  const sect=String(I.secteur||(typeof DOSSIER!=="undefined"&&DOSSIER&&DOSSIER.secteur)||"").trim();
+  const ville=String(I.adresse||"").split(",")[0].trim();
+  const an=rpAnnee(I.creation);
+  let lead=soc+(sect?(" exerce dans "+(/^[aeiouéèêAEIOU]/.test(sect)?"l'":"le secteur ")
+    +sect.charAt(0).toLowerCase()+sect.slice(1)):" exerce son activité")
+    +(ville?(" à "+ville):"")+".";
+  const eff=rpListeFr(rpAnonTxt(I.effectif));
+  if(an||eff) lead+=" "+(an?("Créée en "+an+", elle"):"Elle")+(eff?(" compte "+eff+"."):" poursuit son développement.");
+  /* fragments de la description → puces (le texte de l'analyste n'est pas réécrit, il est structuré) */
+  const brut=rpAnonTxt([I.description,I.services].filter(Boolean).join(" "));
+  const puces=brut.split(/(?:\.\s+|\.$)/).map(s=>s.trim()).filter(s=>s.length>12)
+    .map(s=>rpCoupe(s,190).replace(/[.;]?$/,"."));
+  return {lead:lead,puces:puces};
+}
+/* SCHÉMA D'ACTIONNARIAT : « Nom 55 % · Nom 20 % » devient un organigramme — une répartition de
+   capital se lit en un coup d'œil, pas dans une cellule de tableau. */
+function rpActionnaires(txt){
+  return String(txt||"").split(/\s*[·;,]\s*/).map(s=>s.trim()).filter(Boolean).map(s=>{
+    const m=s.match(/(-?\d+(?:[.,]\d+)?)\s*%/);
+    return {nom:rpCoupe(s.replace(/\s*\(?-?\d+(?:[.,]\d+)?\s*%\)?\s*/,"").trim(),28),
+            pct:m?parseFloat(m[1].replace(",",".")):null};
+  }).filter(a=>a.nom);
+}
+function rpSchemaCapital(sl,x,y,w,h,societe,acts,note){
+  const A=(acts||[]).slice(0,5);
+  if(!A.length) return y;
+  const n=A.length, gap=0.16, bw=Math.min(2.5,(w-gap*(n-1))/n), tot=n*bw+gap*(n-1);
+  const x0=x+(w-tot)/2, hb=0.62, yb=y+0.24;
+  const somme=A.reduce((t,a)=>t+(a.pct||0),0);
+  A.forEach((a,i)=>{
+    const bx=x0+i*(bw+gap);
+    sl.addShape("rect",{x:bx,y:yb,w:bw,h:hb,fill:{color:RP.BLANC},line:{color:"C3D0E6",width:1}});
+    sl.addText(a.nom,{x:bx+0.06,y:yb+0.04,w:bw-0.12,h:0.34,fontSize:8.5,color:RP.G_TITRE,
+      fontFace:"Arial",valign:"top"});
+    sl.addText(a.pct!=null?(String(a.pct).replace(".",",")+" %"):"n.d.",
+      {x:bx+0.06,y:yb+0.36,w:bw-0.12,h:0.24,fontSize:11,bold:true,color:RP.BLEU,fontFace:"Arial"});
+    /* descente vers la barre de collecte — en TRAITS : un rectangle fin se rend avec un contour
+       et l'organigramme paraît fait de petites boîtes */
+    sl.addShape("line",{x:bx+bw/2,y:yb+hb,w:0,h:0.26,line:{color:"9DB0CE",width:1}});
+  });
+  const yBar=yb+hb+0.26;
+  sl.addShape("line",{x:x0+bw/2,y:yBar,w:tot-bw,h:0,line:{color:"9DB0CE",width:1}});
+  sl.addShape("line",{x:x+w/2,y:yBar,w:0,h:0.3,line:{color:"9DB0CE",width:1}});
+  const wS=Math.min(5.6,w*0.62), yS=yBar+0.3;
+  sl.addShape("rect",{x:x+(w-wS)/2,y:yS,w:wS,h:0.62,fill:{color:RP.NAVY}});
+  sl.addText(societe,{x:x+(w-wS)/2+0.1,y:yS,w:wS-0.2,h:0.62,align:"center",valign:"middle",
+    fontSize:12,bold:true,color:RP.BLANC,fontFace:"Arial"});
+  const nt=(note||"")+((somme&&Math.abs(somme-100)>0.5)?(" Total des parts identifiées : "
+    +String(Math.round(somme*10)/10).replace(".",",")+" %."):"");
+  if(nt.trim()) sl.addText(nt.trim(),{x:x,y:yS+0.7,w:w,h:0.3,fontSize:7.5,italic:true,
+    color:RP.G_CLAIR,fontFace:"Arial",valign:"top"});
+  return yS+0.66+(nt.trim()?0.34:0);
+}
 /* Points forts de l'investissement, dérivés des chiffres du plan puis complétés par la fiche
    d'identité. Partagés par le teaser et le mémorandum d'information. */
 function rpPointsForts(proj,ap,I){
@@ -1995,7 +2092,11 @@ function construireIM(pptx){
   let page=2;   /* page 2 : sommaire */
   let sl;
   rpGarde(pptx,B.societe,"Mémorandum d'information",
-    "Opportunité de cession"+(I.secteur?(" — "+I.secteur):"")+"  |  Montants en "+rpLib(),B.dateTxt,B.cabinet);
+    "Opportunité de cession",B.dateTxt,B.cabinet,
+    [["Secteur",rpCoupe(I.secteur||DOSSIER.secteur,32)],
+     ["Implantation",rpCoupe(String(I.adresse||"").split(",")[0],26)],
+     ["Chiffre d'affaires "+fyp[fyp.length-1],rpFmt(caF)+" "+rpLib()],
+     ["Marge d'EBITDA "+fyp[fyp.length-1],mgF!==null?rpPct(mgF):null]]);
   if(RP_SOM_FIX) rpSommaire(pptx,B.societe,RP_SOM_FIX,mention);
   /* ---------- avertissement : une page entière, comme dans tout mémorandum ---------- */
   sl=pptx.addSlide();
@@ -2071,10 +2172,36 @@ function construireIM(pptx){
   }
   rpPied(sl,mention,++page);
   /* ---------- 2. Société, gouvernance et organisation ---------- */
-  rpSection(pptx,2,"Société et organisation",["Historique, actionnariat et gouvernance","Organisation et moyens"],mention,++page);
-  rpPlaceholder(pptx,B.societe,"Société et organisation","Historique, actionnariat et gouvernance",
-    ["Historique et actionnariat","Structure juridique et gouvernance","Implantation et installations",
-     "Faits marquants récents"],mention,++page,{fiche:true});
+  rpSection(pptx,2,"Société et organisation",
+    ["Présentation et actionnariat","Gouvernance, installations et historique","Organisation et moyens"],mention,++page);
+  /* présentation rédigée + fiche d'identité resserrée + schéma de capital */
+  sl=pptx.addSlide();
+  rpEnTete(sl,B.societe,"Société et organisation");
+  { const P=rpProse(B,I);
+    const yP=rpTitreMsg(sl,"Présentation et actionnariat",P.lead);
+    const yB=rpTeaserBloc(sl,0.55,yP+0.18,7.3,"Activité et organisation");
+    rpTeaserPuces(sl,0.55,yB,7.3,P.puces.slice(0,3).map(t=>rpCoupe(t,155)),0.58);
+    /* fiche d'identité : cinq repères, valeurs COURTES sur une ligne. Les effectifs et l'année de
+       création sont déjà dans la phrase d'amorce ; le détail (arrêtés, bail, adresse complète)
+       appartient aux cadres rédigés, pas à un tableau. */
+    const fiche=[["Forme juridique",rpCoupe(I.formeJuridique,46)],
+      ["Création",rpAnnee(I.creation)||rpCoupe(I.creation,46)],
+      ["Secteur",rpCoupe(I.secteur||DOSSIER.secteur,46)],
+      ["Implantation",rpCoupe(String(I.adresse||"").split(",")[0],46)],
+      ["Dirigeant",rpCoupe(I.dirigeant,46)]].filter(([,x])=>x&&String(x).trim());
+    if(fiche.length) rpTable(sl,8.1,yP+0.2,4.68,"Repères",["Rubrique","Information"],fiche,
+      fiche.map(()=>"detail"),new Set(),[1.6,3.1],8.5,null,0.3,{alignG:[1]});
+    const acts=rpActionnaires(I.actionnariat);
+    if(acts.length){
+      rpTeaserBloc(sl,0.55,4.14,12.23,"Répartition du capital");
+      rpSchemaCapital(sl,0.55,4.32,12.23,2.1,B.societe,acts,
+        "Source : déclarations des actionnaires ; répartition à confirmer par les statuts et le registre des titres.");
+    } else rpCadreComment(sl,0.55,4.24,12.23,2.3);
+  }
+  rpPied(sl,mention,++page);
+  rpPlaceholder(pptx,B.societe,"Société et organisation","Gouvernance, installations et historique",
+    ["Structure juridique et gouvernance","Implantation et installations",
+     "Historique et faits marquants","Autorisations, agréments et conformité"],mention,++page);
   /* organisation : le détail du personnel du modèle alimente la page quand il existe */
   sl=pptx.addSlide();
   rpEnTete(sl,B.societe,"Société et organisation");
@@ -2236,21 +2363,56 @@ function construireIM(pptx){
       "Les actionnaires de "+B.societe+" étudient la cession de leurs titres ; le périmètre et le calendrier restent à arrêter avec les candidats retenus.");
     const rows=[
       ["Nature de l'opération","Cession de titres (à confirmer : totalité ou majorité du capital)"],
-      ["Périmètre","Activité et actifs d'exploitation"+(I.description?(" de "+B.societe):"")],
       ["Vendeurs",rpCoupe(I.actionnariat||"Actionnaires actuels",140)],
-      ["Motifs de la cession",rpCoupe(I.contexteMission||"À préciser avec les actionnaires",140)],
+      ["Motifs de la cession",rpCoupe(I.contexteMission||"À préciser avec les actionnaires",200)],
       ["Accompagnement","Transition assurée par l'équipe de direction, durée à convenir"],
       ["Calendrier indicatif","Marques d'intérêt, puis offres indicatives et phase d'exclusivité — calendrier à arrêter"],
       ["Conseil du vendeur",(B.cabinet||"Findalyx Advisory")+(cab.analyste?(" — "+cab.analyste):"")]];
-    const finS=rpTable(sl,0.55,yS+0.2,12.23,B.societe.toUpperCase()+" - Cadre de l'opération",
-      ["Élément","Description"],rows,rows.map(()=>"detail"),new Set(),[3.2,9.0],9.5,
-      "Éléments indicatifs, sans engagement des actionnaires ni de leur conseil.",0.32,{alignG:[1]});
-    let yN=rpTeaserBloc(sl,0.55,finS+0.24,12.23,"Prochaines étapes");
-    rpTeaserPuces(sl,0.55,yN,12.23,[
+    const finS=rpTable(sl,0.55,yS+0.2,6.6,B.societe.toUpperCase()+" - Cadre de l'opération",
+      ["Élément","Description"],rows,rows.map(()=>"detail"),new Set(),[1.9,4.7],8.5,
+      "Éléments indicatifs, sans engagement des actionnaires ni de leur conseil.",0.34,{alignG:[1]});
+    /* PÉRIMÈTRE : deux colonnes « dans / hors », comme dans les notes d'opération — une ligne de
+       tableau « activité et actifs d'exploitation » ne dit pas ce que l'acquéreur achète. Les
+       éléments sont déduits du dossier et restent à valider. */
+    const loc=/lou|bail|location/i.test([I.description,I.adresse].join(" "));
+    const cca=(proj.bs.CCA&&proj.bs.CCA[a1p])?Math.abs(proj.bs.CCA[a1p]):0;
+    const dtt=proj.bs.DETTE[a1p]||0;
+    const dans=["Titres de la société et actifs d'exploitation",
+      "Clientèle, contrats et carnet de commandes en cours",
+      "Personnel en place et savoir-faire",
+      (I.secteur&&/enseign|form|santé/i.test(I.secteur))?"Agréments et autorisations d'exercer":"Marque, licences et autorisations",
+      "Équipements, aménagements et système d'information"];
+    const hors=[loc?"Immobilier d'exploitation : locaux pris à bail — cession du bail à confirmer"
+      :"Immobilier d'exploitation : régime de détention à confirmer",
+      cca>0.5?("Comptes courants d'associés ("+rpMsgFmt(cca)+") : remboursement ou reclassement à convenir")
+        :"Comptes courants d'associés : néant à la date du plan",
+      dtt>0.5?("Dettes financières ("+rpMsgFmt(dtt)+") : reprise ou remboursement au closing")
+        :"Dettes financières : néant à la date du plan",
+      "Trésorerie excédentaire et dette nette : mécanisme d'ajustement de prix au closing",
+      "Litiges et passifs éventuels : couverts par la garantie d'actif et de passif"];
+    const xP=7.35, wP=5.43, wC=(wP-0.2)/2;
+    rpTeaserBloc(sl,xP,yS+0.2,wP,"Périmètre envisagé");
+    [["Dans le périmètre",dans,"16904E",xP],["Hors périmètre ou à confirmer",hors,"B45309",xP+wC+0.2]]
+      .forEach(([t,items,coul,x0])=>{
+        sl.addShape("rect",{x:x0,y:yS+0.48,w:wC,h:0.3,fill:{color:coul}});
+        sl.addText(t,{x:x0+0.1,y:yS+0.48,w:wC-0.2,h:0.3,valign:"middle",fontSize:8.5,bold:true,
+          color:RP.BLANC,fontFace:"Arial"});
+        sl.addShape("rect",{x:x0,y:yS+0.78,w:wC,h:2.62,fill:{color:"FBFCFE"},line:{color:RP.FILET,width:1}});
+        let yy=yS+0.86;
+        items.slice(0,5).forEach(t2=>{
+          sl.addShape("rect",{x:x0+0.12,y:yy+0.08,w:0.06,h:0.06,fill:{color:coul}});
+          sl.addText(t2,{x:x0+0.26,y:yy,w:wC-0.38,h:0.5,fontSize:8,color:"333333",fontFace:"Arial",valign:"top"});
+          yy+=0.5;
+        });
+      });
+    sl.addText("Périmètre indicatif, à arrêter dans le protocole de cession.",
+      {x:xP,y:yS+3.44,w:wP,h:0.24,fontSize:7.5,italic:true,color:RP.G_CLAIR,fontFace:"Arial"});
+    const yN=rpTeaserBloc(sl,0.55,Math.max(finS+0.24,yS+3.8),6.6,"Prochaines étapes");
+    rpTeaserPuces(sl,0.55,yN,6.6,[
       "Marque d'intérêt écrite auprès de "+(B.cabinet||"Findalyx Advisory")
-        +(cab.email?(" ("+cab.email+")"):"")+", accompagnée d'une présentation du candidat et du financement envisagé",
-      "Session de questions-réponses et accès à une salle de données (data room) pour les candidats retenus",
-      "Rencontre avec la direction, puis remise d'une offre indicative sur la base des informations communiquées"],0.34);
+        +(cab.email?(" ("+cab.email+")"):""),
+      "Questions-réponses et accès à une salle de données (data room)",
+      "Rencontre avec la direction, puis offre indicative"],0.42);
   }
   rpPied(sl,mention,++page);
   /* ---------- annexes ---------- */
