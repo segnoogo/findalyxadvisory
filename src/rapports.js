@@ -79,44 +79,36 @@ function rpPied(sl,mention,page){
   sl.addText(String(page),{x:12.2,y:7.1,w:0.58,h:0.25,align:"right",fontSize:9,
     color:RP.G_TXT,fontFace:"Arial"});
 }
-/* PAGE DE GARDE — pleine page bleu nuit, comme les couvertures de mémorandums et de pitchbooks :
-   le nom de la société occupe le tiers médian, le type de document et la période au-dessus, une
-   bande de faits marquants et la signature du conseil en bas. `faits` (optionnel) = [[lab,val]…] :
-   ce que le lecteur doit retenir avant d'ouvrir le document.
-   Rien de décoratif : un filet orange, un bloc de faits, deux logos. */
-function rpGarde(pptx, societe, titreR, sousTitre, dateTxt, cabinet, faits){
+/* PAGE DE GARDE — sobre, sur fond blanc. Une couverture n'est pas une affiche : un aplat de
+   couleur pleine page alourdit le document, se voit à l'impression et vieillit mal. La structure
+   tient donc à la typographie et à deux filets, dans la même grille que les pages intérieures
+   (marge 0,55" · largeur utile 12,23" · filet bleu nuit en tête).
+   `reperes` (optionnel) : repères QUALITATIFS — secteur, implantation. Jamais de chiffres : la
+   couverture annonce le document, elle ne le résume pas. */
+function rpGarde(pptx, societe, titreR, sousTitre, dateTxt, cabinet, reperes){
   const sl=pptx.addSlide();
-  sl.addShape("rect",{x:0,y:0,w:13.333,h:7.5,fill:{color:RP.NAVY}});
-  /* voile plus clair en bas de page : sépare la signature sans ajouter de trait */
-  sl.addShape("rect",{x:0,y:6.1,w:13.333,h:1.4,fill:{color:"12204A"}});
-  {const _lg=logoCab();sl.addImage(_lg?{data:_lg.data,x:0.72,y:0.62,h:0.46,w:0.46*_lg.ratio}
-    :{data:LOGO_FINDALYX,x:0.72,y:0.62,h:0.46,w:0.46*4.45});}
-  sl.addText("STRICTEMENT CONFIDENTIEL",{x:8.6,y:0.7,w:4.0,h:0.3,align:"right",
-    fontSize:9,bold:true,color:"7E90BF",charSpacing:2,fontFace:"Arial"});
+  {const _lg=logoCab();sl.addImage(_lg?{data:_lg.data,x:0.55,y:0.5,h:0.42,w:0.42*_lg.ratio}
+    :{data:LOGO_FINDALYX_CLAIR,x:0.55,y:0.5,h:0.42,w:0.42*4.45});}
+  sl.addText("STRICTEMENT CONFIDENTIEL",{x:8.4,y:0.56,w:4.38,h:0.3,align:"right",
+    fontSize:9,bold:true,color:RP.G_CLAIR,charSpacing:2,fontFace:"Arial"});
+  sl.addShape("rect",{x:0.55,y:1.12,w:12.23,h:0.02,fill:{color:RP.NAVY}});
   if(typeof DOSSIER!=="undefined"&&DOSSIER&&DOSSIER.logo)
-    sl.addImage({data:DOSSIER.logo,x:11.35,y:1.5,w:1.3,h:1.3,sizing:{type:"contain",w:1.3,h:1.3}});
-  sl.addShape("rect",{x:0.72,y:2.28,w:1.7,h:0.05,fill:{color:RP.ORANGE}});
-  sl.addText(String(titreR).toUpperCase(),{x:0.72,y:2.5,w:10.4,h:0.3,fontSize:11,bold:true,
-    color:"9FB0D6",charSpacing:2.5,fontFace:"Arial"});
-  sl.addText(societe,{x:0.72,y:2.92,w:11.9,h:1.0,fontSize:42,bold:true,color:RP.BLANC,fontFace:"Arial"});
-  sl.addText(sousTitre,{x:0.72,y:4.02,w:11.0,h:0.4,fontSize:13,color:"CADCFC",fontFace:"Arial"});
-  /* bande de faits marquants : trois à quatre repères, séparés par un filet vertical */
-  const F=(faits||[]).filter(f=>f&&f[1]);
-  if(F.length){
-    const y0=4.8, wF=Math.min(3.1,(11.9)/F.length);
-    F.slice(0,4).forEach((f,i)=>{
-      const x=0.72+i*wF;
-      if(i) sl.addShape("rect",{x:x-0.22,y:y0+0.04,w:0.012,h:0.62,fill:{color:"2C3E6B"}});
-      sl.addText(String(f[0]).toUpperCase(),{x:x,y:y0,w:wF-0.3,h:0.22,fontSize:8,bold:true,
-        color:"7E90BF",charSpacing:1.2,fontFace:"Arial"});
-      sl.addText(String(f[1]),{x:x,y:y0+0.22,w:wF-0.3,h:0.48,fontSize:12.5,bold:true,
-        color:RP.BLANC,fontFace:"Arial",valign:"top"});
-    });
-  }
-  sl.addText(String(dateTxt).toUpperCase(),{x:0.72,y:6.42,w:6.0,h:0.3,fontSize:10.5,bold:true,
-    color:"9FB0D6",charSpacing:2,fontFace:"Arial"});
+    sl.addImage({data:DOSSIER.logo,x:11.28,y:1.6,w:1.5,h:1.5,sizing:{type:"contain",w:1.5,h:1.5}});
+  /* bloc de titre au tiers de la page : filet orange, type de document, société, sous-titre */
+  sl.addShape("rect",{x:0.55,y:2.55,w:1.7,h:0.05,fill:{color:RP.ORANGE}});
+  sl.addText(String(titreR).toUpperCase(),{x:0.55,y:2.78,w:10.4,h:0.3,fontSize:11,bold:true,
+    color:RP.BLEU,charSpacing:2.5,fontFace:"Arial"});
+  sl.addText(societe,{x:0.55,y:3.2,w:11.0,h:1.05,fontSize:44,bold:true,color:RP.NAVY,fontFace:"Arial"});
+  if(sousTitre) sl.addText(sousTitre,{x:0.55,y:4.32,w:10.6,h:0.4,fontSize:14,color:RP.G_TXT,fontFace:"Arial"});
+  /* repères qualitatifs sur une ligne, séparés par des points médians */
+  const R=(reperes||[]).map(t=>String(t||"").trim()).filter(Boolean);
+  if(R.length) sl.addText(R.join("      ·      "),{x:0.55,y:4.78,w:11.0,h:0.3,fontSize:11,
+    color:RP.G_CLAIR,charSpacing:0.6,fontFace:"Arial"});
+  sl.addShape("rect",{x:0.55,y:6.42,w:12.23,h:0.015,fill:{color:RP.FILET}});
+  sl.addText(String(dateTxt).toUpperCase(),{x:0.55,y:6.6,w:6.0,h:0.3,fontSize:10.5,bold:true,
+    color:RP.NAVY,charSpacing:2,fontFace:"Arial"});
   sl.addText("Préparé par "+cabinet+"  ·  Projet — support de discussion",
-    {x:6.3,y:6.42,w:6.3,h:0.3,align:"right",fontSize:10.5,color:"7E90BF",fontFace:"Arial"});
+    {x:6.5,y:6.6,w:6.28,h:0.3,align:"right",fontSize:10.5,color:RP.G_TXT,fontFace:"Arial"});
 }
 /* SOMMAIRE paginé, comme au début de tout pitchbook.
    Les pages des sections ne sont connues qu'une fois le rapport construit, et l'ordre des
@@ -2093,10 +2085,10 @@ function construireIM(pptx){
   let sl;
   rpGarde(pptx,B.societe,"Mémorandum d'information",
     "Opportunité de cession",B.dateTxt,B.cabinet,
-    [["Secteur",rpCoupe(I.secteur||DOSSIER.secteur,32)],
-     ["Implantation",rpCoupe(String(I.adresse||"").split(",")[0],26)],
-     ["Chiffre d'affaires "+fyp[fyp.length-1],rpFmt(caF)+" "+rpLib()],
-     ["Marge d'EBITDA "+fyp[fyp.length-1],mgF!==null?rpPct(mgF):null]]);
+    /* repères qualitatifs seulement : la couverture ne porte aucun chiffre du plan */
+    [rpCoupe(I.secteur||DOSSIER.secteur,44),
+     rpCoupe([String(I.adresse||"").split(",")[0].trim(),I.pays].filter(Boolean).join(", "),34),
+     "Plan "+fyp[0]+" – "+fyp[fyp.length-1]]);
   if(RP_SOM_FIX) rpSommaire(pptx,B.societe,RP_SOM_FIX,mention);
   /* ---------- avertissement : une page entière, comme dans tout mémorandum ---------- */
   sl=pptx.addSlide();
