@@ -3764,9 +3764,9 @@ function rpSommaire(pptx,societe,sections,mention){
   let y=1.7;
   sections.forEach(s=>{
     sl.addText(String(s.numero).padStart(2,"0"),{x:0.6,y:y,w:0.8,h:hL,valign:"middle",
-      fontSize:14,bold:true,color:RP.ORANGE,fontFace:"Arial"});
-    sl.addText(s.titre,{x:1.5,y:y,w:9.3,h:hL,valign:"middle",fontSize:13.5,bold:true,
-      color:RP.NAVY,fontFace:"Arial"});
+      fontSize:15,bold:true,color:RP.ORANGE,fontFace:RP_TITRE});
+    sl.addText(s.titre,{x:1.5,y:y,w:9.3,h:hL,valign:"middle",fontSize:14,bold:true,
+      color:RP.NAVY,fontFace:RP_TITRE});
     sl.addText(String(s.page),{x:11.0,y:y,w:1.78,h:hL,align:"right",valign:"middle",
       fontSize:12,color:RP.G_TXT,fontFace:"Arial"});
     sl.addShape("rect",{x:0.6,y:y+hL-0.02,w:12.18,h:0.008,fill:{color:RP.FILET}});
@@ -3836,8 +3836,9 @@ function rpFiltrer(lignes,styles){
 function rpTable(sl, x, y, w, bande, entetes, lignes, styles, colsDelta, largeurs, taille, source, rowH, opts){
   opts=opts||{};
   taille=taille||8.5;rowH=rowH||0.24;
-  if(bande) sl.addText(bande,{x:x,y:y-0.26,w:w,h:0.22,fontSize:9.5,bold:true,
-    color:RP.BLEU,charSpacing:1,fontFace:"Arial"});
+  if(bande){ sl.addShape("rect",{x:x,y:y-0.24,w:0.045,h:0.18,fill:{color:RP.BLEU}});
+    sl.addText(bande,{x:x+0.14,y:y-0.26,w:w-0.14,h:0.22,fontSize:9,bold:true,
+      color:RP.BLEU,charSpacing:1,fontFace:"Arial"}); }
   const fl=opts.compact?rpFiltrer(lignes,styles):{L:lignes,S:styles};
   const L=fl.L,S=fl.S;
   const tot=largeurs.reduce((a,b)=>a+b,0);
@@ -3961,7 +3962,8 @@ function rpPlaceholder(pptx, societe, section, titreS, rubriques, mention, page,
     const li=deuxCol?Math.floor(i/2):i, ci=deuxCol?(i%2):0;
     const x=xG+ci*(cw+0.28), y=yTop+li*(ch+0.22);
     const txt=rpTexteRubrique(r,I);
-    sl.addText(r,{x:x,y:y,w:cw,h:0.26,fontSize:11,bold:true,color:RP.BLEU,fontFace:"Arial"});
+    sl.addShape("rect",{x:x,y:y+0.04,w:0.05,h:0.2,fill:{color:RP.BLEU}});
+    sl.addText(r,{x:x+0.16,y:y-0.01,w:cw-0.16,h:0.28,fontSize:11.5,bold:true,color:RP.NAVY,fontFace:RP_TITRE});
     sl.addShape("roundRect",{x:x,y:y+0.3,w:cw,h:ch-0.3,rectRadius:0.02,
       fill:{color:txt?"FFFFFF":"FBFCFE"},line:{color:RP.FILET,width:1}});
     /* police ajustée à la place réelle du cadre : un texte long se réduit au lieu de déborder */
@@ -3973,24 +3975,59 @@ function rpPlaceholder(pptx, societe, section, titreS, rubriques, mention, page,
   });
   rpPied(sl,mention,page);
 }
+/* PAGE DE CONTACTS — même grille et même charte que les pages de contenu (elle était restée sur
+   un ancien modèle : bandeau plein, titre sans-serif, une seule carte et un paragraphe perdu).
+   Trois blocs : le cabinet (carte bleu nuit, domaines d'intervention), l'interlocuteur (carte
+   blanche, coordonnées) et le rappel de confidentialité. */
 function rpContacts(pptx, cabinet, mention, page){
   const sl=pptx.addSlide();
-  sl.addShape("rect",{x:0,y:0,w:13.333,h:2.3,fill:{color:RP.NAVY}});
-  sl.addShape("rect",{x:0.72,y:0.62,w:1.7,h:0.045,fill:{color:RP.ORANGE}});
-  sl.addText("Contacts",{x:0.7,y:0.85,w:8.5,h:0.65,fontSize:28,bold:true,color:RP.BLANC,fontFace:"Arial"});
-  sl.addText("Vos interlocuteurs restent à votre disposition pour toute question relative à ce rapport.",
-    {x:0.7,y:1.55,w:11.0,h:0.35,fontSize:11.5,italic:true,color:"9FB0D6",fontFace:"Arial"});
-  {const _lg=logoCab();sl.addImage(_lg?{data:_lg.data,x:10.9,y:0.72,h:0.42,w:0.42*_lg.ratio}:{data:LOGO_FINDALYX,x:10.9,y:0.72,h:0.42,w:0.42*4.45});}
-  sl.addShape("rect",{x:0.7,y:2.9,w:3.95,h:2.5,fill:{color:RP.BLANC},line:{color:RP.FILET,width:1}});
-  sl.addShape("rect",{x:0.95,y:3.18,w:0.5,h:0.04,fill:{color:RP.ORANGE}});
-  const cab=chargerCabinet();
-  sl.addText(cab.analyste||cabinet||"Analyste",{x:0.95,y:3.32,w:3.45,h:0.35,fontSize:14,bold:true,color:RP.NAVY,fontFace:"Arial"});
-  sl.addText("Financial Advisory — "+cabinet,{x:0.95,y:3.7,w:3.45,h:0.3,fontSize:10.5,color:RP.G_TITRE,fontFace:"Arial"});
-  if(cab.email)sl.addText(cab.email,{x:0.95,y:4.13,w:3.45,h:0.28,fontSize:10.5,color:RP.BLEU,fontFace:"Arial"});
-  if(cab.telephone)sl.addText(cab.telephone,{x:0.95,y:4.43,w:3.45,h:0.28,fontSize:10.5,color:RP.G_TXT,fontFace:"Arial"});
-  if(cab.adresse)sl.addText(cab.adresse,{x:0.95,y:4.73,w:3.45,h:0.28,fontSize:10.5,color:RP.G_TXT,fontFace:"Arial"});
-  sl.addText(cabinet+" — conseil financier : due diligence, business plans, évaluations d'entreprises et modélisation financière dans l'espace OHADA.",
-    {x:0.7,y:5.8,w:11.9,h:0.5,fontSize:10.5,color:RP.G_TXT,fontFace:"Arial"});
+  const cab=(typeof chargerCabinet==="function")?chargerCabinet():{};
+  /* en-tête au nom de la SOCIÉTÉ, comme toutes les autres pages du document */
+  rpEnTete(sl,(typeof DOSSIER!=="undefined"&&DOSSIER&&DOSSIER.societe)||cabinet,"Contacts");
+  rpTitreMsg(sl,"Contacts","Vos interlocuteurs restent à votre disposition pour toute question relative à ce document.");
+  /* carte du cabinet */
+  const xA=0.55, wA=6.0, yC=1.95, hC=3.35;
+  sl.addShape("rect",{x:xA,y:yC,w:wA,h:hC,fill:{color:RP.NAVY}});
+  sl.addShape("rect",{x:xA+0.4,y:yC+0.45,w:1.1,h:0.045,fill:{color:RP.ORANGE}});
+  sl.addText(cabinet,{x:xA+0.4,y:yC+0.66,w:wA-0.8,h:0.5,fontSize:21,bold:true,color:RP.BLANC,fontFace:RP_TITRE});
+  sl.addText("Conseil financier — espace OHADA",{x:xA+0.4,y:yC+1.18,w:wA-0.8,h:0.3,fontSize:11,
+    italic:true,color:"9FB0D6",fontFace:"Arial"});
+  ["Due diligence et revue financière","Business plans et modélisation",
+   "Évaluation d'entreprises","Formation et accompagnement"].forEach((t,i)=>{
+    sl.addShape("rect",{x:xA+0.42,y:yC+1.72+i*0.34,w:0.07,h:0.07,fill:{color:RP.ORANGE}});
+    sl.addText(t,{x:xA+0.62,y:yC+1.62+i*0.34,w:wA-1.1,h:0.3,fontSize:10.5,color:"CADCFC",fontFace:"Arial"});
+  });
+  {const _lg=logoCab();sl.addImage(_lg?{data:_lg.data,x:xA+wA-1.7,y:yC+hC-0.75,h:0.4,w:0.4*_lg.ratio}
+    :{data:LOGO_FINDALYX,x:xA+wA-1.9,y:yC+hC-0.75,h:0.4,w:0.4*4.45});}
+  /* carte de l'interlocuteur */
+  const xB=6.78, wB=6.0;
+  sl.addShape("rect",{x:xB,y:yC,w:wB,h:0.05,fill:{color:RP.ORANGE}});
+  sl.addShape("rect",{x:xB,y:yC+0.05,w:wB,h:hC-0.05,fill:{color:RP.BLANC},line:{color:RP.FILET,width:1}});
+  let yI=rpTeaserBloc(sl,xB+0.4,yC+0.42,wB-0.8,"Votre interlocuteur");
+  sl.addText(cab.analyste||cabinet||"Analyste",{x:xB+0.4,y:yI+0.04,w:wB-0.8,h:0.42,fontSize:19,
+    bold:true,color:RP.NAVY,fontFace:RP_TITRE});
+  sl.addText(cab.analyste?("Financial Advisory — "+cabinet):"Conseil financier",
+    {x:xB+0.4,y:yI+0.5,w:wB-0.8,h:0.3,fontSize:10.5,color:RP.G_TXT,fontFace:"Arial"});
+  sl.addShape("rect",{x:xB+0.4,y:yI+0.88,w:wB-0.8,h:0.012,fill:{color:RP.FILET}});
+  const coord=[["Courriel",cab.email],["Téléphone",cab.telephone],["Adresse",cab.adresse]].filter(c=>c[1]);
+  coord.forEach((c,i)=>{
+      const y=yI+1.02+i*0.42;
+      sl.addText(String(c[0]).toUpperCase(),{x:xB+0.4,y:y,w:1.5,h:0.24,fontSize:8,bold:true,
+        color:RP.G_CLAIR,charSpacing:1.2,fontFace:"Arial"});
+      sl.addText(String(c[1]),{x:xB+1.95,y:y-0.03,w:wB-2.4,h:0.3,fontSize:11,
+        color:(i===0?RP.BLEU:RP.G_TITRE),fontFace:"Arial"});
+    });
+  /* carte vide = paramètres du cabinet non renseignés : on le dit plutôt que de laisser un blanc */
+  if(!coord.length) sl.addText("Coordonnées à renseigner dans les paramètres du cabinet (Accueil › Cabinet).",
+    {x:xB+0.4,y:yI+1.06,w:wB-0.8,h:0.5,fontSize:10,italic:true,color:RP.G_CLAIR,fontFace:"Arial",valign:"top"});
+  /* rappel de confidentialité, pleine largeur */
+  const yD=yC+hC+0.3;
+  sl.addShape("rect",{x:0.55,y:yD,w:12.23,h:0.9,fill:{color:"FBFCFE"},line:{color:RP.FILET,width:1}});
+  sl.addShape("rect",{x:0.55,y:yD,w:0.05,h:0.9,fill:{color:RP.BLEU}});
+  sl.addText("Ce document est confidentiel. Il a été préparé pour ses seuls destinataires et ne peut être "
+    +"reproduit ni communiqué à un tiers sans autorisation écrite. Les projections qu'il contient reposent "
+    +"sur des hypothèses susceptibles de ne pas se réaliser.",
+    {x:0.85,y:yD+0.12,w:11.7,h:0.68,fontSize:10,italic:true,color:RP.G_TXT,fontFace:"Arial",valign:"top"});
   rpPied(sl,mention,page);
 }
 
@@ -4098,7 +4135,8 @@ function rpGraphAnneau(sl,x,y,w,h,titre,labels,values,colors){
     showTitle:false});
 }
 function rpCadreComment(sl,x,y,w,h){
-  sl.addText("COMMENTAIRES",{x:x,y:y,w:w,h:0.26,fontSize:9.5,bold:true,color:RP.BLEU,charSpacing:2,fontFace:"Arial"});
+  sl.addShape("rect",{x:x,y:y+0.04,w:0.045,h:0.18,fill:{color:RP.BLEU}});
+  sl.addText("COMMENTAIRES",{x:x+0.14,y:y,w:w-0.14,h:0.26,fontSize:9,bold:true,color:RP.BLEU,charSpacing:2,fontFace:"Arial"});
   sl.addShape("roundRect",{x:x,y:y+0.32,w:w,h:Math.max(0.5,h-0.32),rectRadius:0.02,fill:{color:"FBFCFE"},line:{color:RP.FILET,width:1}});
   sl.addText("Zone réservée aux commentaires de l'analyste.",{x:x+0.16,y:y+0.46,w:w-0.32,h:0.3,fontSize:9,italic:true,color:RP.G_CLAIR,fontFace:"Arial",valign:"top"});
 }
@@ -4113,7 +4151,7 @@ function rpPreambule(pptx,B,mention,page,ctx,base){
   let y=1.68;
   blocs.forEach(bl=>{
     sl.addShape("rect",{x:0.55,y:y+0.04,w:0.06,h:0.55,fill:{color:RP.ORANGE}});
-    sl.addText(bl[0],{x:0.82,y:y,w:11.7,h:0.3,fontSize:13,bold:true,color:RP.NAVY,fontFace:"Arial"});
+    sl.addText(bl[0],{x:0.82,y:y,w:11.7,h:0.3,fontSize:13.5,bold:true,color:RP.NAVY,fontFace:RP_TITRE});
     sl.addText(bl[1],{x:0.82,y:y+0.32,w:11.7,h:0.78,fontSize:10.5,color:"333333",fontFace:"Arial",valign:"top"});
     y+=1.3;
   });
@@ -4133,10 +4171,13 @@ function rpGlossaire(pptx,B,mention,page){
     ["ROE","Rentabilité des capitaux propres"],["ROCE","Rentabilité des capitaux employés"],
     ["TFT","Tableau des flux de trésorerie"],["VAN / TRI","Valeur actuelle nette / Taux de rendement interne"]];
   const mid=Math.ceil(G.length/2);
-  const mk=sub=>sub.map(g=>[{text:g[0],options:{bold:true,color:RP.NAVY,fontSize:9,fontFace:"Arial",valign:"top"}},
-    {text:g[1],options:{color:RP.G_TITRE,fontSize:9,fontFace:"Arial",valign:"top"}}]);
-  sl.addTable(mk(G.slice(0,mid)),{x:0.55,y:2.0,w:6.0,colW:[1.5,4.5],border:{type:"none"},rowH:0.32,margin:0.02});
-  sl.addTable(mk(G.slice(mid)),{x:6.95,y:2.0,w:6.0,colW:[1.5,4.5],border:{type:"none"},rowH:0.32,margin:0.02});
+  const mk=sub=>sub.map(g=>[{text:g[0],options:{bold:true,color:RP.NAVY,fontSize:9.5,fontFace:RP_TITRE,valign:"middle"}},
+    {text:g[1],options:{color:RP.G_TITRE,fontSize:9,fontFace:"Arial",valign:"middle"}}]);
+  /* deux colonnes de définitions, filet fin sous chaque entrée */
+  [[0.55,G.slice(0,mid)],[6.95,G.slice(mid)]].forEach(([x,sub])=>{
+    sub.forEach((g,i)=>sl.addShape("rect",{x:x,y:2.02+(i+1)*0.34-0.01,w:6.0,h:0.008,fill:{color:"EEF1F6"}}));
+    sl.addTable(mk(sub),{x:x,y:2.0,w:6.0,colW:[1.55,4.45],border:{type:"none"},rowH:0.34,margin:0.02});
+  });
   rpPied(sl,mention,page);
 }
 function rpLexique(pptx,B,mention,page){
@@ -4148,9 +4189,10 @@ function rpLexique(pptx,B,mention,page){
     ["Autonomie financière","Part des capitaux propres dans le total du bilan ; traduit l'indépendance vis-à-vis des créanciers."],
     ["Couverture des intérêts","Capacité de l'EBITDA à couvrir les frais financiers ; en-dessous de 2×, la charge de la dette devient un point d'attention."]];
   let y=1.7;
-  L.forEach(l=>{
-    sl.addText(l[0],{x:0.6,y:y,w:12.2,h:0.28,fontSize:12,bold:true,color:RP.NAVY,fontFace:"Arial"});
-    sl.addText(l[1],{x:0.6,y:y+0.29,w:12.2,h:0.5,fontSize:10.5,color:"333333",fontFace:"Arial",valign:"top"});
+  L.forEach((l,i)=>{
+    if(i) sl.addShape("rect",{x:0.55,y:y-0.14,w:12.23,h:0.008,fill:{color:"EEF1F6"}});
+    sl.addText(l[0],{x:0.6,y:y,w:12.2,h:0.3,fontSize:12.5,bold:true,color:RP.NAVY,fontFace:RP_TITRE});
+    sl.addText(l[1],{x:0.6,y:y+0.31,w:12.2,h:0.5,fontSize:10.5,color:"333333",fontFace:"Arial",valign:"top"});
     y+=0.86;
   });
   rpPied(sl,mention,page);
