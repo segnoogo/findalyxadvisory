@@ -3585,6 +3585,11 @@ async function genererDatabook(){
    ========================================================================= */
 const RP={NAVY:"172554",BLEU:"224289",ORANGE:"FA6706",PALE:"E9EFF7",
   G_TITRE:"1F2937",G_TXT:"6B7280",G_CLAIR:"9CA3AF",FILET:"D8DCE3",BLANC:"FFFFFF"};
+/* Titres en SERIF, corps et chiffres en sans : combinaison des présentations de référence
+   (proposition Coris Holding). Georgia est installé d'office sous Windows et macOS — un
+   caractère non installé chez le lecteur serait remplacé et casserait la mise en page.
+   Repasser toute la charte en Arial = remettre RP_TITRE à "Arial". */
+const RP_TITRE="Georgia";
 const RP_TINTES={"172554":"E8ECF5","224289":"E5EBF6","FA6706":"FEEBDD","16904E":"E4F3EA"};
 
 const rpU=()=>(typeof CONF_UNITE!=="undefined"&&CONF_UNITE)?CONF_UNITE:{f:1,dec:0,lib:"K"+"FCFA"};
@@ -3623,21 +3628,57 @@ function rpEnTete(sl, societe, section){
   sl.addText("STRICTEMENT CONFIDENTIEL",{x:9.4,y:0.5,w:3.38,h:0.28,align:"right",
     fontSize:9,bold:true,color:RP.G_CLAIR,charSpacing:2,fontFace:"Arial"});
 }
-function rpTitre(sl,txt){sl.addText(txt,{x:0.55,y:0.92,w:12.2,h:0.45,fontSize:17,
-  bold:true,color:RP.NAVY,fontFace:"Arial"});}
+/* Titre de page : serif, avec le filet orange court dessous — signature reprise des
+   présentations de référence (l'accent sous le titre, pas dans le titre). */
+function rpTitre(sl,txt){
+  sl.addText(txt,{x:0.55,y:0.9,w:12.2,h:0.45,fontSize:18,bold:true,color:RP.NAVY,fontFace:RP_TITRE});
+  sl.addShape("rect",{x:0.55,y:1.42,w:0.72,h:0.045,fill:{color:RP.ORANGE}});
+}
+/* Pastille d'information (coin haut droit) : unité des montants, périmètre, mention courte.
+   Le lecteur n'a plus à chercher l'unité dans l'en-tête d'un tableau. */
+function rpChip(sl,txt,x,y,w){
+  w=w||Math.max(1.5,0.085*String(txt).length+0.3);
+  x=(x==null)?(12.78-w):x; y=(y==null)?0.86:y;
+  sl.addShape("roundRect",{x:x,y:y,w:w,h:0.28,rectRadius:0.14,fill:{color:RP.PALE}});
+  sl.addText(txt,{x:x,y:y,w:w,h:0.28,align:"center",valign:"middle",fontSize:8.5,bold:true,
+    color:RP.BLEU,fontFace:"Arial"});
+  return x;
+}
+/* Découpe un message en fragments pour mettre en valeur les chiffres clés (les références
+   colorent le mot porteur du titre ; ici c'est le montant qui compte). */
+function rpRuns(msg,cles,taille){
+  const base={fontSize:taille,bold:true,color:RP.NAVY,fontFace:RP_TITRE};
+  const acc={fontSize:taille,bold:true,color:RP.ORANGE,fontFace:RP_TITRE};
+  let reste=String(msg||""), runs=[];
+  const C=(cles||[]).filter(c=>c&&String(c).length>1);
+  if(!C.length) return [{text:reste,options:base}];
+  /* on avance dans la chaîne en cherchant la première clé restante */
+  let garde=0;
+  while(reste&&garde++<40){
+    let pos=-1,cle=null;
+    C.forEach(c=>{const i=reste.indexOf(c);if(i>=0&&(pos<0||i<pos)){pos=i;cle=c;}});
+    if(pos<0){runs.push({text:reste,options:base});break;}
+    if(pos>0)runs.push({text:reste.slice(0,pos),options:base});
+    runs.push({text:cle,options:acc});
+    reste=reste.slice(pos+cle.length);
+  }
+  return runs;
+}
 /* TITRE-MESSAGE (« action title ») : convention des banques d'affaires et des cabinets de
    conseil — le titre porte la CONCLUSION de la page, pas son sujet ; le sujet devient un
    surtitre discret. On doit pouvoir lire la suite des titres et comprendre le dossier sans
    ouvrir un seul tableau. Renvoie l'ordonnée où le contenu peut commencer.
    `msg` vide ⇒ on retombe sur un titre de sujet classique (rétro-compatible). */
-function rpTitreMsg(sl,sujet,msg){
-  if(!msg){rpTitre(sl,sujet);return 1.6;}
-  sl.addText(String(sujet).toUpperCase(),{x:0.55,y:0.83,w:12.2,h:0.2,fontSize:8.5,bold:true,
+function rpTitreMsg(sl,sujet,msg,cles){
+  if(!msg){rpTitre(sl,sujet);return 1.62;}
+  /* surtitre précédé d'un court filet orange (dispositif des présentations de référence) */
+  sl.addShape("rect",{x:0.55,y:0.9,w:0.28,h:0.045,fill:{color:RP.ORANGE}});
+  sl.addText(String(sujet).toUpperCase(),{x:0.95,y:0.79,w:11.83,h:0.22,fontSize:8.5,bold:true,
     color:RP.BLEU,charSpacing:1.5,fontFace:"Arial"});
-  const nl=String(msg).length>95?2:1;
-  sl.addText(msg,{x:0.55,y:1.02,w:12.2,h:nl>1?0.62:0.4,fontSize:nl>1?14:15.5,bold:true,
-    color:RP.NAVY,fontFace:"Arial",valign:"top"});
-  return nl>1?1.72:1.55;
+  const nl=String(msg).length>92?2:1, fs=nl>1?14:15.5;
+  sl.addText(rpRuns(msg,cles,fs),{x:0.55,y:1.02,w:12.2,h:nl>1?0.66:0.42,
+    fontFace:RP_TITRE,valign:"top"});
+  return nl>1?1.76:1.56;
 }
 function rpAssertion(sl,txt){}  /* accroche auto retirée (Salif) — l'analyste écrit dans le cadre Commentaires */
 /* --- fabrique de messages : formulations courtes, tirées des chiffres du dossier --- */
@@ -3666,28 +3707,45 @@ function rpPied(sl,mention,page){
    couverture annonce le document, elle ne le résume pas. */
 function rpGarde(pptx, societe, titreR, sousTitre, dateTxt, cabinet, reperes){
   const sl=pptx.addSlide();
-  {const _lg=logoCab();sl.addImage(_lg?{data:_lg.data,x:0.55,y:0.5,h:0.42,w:0.42*_lg.ratio}
-    :{data:LOGO_FINDALYX_CLAIR,x:0.55,y:0.5,h:0.42,w:0.42*4.45});}
-  sl.addText("STRICTEMENT CONFIDENTIEL",{x:8.4,y:0.56,w:4.38,h:0.3,align:"right",
-    fontSize:9,bold:true,color:RP.G_CLAIR,charSpacing:2,fontFace:"Arial"});
-  sl.addShape("rect",{x:0.55,y:1.12,w:12.23,h:0.02,fill:{color:RP.NAVY}});
-  if(typeof DOSSIER!=="undefined"&&DOSSIER&&DOSSIER.logo)
-    sl.addImage({data:DOSSIER.logo,x:11.28,y:1.6,w:1.5,h:1.5,sizing:{type:"contain",w:1.5,h:1.5}});
-  /* bloc de titre au tiers de la page : filet orange, type de document, société, sous-titre */
-  sl.addShape("rect",{x:0.55,y:2.55,w:1.7,h:0.05,fill:{color:RP.ORANGE}});
-  sl.addText(String(titreR).toUpperCase(),{x:0.55,y:2.78,w:10.4,h:0.3,fontSize:11,bold:true,
+  const XP=8.05;                       /* la page reste blanche à gauche : deux tiers / un tiers */
+  sl.addShape("rect",{x:XP,y:0,w:13.333-XP,h:7.5,fill:{color:RP.NAVY}});
+  sl.addShape("rect",{x:XP-0.06,y:0,w:0.06,h:7.5,fill:{color:RP.ORANGE}});
+  /* marque géométrique du panneau : cercle ouvert + trois barres — sobre, sans image */
+  sl.addShape("ellipse",{x:XP+0.95,y:1.25,w:3.5,h:3.5,fill:{type:"none"},line:{color:"2C3E6B",width:1.25}});
+  [[0.55,1.05],[1.15,1.55],[1.75,0.75]].forEach((b,i)=>
+    sl.addShape("rect",{x:XP+1.75+i*0.62,y:4.3-b[1],w:0.42,h:b[1],
+      fill:{color:i===1?RP.ORANGE:"31549B"}}));
+  {const _lg=logoCab();sl.addImage(_lg?{data:_lg.data,x:0.55,y:0.5,h:0.44,w:0.44*_lg.ratio}
+    :{data:LOGO_FINDALYX_CLAIR,x:0.55,y:0.5,h:0.44,w:0.44*4.45});}
+  sl.addText("STRICTEMENT CONFIDENTIEL",{x:XP+0.5,y:0.56,w:4.28,h:0.3,align:"right",
+    fontSize:9,bold:true,color:"7E90BF",charSpacing:2,fontFace:"Arial"});
+  /* bloc de titre : filet orange, type de document, société en serif, sous-titre */
+  sl.addShape("rect",{x:0.55,y:2.45,w:1.5,h:0.05,fill:{color:RP.ORANGE}});
+  sl.addText(String(titreR).toUpperCase(),{x:0.55,y:2.68,w:7.0,h:0.3,fontSize:10.5,bold:true,
     color:RP.BLEU,charSpacing:2.5,fontFace:"Arial"});
-  sl.addText(societe,{x:0.55,y:3.2,w:11.0,h:1.05,fontSize:44,bold:true,color:RP.NAVY,fontFace:"Arial"});
-  if(sousTitre) sl.addText(sousTitre,{x:0.55,y:4.32,w:10.6,h:0.4,fontSize:14,color:RP.G_TXT,fontFace:"Arial"});
-  /* repères qualitatifs sur une ligne, séparés par des points médians */
-  const R=(reperes||[]).map(t=>String(t||"").trim()).filter(Boolean);
-  if(R.length) sl.addText(R.join("      ·      "),{x:0.55,y:4.78,w:11.0,h:0.3,fontSize:11,
-    color:RP.G_CLAIR,charSpacing:0.6,fontFace:"Arial"});
-  sl.addShape("rect",{x:0.55,y:6.42,w:12.23,h:0.015,fill:{color:RP.FILET}});
-  sl.addText(String(dateTxt).toUpperCase(),{x:0.55,y:6.6,w:6.0,h:0.3,fontSize:10.5,bold:true,
+  sl.addText(societe,{x:0.55,y:3.06,w:7.2,h:1.5,fontSize:36,bold:true,color:RP.NAVY,
+    fontFace:RP_TITRE,valign:"top"});
+  if(sousTitre) sl.addText(sousTitre,{x:0.55,y:4.62,w:7.0,h:0.4,fontSize:13,color:RP.G_TXT,fontFace:"Arial"});
+  /* repères qualitatifs : une ligne par repère, filet court devant — pas de chiffres */
+  const R=(reperes||[]).map(t=>String(t||"").trim()).filter(Boolean).slice(0,3);
+  R.forEach((t,i)=>{
+    const y=5.15+i*0.3;
+    sl.addShape("rect",{x:0.57,y:y+0.11,w:0.18,h:0.025,fill:{color:RP.G_CLAIR}});
+    sl.addText(t,{x:0.87,y:y,w:6.7,h:0.28,fontSize:10.5,color:RP.G_TXT,fontFace:"Arial"});
+  });
+  sl.addShape("rect",{x:0.55,y:6.42,w:7.0,h:0.015,fill:{color:RP.FILET}});
+  sl.addText(String(dateTxt).toUpperCase(),{x:0.55,y:6.6,w:7.0,h:0.3,fontSize:10.5,bold:true,
     color:RP.NAVY,charSpacing:2,fontFace:"Arial"});
-  sl.addText("Préparé par "+cabinet+"  ·  Projet — support de discussion",
-    {x:6.5,y:6.6,w:6.28,h:0.3,align:"right",fontSize:10.5,color:RP.G_TXT,fontFace:"Arial"});
+  /* panneau : destinataire du document et signature du conseil */
+  sl.addText("PRÉPARÉ PAR",{x:XP+0.5,y:5.5,w:4.28,h:0.24,align:"right",fontSize:8.5,bold:true,
+    color:"7E90BF",charSpacing:1.5,fontFace:"Arial"});
+  sl.addText(cabinet,{x:XP+0.5,y:5.74,w:4.28,h:0.4,align:"right",fontSize:16,bold:true,
+    color:RP.BLANC,fontFace:RP_TITRE});
+  sl.addShape("rect",{x:12.28,y:6.24,w:0.5,h:0.03,fill:{color:RP.ORANGE}});
+  sl.addText("Projet — support de discussion",{x:XP+0.5,y:6.42,w:4.28,h:0.3,align:"right",
+    fontSize:9.5,italic:true,color:"9FB0D6",fontFace:"Arial"});
+  if(typeof DOSSIER!=="undefined"&&DOSSIER&&DOSSIER.logo)
+    sl.addImage({data:DOSSIER.logo,x:XP+1.85,y:0.95,w:1.7,h:1.7,sizing:{type:"contain",w:1.7,h:1.7}});
 }
 /* SOMMAIRE paginé, comme au début de tout pitchbook.
    Les pages des sections ne sont connues qu'une fois le rapport construit, et l'ordre des
@@ -3722,8 +3780,8 @@ function rpSection(pptx, numero, titreS, sousSections, mention, page){
   const sl=pptx.addSlide();
   sl.addShape("rect",{x:0.55,y:0.42,w:12.23,h:0.02,fill:{color:RP.NAVY}});
   sl.addText(String(numero).padStart(2,"0"),{x:0.55,y:1.5,w:3.2,h:1.6,fontSize:92,
-    bold:true,color:RP.PALE,fontFace:"Arial"});
-  sl.addText(titreS,{x:0.62,y:3.3,w:10.5,h:0.7,fontSize:27,bold:true,color:RP.NAVY,fontFace:"Arial"});
+    bold:true,color:RP.PALE,fontFace:RP_TITRE});
+  sl.addText(titreS,{x:0.62,y:3.3,w:10.5,h:0.7,fontSize:28,bold:true,color:RP.NAVY,fontFace:RP_TITRE});
   let y=4.25;
   sousSections.forEach((ss,i)=>{
     sl.addText(numero+"."+(i+1),{x:0.65,y:y,w:0.7,h:0.3,fontSize:11,bold:true,color:RP.ORANGE,fontFace:"Arial"});
@@ -4370,6 +4428,7 @@ function rpPageCA(pptx,C,page){
   const tcam=(caD1>0&&caF>0&&ap.length>1)?Math.pow(caF/caD1,1/(ap.length-1))-1:null;
   const sl=pptx.addSlide();
   rpEnTete(sl,B.societe,C.sec);
+  if(C.chip) rpChip(sl,C.chip);
   const det=Object.keys(proj.pl.CA_DETAIL||{}).map(k=>proj.pl.CA_DETAIL[k])
     .filter(L=>ap.some(a=>Math.abs(L.vals[a]||0)>0.5))
     .sort((p,q)=>(q.vals[aF]||0)-(p.vals[aF]||0));
@@ -4420,6 +4479,7 @@ function rpPageBridge(pptx,C,page){
   const {B,proj,ap,aF,fyp,mention}=C;
   const sl=pptx.addSlide();
   rpEnTete(sl,B.societe,C.sec);
+  if(C.chip) rpChip(sl,C.chip);
   const p1=ap[0], d=cle=>(proj.pl[cle]?((proj.pl[cle][aF]||0)-(proj.pl[cle][p1]||0)):0);
   const eb1=proj.pl.EBITDA[p1];
   const items=[{lib:"EBITDA "+fyp[0],val:eb1,type:"borne"},
@@ -4448,6 +4508,7 @@ function rpPageTreso(pptx,C,page){
   const {B,proj,ap,aF,fyp,mention}=C;
   const sl=pptx.addSlide();
   rpEnTete(sl,B.societe,C.sec);
+  if(C.chip) rpChip(sl,C.chip);
   const som=f=>ap.reduce((t,a)=>t+(f(proj.tft[a])||0),0);
   const ouv=proj.tft[ap[0]].OUVERTURE||0, clo=proj.tft[aF].CLOTURE||0;
   const cfl=[{lib:"Trésorerie d'ouverture",val:ouv,type:"borne"},
@@ -4465,7 +4526,7 @@ function rpPageTreso(pptx,C,page){
   const fmCf=x=>rpFmtE(x,eCf)+" "+eCf.lib;
   const yCf=rpTitreMsg(sl,"Génération de trésorerie sur l'horizon du plan",
     "Sur l'ensemble du plan, l'exploitation nette des investissements dégage "+fmCf(som(t=>t.ZB+t.ZC))
-    +" ; la trésorerie de clôture s'établit à "+fmCf(clo)+".");
+    +" ; la trésorerie de clôture s'établit à "+fmCf(clo)+".",[fmCf(clo)]);
   rpWaterfall(sl,0.55,yCf+0.2,12.23,3.75,"Cumul "+fyp[0]+" – "+fyp[fyp.length-1],cfl,
     "Cumul des flux du tableau de trésorerie sur l'horizon. Bleu : ressources · rouge : emplois.");
   rpCommentReste(sl,0.55,yCf+4.15,12.23);
@@ -4904,7 +4965,7 @@ function construireBP(pptx,opts){
       ?("L'EBITDA devient positif en "+libFY(bascEb,true)+" et atteint "+rpMsgFmt(ebF)
         +(mgEbF!==null?(", soit "+Math.round(mgEbF*100)+" % du chiffre d'affaires"):"")+" en "+fyp[fyp.length-1]+".")
       :("L'EBITDA progresse jusqu'à "+rpMsgFmt(ebF)
-        +(mgEbF!==null?(", soit "+Math.round(mgEbF*100)+" % du chiffre d'affaires"):"")+", en "+fyp[fyp.length-1]+"."));
+        +(mgEbF!==null?(", soit "+Math.round(mgEbF*100)+" % du chiffre d'affaires"):"")+", en "+fyp[fyp.length-1]+"."),[rpMsgFmt(ebF)]);
   proj.pl.FRAIS_GENERAUX={}; ap.forEach(a=>{proj.pl.FRAIS_GENERAUX[a]=(proj.pl.OPEX_TOTAL[a]||0)+(proj.pl.CHARGES_PERSONNEL[a]||0);});
   const codesP=[["CA","Chiffre d'affaires","titre"],["ACHATS","Coûts directs","sous_total"],
     ["MARGE_BRUTE","Marge brute","sous_total"],["AUTRES_PRODUITS","Autres produits","detail"],
@@ -5184,7 +5245,7 @@ function construireValo(pptx,opts){
       +rpFmt(bMin)+" – "+rpFmt(bMax)+"), "
       +(ret.length>1?("sur la base de "+ret.length+" méthodes concordantes")
         :("une seule méthode étant applicable"))
-      +(nEc?(" ; "+nEc+" méthode"+(nEc>1?"s écartées":" écartée")):"")+"."); }
+      +(nEc?(" ; "+nEc+" méthode"+(nEc>1?"s écartées":" écartée")):"")+".",[rpMsgFmt(val.fourchette.retenue)]); }
   /* une méthode écartée par le moteur n'affiche pas de montant : « n.a. » et le motif */
   const carte=(m,def)=>(m&&m.applicable===false)?"n.a.":(rpFmt((m&&m.central)!==undefined?m.central:def)+" "+rpLib());
   const sousC=(m,txt)=>(m&&m.applicable===false)?(m.motif||"méthode écartée"):txt;
@@ -5502,10 +5563,33 @@ function rpPointsForts(proj,ap,I){
     I.creation?("Activité exercée depuis "+I.creation+"."):null
   ].filter(Boolean);
 }
+/* intitulé de bloc précédé d'un petit repère vertical (dispositif des références : le lecteur
+   distingue un intitulé de bloc d'un titre de page sans changer de corps) */
 function rpTeaserBloc(sl,x,y,w,titre){
-  sl.addText(String(titre).toUpperCase(),{x:x,y:y,w:w,h:0.22,fontSize:8.5,bold:true,
+  sl.addShape("rect",{x:x,y:y+0.02,w:0.045,h:0.18,fill:{color:RP.BLEU}});
+  sl.addText(String(titre).toUpperCase(),{x:x+0.14,y:y,w:w-0.14,h:0.22,fontSize:8.5,bold:true,
     color:RP.BLEU,charSpacing:1.5,fontFace:"Arial"});
   return y+0.26;
+}
+/* CARTES NUMÉROTÉES : filet d'accent en tête, numéro fantôme, titre, texte. Reprend la grille
+   de cartes des présentations de référence — sert aux pages qualitatives (étapes, axes, risques). */
+function rpCartesNum(sl,x,y,w,h,items,opts){
+  opts=opts||{};
+  const n=items.length; if(!n) return y;
+  const gap=0.22, cw=(w-gap*(n-1))/n;
+  items.forEach((it,i)=>{
+    const cx=x+i*(cw+gap);
+    sl.addShape("rect",{x:cx,y:y,w:cw,h:0.05,fill:{color:i%2?RP.ORANGE:RP.NAVY}});
+    sl.addShape("rect",{x:cx,y:y+0.05,w:cw,h:h-0.05,fill:{color:RP.BLANC},line:{color:RP.FILET,width:1}});
+    sl.addText(String(i+1).padStart(2,"0"),{x:cx+cw-0.85,y:y+0.14,w:0.72,h:0.5,align:"right",
+      fontSize:26,bold:true,color:RP.PALE,fontFace:RP_TITRE});
+    sl.addText(it[0],{x:cx+0.2,y:y+0.2,w:cw-1.0,h:0.34,fontSize:11.5,bold:true,color:RP.NAVY,
+      fontFace:RP_TITRE,valign:"top"});
+    sl.addShape("rect",{x:cx+0.2,y:y+0.6,w:cw-0.4,h:0.012,fill:{color:RP.FILET}});
+    if(it[1]) sl.addText(it[1],{x:cx+0.2,y:y+0.68,w:cw-0.4,h:Math.max(0.3,h-0.78),fontSize:9.5,
+      color:"333333",fontFace:"Arial",valign:"top"});
+  });
+  return y+h;
 }
 function rpTeaserPuces(sl,x,y,w,items,h){
   let yy=y;
@@ -5545,7 +5629,7 @@ function construireTeaser(pptx){
   sl.addShape("rect",{x:0.55,y:0.42,w:1.7,h:0.045,fill:{color:RP.ORANGE}});
   sl.addText("OPPORTUNITÉ D'INVESTISSEMENT"+(anon?" — PROFIL ANONYME":""),{x:0.55,y:0.2,w:8.6,h:0.24,
     fontSize:8.5,bold:true,color:"9FB0D6",charSpacing:1.5,fontFace:"Arial"});
-  sl.addText(nom,{x:0.55,y:0.62,w:9.4,h:0.5,fontSize:26,bold:true,color:RP.BLANC,fontFace:"Arial"});
+  sl.addText(nom,{x:0.55,y:0.6,w:9.4,h:0.55,fontSize:27,bold:true,color:RP.BLANC,fontFace:RP_TITRE});
   sl.addText(geo,{x:0.55,y:1.16,w:9.4,h:0.3,fontSize:11.5,color:"CADCFC",fontFace:"Arial"});
   sl.addText("STRICTEMENT CONFIDENTIEL",{x:9.3,y:0.2,w:3.48,h:0.24,align:"right",
     fontSize:8.5,bold:true,color:"7E90BF",charSpacing:1.5,fontFace:"Arial"});
@@ -5555,8 +5639,9 @@ function construireTeaser(pptx){
   /* colonne de gauche : présentation (5 lignes max) puis points forts (5 puces max) */
   const xL=0.55, wL=7.15;
   rpTeaserBloc(sl,xL,1.85,wL,"Présentation");
-  const desc=rpCoupe(rpAnonTxt([I.description,I.services].filter(Boolean).join(" "))
-    ||("Société du secteur "+(secteur||"—")+(ville?(", implantée à "+ville):"")+"."),430);
+  /* amorce rédigée (même fabrique que le mémorandum) puis premier fragment de description */
+  const PRt=rpProse(B,I);
+  const desc=rpCoupe(PRt.lead+(PRt.puces.length?(" "+PRt.puces[0]):""),430);
   sl.addText(desc,{x:xL,y:2.11,w:wL,h:0.95,fontSize:10,color:"333333",fontFace:"Arial",valign:"top"});
   rpTeaserBloc(sl,xL,3.16,wL,"Points forts");
   rpTeaserPuces(sl,xL,3.42,wL,rpPointsForts(proj,ap,I).slice(0,5),0.5);
@@ -5694,7 +5779,8 @@ function construireIM(pptx){
   rpTitreMsg(sl,"L'opportunité en un coup d'œil",
     B.societe+" — "+rpCoupe(I.secteur||DOSSIER.secteur||"activité",40)
     +(I.adresse?(" à "+String(I.adresse).split(",")[0].trim()):"")
-    +" — vise "+rpMsgFmt(caF)+" de chiffre d'affaires et "+rpMsgFmt(ebF)+" d'EBITDA en "+fyp[fyp.length-1]+".");
+    +" — vise "+rpMsgFmt(caF)+" de chiffre d'affaires et "+rpMsgFmt(ebF)+" d'EBITDA en "+fyp[fyp.length-1]+".",
+    [rpMsgFmt(caF),rpMsgFmt(ebF)]);
   rpCartes(sl,[
     ["Chiffre d'affaires "+fyp[fyp.length-1],rpFmt(caF)+" "+rpLib(),tcam!==null?(rpPct(tcam)+" par an"):"",null,"neutre","chart","224289"],
     ["EBITDA "+fyp[fyp.length-1],rpFmt(ebF)+" "+rpLib(),mgF!==null?(rpPct(mgF)+" du chiffre d'affaires"):"",null,"neutre","coins","FA6706"],
@@ -5705,8 +5791,9 @@ function construireIM(pptx){
   { const forts=rpPointsForts(proj,ap,I).slice(0,5);
     const yF=rpTeaserBloc(sl,0.55,3.15,7.3,"Points forts de l'investissement");
     const bas=rpTeaserPuces(sl,0.55,yF,7.3,forts,0.52);
-    const desc=rpCoupe([I.description,I.services].filter(Boolean).join(" ")
-      ||("Société du secteur "+(I.secteur||DOSSIER.secteur||"—")+"."),520);
+    /* même amorce rédigée que la page société, complétée du premier fragment de description */
+    const PR=rpProse(B,I);
+    const desc=rpCoupe(PR.lead+(PR.puces.length?(" "+PR.puces[0]):""),470);
     const yD=rpTeaserBloc(sl,8.1,3.15,4.68,"Présentation");
     sl.addText(desc,{x:8.1,y:yD,w:4.68,h:2.6,fontSize:9.5,color:"333333",fontFace:"Arial",valign:"top"});
     rpCommentReste(sl,0.55,Math.max(bas+0.12,5.95),12.23);
@@ -5841,6 +5928,7 @@ function construireIM(pptx){
   /* ---------- 5. Performance financière ---------- */
   rpSection(pptx,5,"Performance financière",
     ["Construction du chiffre d'affaires","Compte de résultat et rentabilité","Trésorerie et structure financière"],mention,++page);
+  CTX.chip="Projections de la direction — non auditées";
   page=rpPageCA(pptx,CTX,page);
   /* compte de résultat de synthèse (le détail complet est dans le business plan) */
   sl=pptx.addSlide();
@@ -5935,13 +6023,13 @@ function construireIM(pptx){
     const rows=[
       ["Nature de l'opération","Cession de titres (à confirmer : totalité ou majorité du capital)"],
       ["Vendeurs",rpCoupe(I.actionnariat||"Actionnaires actuels",140)],
-      ["Motifs de la cession",rpCoupe(I.contexteMission||"À préciser avec les actionnaires",200)],
+      ["Motifs de la cession",rpCoupe(I.contexteMission||"À préciser avec les actionnaires",120)],
       ["Accompagnement","Transition assurée par l'équipe de direction, durée à convenir"],
       ["Calendrier indicatif","Marques d'intérêt, puis offres indicatives et phase d'exclusivité — calendrier à arrêter"],
       ["Conseil du vendeur",(B.cabinet||"Findalyx Advisory")+(cab.analyste?(" — "+cab.analyste):"")]];
     const finS=rpTable(sl,0.55,yS+0.2,6.6,B.societe.toUpperCase()+" - Cadre de l'opération",
       ["Élément","Description"],rows,rows.map(()=>"detail"),new Set(),[1.9,4.7],8.5,
-      "Éléments indicatifs, sans engagement des actionnaires ni de leur conseil.",0.34,{alignG:[1]});
+      "Éléments indicatifs, sans engagement des actionnaires ni de leur conseil.",0.32,{alignG:[1]});
     /* PÉRIMÈTRE : deux colonnes « dans / hors », comme dans les notes d'opération — une ligne de
        tableau « activité et actifs d'exploitation » ne dit pas ce que l'acquéreur achète. Les
        éléments sont déduits du dossier et restent à valider. */
@@ -5978,12 +6066,14 @@ function construireIM(pptx){
       });
     sl.addText("Périmètre indicatif, à arrêter dans le protocole de cession.",
       {x:xP,y:yS+3.44,w:wP,h:0.24,fontSize:7.5,italic:true,color:RP.G_CLAIR,fontFace:"Arial"});
-    const yN=rpTeaserBloc(sl,0.55,Math.max(finS+0.24,yS+3.8),6.6,"Prochaines étapes");
-    rpTeaserPuces(sl,0.55,yN,6.6,[
-      "Marque d'intérêt écrite auprès de "+(B.cabinet||"Findalyx Advisory")
-        +(cab.email?(" ("+cab.email+")"):""),
-      "Questions-réponses et accès à une salle de données (data room)",
-      "Rencontre avec la direction, puis offre indicative"],0.42);
+    /* les trois étapes prennent toute la largeur sous les deux blocs : dans une colonne de
+       2 pouces, les intitulés passaient sur deux lignes et les cartes débordaient du pied */
+    const yN=rpTeaserBloc(sl,0.55,5.52,12.23,"Prochaines étapes");
+    rpCartesNum(sl,0.55,yN+0.02,12.23,1.24,[
+      ["Marque d'intérêt","Écrite, auprès de "+(B.cabinet||"Findalyx Advisory")
+        +(cab.email?(" — "+cab.email):"")+"."],
+      ["Accès aux données","Questions-réponses et salle de données (data room)."],
+      ["Offre indicative","Rencontre avec la direction, puis offre remise par écrit."]]);
   }
   rpPied(sl,mention,++page);
   /* ---------- annexes ---------- */
