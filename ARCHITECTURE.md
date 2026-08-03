@@ -161,9 +161,19 @@ Conventions reprises des pitchbooks de banques d'affaires et des decks de consei
   après création. Le rapport est donc construit **deux fois** : une passe à blanc qui relève la
   page de chaque section (`RP_SOM`), puis la passe réelle qui compose le sommaire en page 2
   (`RP_SOM_FIX`). Les compteurs de page réservent la page 2 dès le départ.
+- **Une page = un exhibit.** Dans un document de banque d'affaires, la page porte un graphique qui
+  démontre le titre ; le tableau détaillé est un document de référence. Exhibits disponibles :
+  `rpWaterfall` (bridge d'EBITDA, génération de trésorerie), `rpColonnesEmpilees` (construction du
+  chiffre d'affaires par ligne de revenus, `{total:true}` pour le total de pile), `rpColonnes`
+  (trajectoires, CA vs CA critique), `rpColonnesNorme` (ratio contre sa norme de covenant),
+  `rpFootball` (valorisation), et `rpTable` + `opts.fond` (carte de chaleur de sensibilité).
+  Les exhibits sont dessinés en **formes**, pas en graphiques natifs : les étiquettes de valeur
+  restent maîtrisées (les graphiques PptxGenJS natifs ne les placent pas de façon fiable).
 - **Football field** (`rpFootball`) : synthèse de valorisation — une barre flottante min–max par
   méthode sur un axe commun, losange sur la valeur centrale, zone de recoupement, repère de la
   valeur retenue. C'est la page que le lecteur regarde en premier.
+- Tout exhibit est **dérivé des agrégats du moteur** (différences ou cumuls de valeurs déjà
+  publiées) : un bridge ne peut donc pas s'écarter du tableau qu'il explique.
 - **Teaser** (`construireTeaser`) : 1 page + résumé financier, diffusable **avant** tout NDA,
   avec option de nom de code (`DOSSIER.teaser = {anonyme, code}`). Aucune valorisation. Tous les
   textes repris de la fiche d'identité sont bornés (`rpCoupe`) : un teaser ne déborde jamais.
