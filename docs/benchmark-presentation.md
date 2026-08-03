@@ -20,8 +20,24 @@ l'application. Sources en fin de note.
 2. **CIM / mémorandum d'information** — le dossier complet, après NDA.
 3. **Management presentation** — la même matière, présentée par la direction.
 
-Notre rapport « Business plan + Valorisation » joue le rôle du CIM ; le teaser était le maillon
-manquant, d'où son ajout.
+Les trois documents existent désormais dans l'application : **teaser** (avant NDA), **mémorandum
+d'information** (après NDA) et **business plan + valorisation** (usage interne et bancaire).
+
+### Structure du mémorandum retenue
+
+Ordre observé dans les sources (30–80 pages en pratique, résumé exécutif de 5–10 pages à lui
+seul) et implémenté ici en 9 sections : avertissement → résumé exécutif → société et organisation
+→ offre et modèle économique → marché et positionnement → performance financière → plan de
+croissance → risques et atténuation → structure de l'opération → annexes.
+
+Deux règles de fond :
+
+- **le CIM ne contient pas la valorisation du vendeur.** Il présente les projections et les
+  retraitements ; la valeur reste dans le rapport interne. Remettre son DCF à l'acquéreur, c'est
+  lui donner son prix de réserve avant la négociation ;
+- **les états financiers détaillés sont des annexes.** Le corps du document porte des exhibits
+  (construction du CA, bridge d'EBITDA, génération de trésorerie) et un compte de résultat de
+  synthèse ; le détail ligne à ligne vit dans le business plan et le classeur Excel.
 
 ## 3. Contenu d'un teaser (consensus des sources)
 

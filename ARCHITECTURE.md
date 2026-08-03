@@ -71,7 +71,7 @@ programme** (voir `jsconfig.json`), pas des fichiers indépendants.
 | `licence.js` | Licence ECDSA hors-ligne + vérif en ligne (Supabase), quota sociétés | `licDemarrer`, `licControler`, `licActiver`, `LIC_PUB` (clé **publique**) |
 | `bp.js` | Couche **business plan interactive** (scénarios, OPEX détaillés) au-dessus du moteur | `hypothesesBP`, `projeterBP`, `valoriserBP` |
 | `databook.js` | Databook DD Excel 13 onglets à formules | `genererDatabook`, `DB_PL`, `DB_BS` |
-| `rapports.js` | 3 rapports PowerPoint (DD / BP / Valo) via PptxGenJS | générateurs de rapport |
+| `rapports.js` | 6 documents PowerPoint via PptxGenJS : due diligence, business plan, valorisation, BP + valo (combiné), **teaser** (1 page, avant NDA) et **mémorandum d'information** (après NDA, sans valorisation) | `construireDD`, `construireBP`, `construireValo`, `construireBPValo`, `construireTeaser`, `construireIM`, `genererRapport` |
 | `pdf.js` | Export PDF (jsPDF) | générateur PDF |
 | `ui.js` | **Interface principale** : état, navigation, vues, rendu, export Excel des états | `demarrerApp`, `recalculer`, `uni`→`CONF_UNITE`, `vue*()`, `ETATS`, `DOSSIER` |
 | `bpui.js` | Interface du business plan (hypothèses, scénarios, valo) | `assurerBP`, `hBP`, `choisirScenario` |
@@ -174,9 +174,17 @@ Conventions reprises des pitchbooks de banques d'affaires et des decks de consei
   valeur retenue. C'est la page que le lecteur regarde en premier.
 - Tout exhibit est **dérivé des agrégats du moteur** (différences ou cumuls de valeurs déjà
   publiées) : un bridge ne peut donc pas s'écarter du tableau qu'il explique.
-- **Teaser** (`construireTeaser`) : 1 page + résumé financier, diffusable **avant** tout NDA,
-  avec option de nom de code (`DOSSIER.teaser = {anonyme, code}`). Aucune valorisation. Tous les
-  textes repris de la fiche d'identité sont bornés (`rpCoupe`) : un teaser ne déborde jamais.
+- **Chaîne de documents d'une cession** (pratique de marché) : `construireTeaser` (1 page + résumé
+  financier, **avant** NDA, option nom de code via `DOSSIER.teaser = {anonyme, code}`) →
+  `construireIM` (mémorandum d'information, **après** NDA : résumé exécutif, société, offre et
+  tarification, marché, performance financière, croissance, risques, structure de l'opération) →
+  `construireBPValo` (business plan **et** valorisation, à usage interne et bancaire).
+  Ni le teaser ni l'IM ne portent la valorisation : on ne remet pas son propre DCF à l'acquéreur.
+  Tous les textes repris de la fiche d'identité sont bornés (`rpCoupe`) : ces documents ne
+  débordent jamais. Les pages narratives de l'IM sont des cadres à compléter (`rpPlaceholder`),
+  préremplis depuis la fiche d'identité quand elle est renseignée.
+- Les pages d'exhibit partagées entre le BP et l'IM sont factorisées : `rpPageCA`,
+  `rpPageBridge`, `rpPageTreso` (contexte `{B,mm,proj,ap,aF,fyp,mention,sec}`).
 
 ### 7.2 Tableaux des rapports PowerPoint (`rpTable`)
 

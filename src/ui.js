@@ -1577,7 +1577,9 @@ function vueExports(){
     ${carte("Business plan + Valorisation","Document unique : le plan (hypothèses, projections, covenants) puis l'évaluation des fonds propres — l'usage courant pour un dossier bancaire ou investisseur.","genererRapport('bpvalo')","Générer")}
     </div>
     <div class="sec-titre">Mise en relation investisseurs</div>
-    <div class="grille-exp">${carteTeaser()}</div>`;
+    <div class="grille-exp">
+    ${carte("Mémorandum d'information (IM)","Le document de vente, remis <b>après</b> signature d'un accord de confidentialité : résumé exécutif, société et organisation, offre et tarification, marché, performance financière (construction du CA, bridge d'EBITDA, génération de trésorerie), plan de croissance, risques et structure de l'opération. <b>Sans la valorisation</b> — on ne remet pas son DCF à l'acquéreur.","genererRapport('im')","Générer")}
+    ${carteTeaser()}</div>`;
   }
   if(!ETATS) return '<div class="mut">Importez d\'abord des balances.</div>';
   return `<h1>Exports</h1>
@@ -1601,7 +1603,9 @@ function vueExports(){
     ${carte("Business plan + Valorisation","Document unique : le plan (hypothèses, projections, covenants) puis l'évaluation des fonds propres — l'usage courant pour un dossier bancaire ou investisseur.","genererRapport('bpvalo')","Générer")}
   </div>
   <div class="sec-titre">Mise en relation investisseurs</div>
-  <div class="grille-exp">${carteTeaser()}</div>`;
+  <div class="grille-exp">
+    ${carte("Mémorandum d'information (IM)","Le document de vente, remis <b>après</b> signature d'un accord de confidentialité : résumé exécutif, société et organisation, offre et tarification, marché, performance financière (construction du CA, bridge d'EBITDA, génération de trésorerie), plan de croissance, risques et structure de l'opération. <b>Sans la valorisation</b> — on ne remet pas son DCF à l'acquéreur.","genererRapport('im')","Générer")}
+  ${carteTeaser()}</div>`;
 }
 function styliserEntete(row,texteCols){
   texteCols=texteCols||1;
