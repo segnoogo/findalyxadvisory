@@ -96,6 +96,189 @@ function modeleParDefaut(){
       prudent:{lab:"Prudent",dCA:-0.10,dMarge:-0.05,dJours:0.10}}};
 }
 function modeleScenariosDefaut(){return {central:{lab:"Central",dCA:0,dMarge:0,dJours:0},optimiste:{lab:"Optimiste",dCA:0.10,dMarge:0.05,dJours:-0.10},prudent:{lab:"Prudent",dCA:-0.10,dMarge:-0.05,dJours:0.10}};}
+
+/* ================= CATALOGUE DE MODÈLES SECTORIELS =================
+   Au démarrage d'un business plan, l'utilisateur choisit un SECTEUR : l'outil
+   charge un modèle complet pré-rempli (lignes de revenus + inducteurs + coûts
+   typiques + personnel + CAPEX) et SUGGÈRE les hypothèses clés à renseigner.
+   Tout reste 100 % modifiable ensuite — c'est un point de départ, pas un carcan.
+   Réutilise M_PRESETS + le moteur projeterModele existant (aucun calcul nouveau).
+   Chaque entrée : {id, lab, grp, desc, cles[], build()→M (schéma de modeleDemo)}.
+   Les montants sont des ORDRES DE GRANDEUR indicatifs : c'est la STRUCTURE qui compte. */
+function _pz(id){return JSON.parse(JSON.stringify((M_PRESETS[id]||M_PRESETS.quantite).rows));}
+function _secM(over){
+  var M=modeleParDefaut();M.revenus=[];M.coutsDirects=[];M.chargesFixes=[];M.personnel=[];M.capex=[];
+  Object.keys(over).forEach(function(k){M[k]=over[k];});
+  if(!over.financement){   /* auto-dimensionne le montage à partir du CAPEX : 20 % fonds propres, 45 % emprunt, le reste équilibré en compte courant associés (plug) — remplaçable */
+    var cx=(M.capex||[]).reduce(function(s,c){return s+(+c.montant||0);},0);
+    var cap=Math.round(cx*0.20/1e6)*1e6||20000000, emp=Math.round(cx*0.45/1e6)*1e6||30000000;
+    M.financement={mode:"manuel",partFP:0.35,moisBFR:2,capital:cap,primes:0,apports:0,plug:"cca",ccaTaux:0,ccaMode:"maintenu",ccaDuree:5,subvention:0,emprunt:{montant:emp,taux:0.09,duree:7,grace:1}};
+  }
+  return M;
+}
+var MODELES_SECTORIELS=[
+  {id:"industrie",lab:"Industrie / transformation",grp:"Industrie & énergie",
+   desc:"Usine de transformation (métallurgie, plasturgie, matériaux…) : le CA remonte de la capacité de production, ligne par ligne.",
+   cles:["Capacité de production par ligne (tonnes ou unités/an)","Taux d'utilisation et taux d'écoulement (%)","Prix de vente par produit/famille (FCFA/t ou /u)","Coût des matières premières (% du CA)","Investissement en équipements et durée d'amortissement","Structure de financement (fonds propres / emprunt)"],
+   build:function(){return _secM({
+     revenus:[{name:"Production principale",tpl:"production",rows:[{op:"x",name:"Capacité installée",val:80000,unit:"t/an",g:0},{op:"x",name:"Taux d'utilisation",val:90,unit:"%",g:0},{op:"x",name:"Taux d'écoulement (marché)",val:100,unit:"%",g:0}],prix:{val:650000,unit:"FCFA/t",g:2}},
+              {name:"Produits de diversification",tpl:"quantite",rows:[{op:"x",name:"Quantité",val:0,unit:"u/an",g:0}],prix:{val:50000,unit:"FCFA",g:2}}],
+     coutsDirects:[{name:"Matières premières",m:"pct",scope:"all",pct:68,val:0},{name:"Énergie et consommables",m:"pct",scope:"all",pct:6,val:0}],
+     chargesFixes:[{name:"Maintenance et pièces",montant:120000000,g:3},{name:"Transport et logistique",montant:60000000,g:3},{name:"Assurances, sécurité, administratif",montant:40000000,g:3}],
+     personnel:[{poste:"Ouvriers de production",effectif:40,salaireMensuel:120000,g:3},{poste:"Encadrement et maintenance",effectif:8,salaireMensuel:350000,g:3},{poste:"Administration et commercial",effectif:6,salaireMensuel:250000,g:3}],
+     capex:[{name:"Lignes de production et équipements",montant:6000000000,duree:10,annee:1},{name:"Bâtiments et aménagements",montant:2000000000,duree:20,annee:1}],
+     bfr:{dso:45,dio:60,dpo:45}});}},
+  {id:"agro",lab:"Agro-alimentaire (transformation)",grp:"Industrie & énergie",
+   desc:"Transformation agroalimentaire (minoterie, huilerie, jus, laiterie…) : capacité de production × prix, matière première dominante.",
+   cles:["Capacité de transformation (tonnes ou litres/an)","Taux d'utilisation (%)","Prix de vente du produit fini","Coût de la matière première agricole (% du CA)","Emballage et pertes","Chaîne du froid / logistique"],
+   build:function(){return _secM({
+     revenus:[{name:"Produit fini transformé",tpl:"production",rows:[{op:"x",name:"Capacité de transformation",val:2000000,unit:"L/an",g:0},{op:"x",name:"Taux d'utilisation",val:85,unit:"%",g:0}],prix:{val:900,unit:"FCFA/L",g:2}}],
+     coutsDirects:[{name:"Matière première agricole",m:"pct",scope:"all",pct:55,val:0},{name:"Emballage",m:"pct",scope:"all",pct:6,val:0}],
+     chargesFixes:[{name:"Énergie et chaîne du froid",montant:36000000,g:4},{name:"Transport et distribution",montant:24000000,g:3},{name:"Qualité, hygiène, administratif",montant:18000000,g:3}],
+     personnel:[{poste:"Opérateurs de production",effectif:15,salaireMensuel:110000,g:3},{poste:"Qualité et logistique",effectif:4,salaireMensuel:250000,g:3},{poste:"Commercial et administration",effectif:4,salaireMensuel:230000,g:3}],
+     capex:[{name:"Ligne de transformation",montant:400000000,duree:10,annee:1},{name:"Chaîne du froid et utilités",montant:120000000,duree:8,annee:1}],
+     bfr:{dso:30,dio:45,dpo:40}});}},
+  {id:"negoce",lab:"Négoce / distribution",grp:"Commerce",
+   desc:"Achat-revente (grossiste, semi-grossiste, points de vente) : le CA vient du volume vendu, la marge se fait sur le coût d'achat.",
+   cles:["Nombre de points de vente","Ventes moyennes par point et par jour","Jours d'ouverture par an","Prix de vente moyen","Coût d'achat des marchandises (% du CA)","Délais clients / fournisseurs et stock (BFR)"],
+   build:function(){return _secM({
+     revenus:[{name:"Ventes de marchandises",tpl:"negoce",rows:_pz("negoce"),prix:{val:5000,unit:"FCFA",g:2}}],
+     coutsDirects:[{name:"Coût d'achat des marchandises",m:"pct",scope:"all",pct:78,val:0}],
+     chargesFixes:[{name:"Loyer des locaux et dépôts",montant:24000000,g:2},{name:"Transport et manutention",montant:12000000,g:3},{name:"Marketing et administratif",montant:9000000,g:3}],
+     personnel:[{poste:"Vendeurs et caissiers",effectif:8,salaireMensuel:110000,g:3},{poste:"Magasiniers et livreurs",effectif:4,salaireMensuel:120000,g:3},{poste:"Gérance et comptabilité",effectif:2,salaireMensuel:300000,g:3}],
+     capex:[{name:"Aménagement des points de vente",montant:60000000,duree:8,annee:1},{name:"Véhicules de livraison",montant:35000000,duree:5,annee:1}],
+     bfr:{dso:20,dio:60,dpo:35}});}},
+  {id:"restauration",lab:"Restauration",grp:"Services",
+   desc:"Restaurant, maquis, traiteur : couverts servis × ticket moyen ; les matières (food cost) sont le poste clé.",
+   cles:["Couverts par jour et jours d'ouverture","Taux de remplissage (%)","Ticket moyen (FCFA)","Food cost — coût des matières (% du CA)","Loyer et énergie","Investissement cuisine et salle"],
+   build:function(){return _secM({
+     revenus:[{name:"Ventes de couverts",tpl:"restauration",rows:_pz("restauration"),prix:{val:4500,unit:"FCFA",g:2}}],
+     coutsDirects:[{name:"Matières (food cost)",m:"pct",scope:"all",pct:33,val:0},{name:"Boissons",m:"pct",scope:"all",pct:6,val:0}],
+     chargesFixes:[{name:"Loyer et charges",montant:18000000,g:2},{name:"Énergie, eau, gaz",montant:9000000,g:4},{name:"Marketing et divers",montant:6000000,g:3}],
+     personnel:[{poste:"Cuisine",effectif:5,salaireMensuel:130000,g:3},{poste:"Salle et service",effectif:6,salaireMensuel:110000,g:3},{poste:"Gérance",effectif:1,salaireMensuel:350000,g:3}],
+     capex:[{name:"Équipement de cuisine",montant:40000000,duree:7,annee:1},{name:"Aménagement de la salle",montant:30000000,duree:8,annee:1}],
+     bfr:{dso:2,dio:10,dpo:25}});}},
+  {id:"hotellerie",lab:"Hôtellerie",grp:"Services",
+   desc:"Hôtel, résidence : nuitées vendues (chambres × occupation × jours) × prix moyen ; F&B en complément.",
+   cles:["Nombre de chambres","Taux d'occupation (%)","Prix moyen de la nuitée (FCFA)","Coûts opérationnels des chambres (% du CA)","Personnel (réception, étages, restauration)","Investissement bâtiment et rénovation"],
+   build:function(){return _secM({
+     revenus:[{name:"Hébergement (nuitées)",tpl:"hotellerie",rows:_pz("hotellerie"),prix:{val:35000,unit:"FCFA",g:2}},
+              {name:"Restauration et bar",tpl:"quantite",rows:[{op:"x",name:"Couverts/an",val:0,unit:"couv.",g:0}],prix:{val:6000,unit:"FCFA",g:2}}],
+     coutsDirects:[{name:"Coûts opérationnels des chambres",m:"pct",scope:"all",pct:18,val:0}],
+     chargesFixes:[{name:"Énergie, eau, internet",montant:30000000,g:4},{name:"Maintenance et blanchisserie",montant:18000000,g:3},{name:"Commercialisation (OTA, marketing)",montant:15000000,g:3}],
+     personnel:[{poste:"Réception et administration",effectif:6,salaireMensuel:180000,g:3},{poste:"Étages et entretien",effectif:8,salaireMensuel:110000,g:3},{poste:"Restauration",effectif:6,salaireMensuel:130000,g:3}],
+     capex:[{name:"Bâtiment et aménagement",montant:800000000,duree:20,annee:1},{name:"Mobilier et équipements",montant:120000000,duree:8,annee:1}],
+     bfr:{dso:10,dio:15,dpo:30}});}},
+  {id:"ecole",lab:"École / formation",grp:"Services",
+   desc:"Établissement scolaire ou centre de formation : élèves inscrits × frais de scolarité, coûts d'enseignement pilotés par la capacité.",
+   cles:["Effectif d'élèves par niveau (par an)","Taux de remplissage / remises (%)","Frais de scolarité par niveau (FCFA)","Enseignants (nombre de classes × heures)","Loyer et charges de fonctionnement","Investissement (bâtiment, mobilier, informatique)"],
+   build:function(){return _secM({
+     revenus:[{name:"Scolarités",tpl:"ecole",rows:_pz("ecole"),prix:{val:400000,unit:"FCFA",g:3}}],
+     coutsDirects:[{name:"Enseignants (masse salariale pédagogique)",m:"pct",scope:"all",pct:35,val:0},{name:"Fournitures et supports",m:"pct",scope:"all",pct:3,val:0}],
+     chargesFixes:[{name:"Loyer des locaux",montant:18000000,g:0},{name:"Électricité, eau, internet",montant:6000000,g:4},{name:"Communication et recrutement",montant:4000000,g:3}],
+     personnel:[{poste:"Direction",effectif:1,salaireMensuel:600000,g:3},{poste:"Administration et scolarité",effectif:3,salaireMensuel:250000,g:3},{poste:"Surveillance et entretien",effectif:4,salaireMensuel:120000,g:3}],
+     capex:[{name:"Aménagement des bâtiments",montant:40000000,duree:10,annee:1},{name:"Mobilier et informatique",montant:20000000,duree:5,annee:1}],
+     bfr:{dso:30,dio:0,dpo:30}});}},
+  {id:"sante",lab:"Santé (clinique / cabinet)",grp:"Services",
+   desc:"Clinique, cabinet, laboratoire : nombre d'actes × tarif moyen ; consommables et plateau technique.",
+   cles:["Nombre d'actes par jour et jours d'ouverture","Tarif moyen par acte (FCFA)","Consommables et médicaments (% du CA)","Personnel médical et paramédical","Investissement en équipement médical","Délais de paiement (assurances, mutuelles)"],
+   build:function(){return _secM({
+     revenus:[{name:"Actes et consultations",tpl:"sante",rows:_pz("sante"),prix:{val:15000,unit:"FCFA",g:2}}],
+     coutsDirects:[{name:"Consommables et médicaments",m:"pct",scope:"all",pct:22,val:0}],
+     chargesFixes:[{name:"Loyer et maintenance",montant:24000000,g:2},{name:"Énergie et fluides médicaux",montant:12000000,g:4},{name:"Assurances et administratif",montant:9000000,g:3}],
+     personnel:[{poste:"Médecins",effectif:3,salaireMensuel:800000,g:3},{poste:"Infirmiers et techniciens",effectif:8,salaireMensuel:200000,g:3},{poste:"Accueil et administration",effectif:4,salaireMensuel:150000,g:3}],
+     capex:[{name:"Équipement médical",montant:250000000,duree:7,annee:1},{name:"Aménagement des locaux",montant:80000000,duree:10,annee:1}],
+     bfr:{dso:45,dio:30,dpo:30}});}},
+  {id:"agriculture",lab:"Agriculture (production végétale)",grp:"Agriculture & élevage",
+   desc:"Exploitation agricole : superficie × rendement × taux de commercialisation × prix de vente à la tonne.",
+   cles:["Superficie cultivée (ha)","Rendement (t/ha)","Taux de commercialisation (%)","Prix de vente (FCFA/t)","Intrants (semences, engrais, phyto — % du CA)","Mécanisation et irrigation (CAPEX)"],
+   build:function(){return _secM({
+     revenus:[{name:"Ventes de récolte",tpl:"agriculture",rows:_pz("agriculture"),prix:{val:200000,unit:"FCFA/t",g:2}}],
+     coutsDirects:[{name:"Intrants (semences, engrais, phyto)",m:"pct",scope:"all",pct:35,val:0},{name:"Récolte et transport",m:"pct",scope:"all",pct:8,val:0}],
+     chargesFixes:[{name:"Location foncière et eau",montant:9000000,g:2},{name:"Carburant et entretien matériel",montant:12000000,g:4},{name:"Gardiennage et divers",montant:6000000,g:3}],
+     personnel:[{poste:"Ouvriers agricoles permanents",effectif:6,salaireMensuel:90000,g:3},{poste:"Chef de culture",effectif:1,salaireMensuel:350000,g:3}],
+     capex:[{name:"Matériel agricole (tracteur, outils)",montant:120000000,duree:7,annee:1},{name:"Irrigation et magasin de stockage",montant:80000000,duree:10,annee:1}],
+     bfr:{dso:15,dio:30,dpo:20}});}},
+  {id:"energie",lab:"Énergie solaire (IPP)",grp:"Industrie & énergie",
+   desc:"Centrale solaire / producteur d'électricité : puissance × facteur de charge × heures × tarif du kWh.",
+   cles:["Puissance installée (kWc)","Facteur de charge (%)","Tarif de rachat du kWh (FCFA)","Coûts d'exploitation et maintenance (% du CA)","Investissement centrale et durée (20-25 ans)","Financement long terme (dette projet)"],
+   build:function(){return _secM({
+     revenus:[{name:"Vente d'électricité",tpl:"energie",rows:[{op:"x",name:"Puissance installée",val:5000,unit:"kWc",g:0},{op:"x",name:"Facteur de charge",val:18,unit:"%",g:0},{op:"x",name:"Heures",val:8760,unit:"h/an",g:0}],prix:{val:85,unit:"FCFA/kWh",g:1}}],
+     coutsDirects:[{name:"Exploitation et maintenance (O&M)",m:"pct",scope:"all",pct:8,val:0}],
+     chargesFixes:[{name:"Assurances et location du site",montant:24000000,g:2},{name:"Administration et supervision",montant:18000000,g:3}],
+     personnel:[{poste:"Techniciens d'exploitation",effectif:5,salaireMensuel:250000,g:3},{poste:"Direction et administration",effectif:2,salaireMensuel:500000,g:3}],
+     capex:[{name:"Centrale (panneaux, onduleurs, poste)",montant:3500000000,duree:20,annee:1},{name:"Raccordement et génie civil",montant:500000000,duree:20,annee:1}],
+     bfr:{dso:60,dio:0,dpo:30}});}},
+  {id:"transport",lab:"Transport",grp:"Services",
+   desc:"Transport de personnes ou de marchandises : flotte × rotations × remplissage × prix.",
+   cles:["Nombre de véhicules et trajets/jour","Places par véhicule et taux de remplissage","Prix moyen du billet ou de la course","Carburant et entretien (% du CA)","Renouvellement de la flotte (CAPEX)","Assurances et taxes"],
+   build:function(){return _secM({
+     revenus:[{name:"Transport (billets/courses)",tpl:"transport",rows:_pz("transport"),prix:{val:2500,unit:"FCFA",g:2}}],
+     coutsDirects:[{name:"Carburant",m:"pct",scope:"all",pct:28,val:0},{name:"Entretien et pneumatiques",m:"pct",scope:"all",pct:12,val:0}],
+     chargesFixes:[{name:"Assurances et taxes",montant:24000000,g:3},{name:"Gare, dépôt, administratif",montant:15000000,g:3}],
+     personnel:[{poste:"Chauffeurs",effectif:12,salaireMensuel:130000,g:3},{poste:"Mécaniciens et logistique",effectif:4,salaireMensuel:160000,g:3},{poste:"Administration",effectif:3,salaireMensuel:220000,g:3}],
+     capex:[{name:"Flotte de véhicules",montant:300000000,duree:5,annee:1},{name:"Atelier et équipements",montant:40000000,duree:8,annee:1}],
+     bfr:{dso:10,dio:15,dpo:25}});}},
+  {id:"immobilier",lab:"Immobilier locatif",grp:"Immobilier",
+   desc:"Programme locatif (résidentiel, commercial) : lots × taux d'occupation × loyer mensuel.",
+   cles:["Nombre de lots et surfaces","Taux d'occupation (%)","Loyer mensuel moyen par lot (FCFA)","Charges non récupérables (% du CA)","Coût de construction et durée d'amortissement","Financement (fonds propres / crédit)"],
+   build:function(){return _secM({
+     revenus:[{name:"Revenus locatifs",tpl:"immobilier",rows:_pz("immobilier"),prix:{val:600000,unit:"FCFA/mois",g:2}}],
+     coutsDirects:[{name:"Charges non récupérables et entretien",m:"pct",scope:"all",pct:15,val:0}],
+     chargesFixes:[{name:"Gestion locative et administratif",montant:9000000,g:2},{name:"Assurances et taxes foncières",montant:12000000,g:3}],
+     personnel:[{poste:"Gardiennage et entretien",effectif:4,salaireMensuel:100000,g:3},{poste:"Gestion",effectif:1,salaireMensuel:300000,g:3}],
+     capex:[{name:"Construction / acquisition des lots",montant:1000000000,duree:25,annee:1}],
+     bfr:{dso:10,dio:0,dpo:20}});}},
+  {id:"service",lab:"Services / conseil / prestations",grp:"Services",
+   desc:"Cabinet, agence, prestataire : capacité de production de services (postes × heures × occupation) × prix de la prestation.",
+   cles:["Nombre de postes / consultants","Heures facturables et taux d'occupation (%)","Prix moyen de la prestation (FCFA)","Sous-traitance (% du CA)","Masse salariale (le poste dominant)","Délais de paiement clients"],
+   build:function(){return _secM({
+     revenus:[{name:"Prestations facturées",tpl:"service",rows:_pz("service"),prix:{val:15000,unit:"FCFA",g:3}}],
+     coutsDirects:[{name:"Sous-traitance et frais de mission",m:"pct",scope:"all",pct:18,val:0}],
+     chargesFixes:[{name:"Loyer et bureau",montant:12000000,g:2},{name:"Logiciels, télécoms, administratif",montant:6000000,g:3},{name:"Marketing et développement",montant:5000000,g:3}],
+     personnel:[{poste:"Consultants / experts",effectif:6,salaireMensuel:450000,g:4},{poste:"Support et administration",effectif:2,salaireMensuel:220000,g:3}],
+     capex:[{name:"Aménagement des bureaux",montant:25000000,duree:8,annee:1},{name:"Matériel informatique",montant:15000000,duree:3,annee:1}],
+     bfr:{dso:45,dio:0,dpo:30}});}}
+];
+var MODELES_SECTORIELS_GRP=["Industrie & énergie","Agriculture & élevage","Commerce","Services","Immobilier"];
+function secteurModele(id){var s=null;MODELES_SECTORIELS.forEach(function(x){if(x.id===id)s=x;});return s;}
+/* charge un modèle sectoriel dans le dossier (conserve horizon, valorisation et scénarios) */
+function mAppliquerSecteur(id){
+  if(!DOSSIER)return;
+  if(!id){DOSSIER.secteurModele="";sauverDossier();rendre();return;}
+  var s=secteurModele(id);if(!s)return;
+  var M=assurerModele();
+  var vierge=(M.revenus&&M.revenus.length===1&&M.revenus[0].name==="Produit / service 1"&&!DOSSIER.secteurModele);
+  if(!vierge && !confirm("Charger le modèle sectoriel « "+s.lab+" » ?\n\nIl remplace les lignes de revenus, les coûts, le personnel et les CAPEX actuels. Le nom de la société, l'horizon, les scénarios et la valorisation sont conservés."))return;
+  var neuf=s.build();
+  neuf.nb=M.nb;neuf.anneeDepart=M.anneeDepart;neuf.valo=M.valo;neuf.scenarios=M.scenarios;neuf.scenario=M.scenario;
+  if(M.dureeConstruction)neuf.dureeConstruction=M.dureeConstruction;
+  DOSSIER.modele=neuf;DOSSIER.secteurModele=id;
+  if(DOSSIER.infos&&!DOSSIER.infos.secteur)DOSSIER.infos.secteur=s.lab;
+  sauverDossier();SOUS_MODELE="rev";rendre();
+  if(typeof toast==="function")toast("Modèle « "+s.lab+" » chargé — ajuste les hypothèses suggérées.");
+}
+/* bloc « point de départ » affiché en tête de l'onglet Revenus */
+function mBlocSecteur(){
+  var cur=(DOSSIER&&DOSSIER.secteurModele)||"";
+  var groupes=MODELES_SECTORIELS_GRP.map(function(g){
+    var items=MODELES_SECTORIELS.filter(function(s){return s.grp===g;})
+      .map(function(s){return '<option value="'+s.id+'"'+(s.id===cur?' selected':'')+'>'+esc(s.lab)+'</option>';}).join("");
+    return items?'<optgroup label="'+esc(g)+'">'+items+'</optgroup>':"";
+  }).join("");
+  var s=secteurModele(cur);
+  var desc=s?'<div class="mut" style="margin-top:8px">'+esc(s.desc)+'</div>':'';
+  var sugg=s?('<div style="margin-top:10px;padding:10px 12px;background:#fff7ee;border:1px solid #f5d9b8;border-radius:8px">'
+      +'<b style="color:#b45309">Hypothèses clés à renseigner pour ce secteur</b>'
+      +'<ul style="margin:6px 0 0;padding-left:18px">'+s.cles.map(function(c){return '<li>'+esc(c)+'</li>';}).join("")+'</ul></div>')
+    :'<div class="mut" style="margin-top:8px">Choisis ton secteur ci-dessus pour partir d\'un modèle adapté ; sinon, compose librement tes lignes de revenus.</div>';
+  return '<div class="card" style="background:#f6f8fc;border:1px solid #dfe6f1;border-radius:10px;padding:14px 16px;margin-bottom:16px">'
+    +'<div style="font-weight:600;color:#172554">Point de départ — modèle sectoriel</div>'
+    +'<div class="mut" style="margin:4px 0 10px">L\'outil pré-remplit les lignes de revenus, les inducteurs et les coûts typiques du secteur ; tu ajustes ensuite tout librement.</div>'
+    +'<select class="sel" style="max-width:460px" onchange="mAppliquerSecteur(this.value)">'
+    +'<option value="">— Choisir un secteur / une industrie —</option>'+groupes+'</select>'
+    +desc+sugg+'</div>';
+}
 /* ============================================================
    DOSSIER D'EXEMPLE — créé au premier lancement pour que l'outil
    soit navigable sans rien saisir. Supprimable comme un dossier
@@ -319,7 +502,7 @@ function mCarteRevenu(L,li){
     if(r.mode==='yearly'){var cells='';for(var k=0;k<N;k++){var yv=valSerie(r.vals,k);cells+='<span class="mind-yv"><label>An '+(k+1)+'</label><input class="nin ninm" value="'+mAmt(yv)+'" oninput="mSep(this)" onchange="mIndYv('+li+','+ri+','+k+',this.value)"></span>';}vals='<div class="mind-vals">'+cells+'</div>';}
     else vals='<div class="mind-vals"><span class="mind-f"><label>Valeur an 1</label><input class="nin ninm" value="'+mAmt(r.val)+'" oninput="mSep(this)" onchange="mInd('+li+','+ri+',\'val\',this.value)"></span><span class="mind-f"><label>Croissance %/an</label><input class="nin" value="'+r.g+'" onchange="mInd('+li+','+ri+',\'g\',this.value)"></span></div>';
     return '<div class="mind">'
-      +'<div class="mind-top"><button class="btn sm" title="× ou ÷" onclick="mIndOp('+li+','+ri+')" style="min-width:34px;font-weight:700">'+(r.op==='d'?'÷':'×')+'</button>'
+      +'<div class="mind-top"><button class="btn sm mind-op" title="× ou ÷ — bascule l\'opérateur" onclick="mIndOp('+li+','+ri+')">'+(r.op==='d'?'÷':'×')+'</button>'
       +'<input class="sel" style="flex:1;min-width:130px" placeholder="Nom de l\'inducteur" value="'+esc(r.name)+'" onchange="mInd('+li+','+ri+',\'name\',this.value)">'
       +'<input class="nin" style="width:78px" placeholder="unité" value="'+esc(r.unit)+'" onchange="mInd('+li+','+ri+',\'unit\',this.value)">'
       +'<span class="segvue"><button class="'+(r.mode==='yearly'?'':'on')+'" onclick="mIndMode('+li+','+ri+',\'grow\')">Croissance</button><button class="'+(r.mode==='yearly'?'on':'')+'" onclick="mIndMode('+li+','+ri+',\'yearly\')">Par année</button></span>'
@@ -335,10 +518,10 @@ function mCarteRevenu(L,li){
     +'<div class="mut" style="text-transform:uppercase;letter-spacing:.5px;font-size:11px;font-weight:700;margin-bottom:8px">Inducteurs de volume (× ou ÷ · unité % = ratio)</div>'
     +rows
     +'<button class="btn sm" style="margin-top:2px" onclick="mAddInd('+li+')">+ inducteur</button>'
-    +'<div class="mind-price"><span class="x">= Volume an 1 : <b>'+Math.round(vol).toLocaleString("fr-FR").replace(/[  ]/g," ")+'</b> <span class="mut">(en volume, pas en FCFA)</span></span></div>'
+    +'<div class="mind-res"><div class="mind-price"><span class="x">=</span> <span class="mind-lbl">Volume an&nbsp;1</span> <b style="font-size:15px">'+Math.round(vol).toLocaleString("fr-FR").replace(/[  ]/g," ")+'</b> <span class="mut">unités (pas des FCFA)</span></div>'
     +'<div class="mind-price"><span class="x">×</span> <span class="mut">Prix an 1 (FCFA)</span> <input class="nin ninm" value="'+mAmt(prix)+'" oninput="mSep(this)" onchange="mPrix('+li+',\'val\',this.value)"><input class="nin" style="width:70px" value="'+esc(L.prix.unit||'')+'" onchange="mPrix('+li+',\'unit\',this.value)">'
     +'<span class="mut">croissance</span> <input class="nin" style="width:60px" value="'+(L.prix.g||0)+'" onchange="mPrix('+li+',\'g\',this.value)"> %'
-    +'<span style="margin-left:auto;font-weight:700;color:#16904E">CA an 1 : '+fmt(ca/1000)+' '+uni().suf+'</span></div>'
+    +'<span class="mind-ca">CA an 1 · '+fmt(ca/1000)+' '+uni().suf+'</span></div></div>'
     +'<div class="mut" style="border-top:1px dashed #e3e9f2;padding-top:8px;margin-top:6px;font-size:12px">Les coûts directs se paramètrent dans l\'onglet <b>Coûts directs</b> (choix du périmètre : cette ligne, l\'ensemble, ou indépendant).</div>'
     +'</div></div>';
 }
@@ -420,7 +603,7 @@ function vueModele(){
     +'</div>';
   var corps="";
   if(SOUS_MODELE==="rev"){
-    corps='<div class="mut" style="margin-bottom:10px">Chaque ligne construit son volume avec ses propres inducteurs (× ou ÷), puis × prix = CA. Les modèles sont des points de départ modifiables.</div>'
+    corps=mBlocSecteur()+'<div class="mut" style="margin-bottom:10px">Chaque ligne construit son volume avec ses propres inducteurs (× ou ÷), puis × prix = CA. Les modèles sont des points de départ modifiables.</div>'
       +M.revenus.map(function(L,li){return mCarteRevenu(L,li);}).join("")
       +'<button class="btn" onclick="mAddLigne()">+ Ajouter une ligne de revenus</button>';
   } else if(SOUS_MODELE==="cout"){

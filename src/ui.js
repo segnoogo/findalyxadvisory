@@ -454,7 +454,8 @@ function vueAccueil(){
   const creationModele=`<div class="card">
     <b>Business plan — projet</b>
     <div class="mut" style="margin:6px 0 12px">Pas de comptabilité à importer ? Construisez le plan à partir d'inducteurs (volumes, prix, coûts) — idéal pour une startup ou un projet nouveau.</div>
-    <div class="row" style="gap:8px"><input id="nouvNomModele" class="sel" placeholder="Nom de la société" style="flex:1">
+    <div class="row" style="gap:8px;flex-wrap:wrap"><input id="nouvNomModele" class="sel" placeholder="Nom de la société" style="flex:2;min-width:170px">
+    <select id="nouvSecteurModele" class="sel" style="flex:1;min-width:220px" title="Charge un modèle sectoriel pré-rempli — entièrement modifiable ensuite"><option value="">Secteur : générique (à composer)</option>${typeof MODELES_SECTORIELS!=='undefined'?MODELES_SECTORIELS_GRP.map(g=>'<optgroup label="'+g+'">'+MODELES_SECTORIELS.filter(s=>s.grp===g).map(s=>'<option value="'+s.id+'">'+esc(s.lab)+'</option>').join('')+'</optgroup>').join(''):''}</select>
     <button class="btn primary" onclick="creerModele()">Créer le projet</button></div>
   </div>`;
   return `<h1>Accueil</h1>
@@ -466,13 +467,16 @@ function creerModelePrompt(){
   const nom=prompt("Nom de la société (business plan — projet) :");
   if(nom&&nom.trim())creerModele(nom.trim());
 }
-async function creerModele(nom){
+async function creerModele(nom,secId){
   if(!nom){const el=document.getElementById("nouvNomModele");nom=el?el.value.trim():"";}
   if(!nom){toast("Entrez un nom de société");return;}
+  if(secId===undefined){const s=document.getElementById("nouvSecteurModele");secId=s?s.value:"";}
   const id="d"+Date.now();
   const q=await licAjouterSociete(id,nom);
   if(!q.ok){toast("Quota atteint : votre licence permet "+q.max+" société(s) ("+q.used+" utilisées).");return;}
-  DOSSIER={id:id,societe:nom,secteur:"Général",balances:[],overrides:{},sansHistorique:true,modele:modeleParDefaut()};
+  const sec=(secId&&typeof secteurModele==="function")?secteurModele(secId):null;
+  DOSSIER={id:id,societe:nom,secteur:"Général",balances:[],overrides:{},sansHistorique:true,secteurModele:(sec?secId:""),modele:(sec?sec.build():modeleParDefaut())};
+  if(sec)DOSSIER.infos={secteur:sec.lab};
   recalculer();sauverDossier();localStorage.setItem(ACTIF_KEY,DOSSIER.id);SOUS_MODELE="rev";VUE="modele";shell();
 }
 /* dossier d'exemple : créé sans passer par le quota de licence (il n'est pas une société du client) */
