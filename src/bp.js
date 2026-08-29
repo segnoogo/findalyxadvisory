@@ -345,6 +345,15 @@ function projeterModele(M,scenario){
   P.pl.CDIND_DETAIL={};   /* coûts directs pilotés par inducteurs (indépendants des lignes de revenus : ex. vacataires = classes × heures × taux horaire) */
   ["IMMO_BRUT","AMORT_CUM","IMMO_NET","STOCKS","CLIENTS","AUTRES_CREANCES","FOURNISSEURS","DETTES_FISC_SOC","AUTRES_DETTES","BFR","CP","DETTE","CCA","PROVISIONS","TRESO","LIGNE_CT","TRESO_ACTIVE"].forEach(function(c){P.bs[c]={};});
   var infl=M.inflation||0.03, bfrH=M.bfr||{dso:30,dio:45,dpo:30};
+  /* ---- Ligne de crédit renouvelable (revolver / découvert autorisé) ----
+     Sans paramétrage, on conserve le comportement historique : tirage illimité dès que
+     la trésorerie passe sous zéro, au taux `decouvert_taux`, sans commission. */
+  var RV=M.revolver||{};
+  var rvPlaf=(+RV.plafond>0)?(+RV.plafond)/1000:0;                 /* saisi en FCFA → base KFCFA ; 0 = illimité */
+  var rvTaux=(RV.taux!=null?+RV.taux:(M.decouvert_taux!=null?+M.decouvert_taux:0.12));
+  var rvComm=(+RV.commission||0);                                  /* commission d'engagement sur le non-tiré */
+  var rvSeuil=(+RV.seuil||0)/1000;                                 /* trésorerie plancher à maintenir */
+  var rvSature=false, rvMax=0;
   var tva=(M.tva!=null?+M.tva:0.18);   /* taux de TVA de droit commun */
   /* Activité EXONÉRÉE (enseignement, santé…) : le chiffre d'affaires est facturé HT, donc les
      créances clients ne portent pas de TVA. Les ACHATS en portent toujours une, et elle n'est
@@ -498,13 +507,16 @@ function projeterModele(M,scenario){
     var soldeDebut=detteSolde, remb=0;
     if(isOp&&py>=anneeExploit+dGrace){ remb=Math.min(amortAnnuel,detteSolde); detteSolde-=remb; }
     var interets=isOp?dTaux*(soldeDebut+detteSolde)/2:0;
-    var interetsCT=(M.decouvert_taux||0.12)*ligneCT;
+    /* Revolver : intérêts sur le tirage de l'année PRÉCÉDENTE (non circulaire), et
+       commission d'engagement sur la fraction NON tirée du plafond autorisé. */
+    var interetsCT=rvTaux*ligneCT;
+    var commCT=(rvPlaf>0?rvComm*Math.max(0,rvPlaf-ligneCT):0);
     var dette=detteSolde;
     /* --- cascade P&L --- */
     var ebitda=ca+cd+autresProd+opexTot+persTot;
     var ebit=ebitda-dot;
     var pf=isOp?valAnnee(M.produitsFin,oi)/SC:0;
-    var rf=pf-interets-interetsCT-intCCA;
+    var rf=pf-interets-interetsCT-commCT-intCCA;
     var ebt=ebit+rf;
     var baseIS=ebt;
     if(ebt>0){var dispo=ebt; deficits.forEach(function(d){var im=Math.min(d.montant,dispo);d.montant-=im;dispo-=im;}); deficits=deficits.filter(function(d){return d.montant>0.01;}); baseIS=dispo;}
@@ -534,7 +546,12 @@ function projeterModele(M,scenario){
     cp=cp+rn-div;
     var immoNet=brut-amortCum;
     var tresoNette=cp+dette+ccaSolde+provisions-immoNet-bfr;
-    ligneCT=tresoNette<0?-tresoNette:0;
+    /* Tirage du revolver : ramener la trésorerie au seuil convenu, dans la limite du
+       plafond autorisé. Cash-sweep automatique (le tirage retombe à 0 dès que la
+       trésorerie repasse au-dessus du seuil). Plafond 0 = pas de limite (historique). */
+    var besoinCT=Math.max(0,rvSeuil-tresoNette);
+    ligneCT=(rvPlaf>0)?Math.min(besoinCT,rvPlaf):besoinCT;
+    if(rvPlaf>0&&besoinCT>rvPlaf+1e-9) rvSature=true;   /* plafond insuffisant : signalé aux contrôles */
     var tresoActive=tresoNette+ligneCT, treso=tresoNette;
     /* --- TFT --- */
     var prevStk=(P.bs.STOCKS[AP[i-1]]!==undefined)?P.bs.STOCKS[AP[i-1]]:0;
@@ -560,13 +577,16 @@ function projeterModele(M,scenario){
     P.bs.FOURNISSEURS[a]=fournisseurs;P.bs.DETTES_FISC_SOC[a]=0;P.bs.AUTRES_DETTES[a]=autresDet;P.bs.BFR[a]=bfr;
     P.bs.CP[a]=cp;P.bs.DETTE[a]=dette;P.bs.CCA[a]=ccaSolde;P.bs.PROVISIONS[a]=provisions;P.bs.TRESO[a]=treso;
     P.bs.LIGNE_CT[a]=ligneCT;P.bs.TRESO_ACTIVE[a]=tresoActive;
-    P.dette[a]={ouverture:soldeDebut,tirage:tirageDette,remboursement:remb,interets:(isOp?interets:idc),interetsCT:interetsCT,ligneCT:ligneCT,cloture:dette,div:div,idc:(isOp?0:idc),construction:!isOp,
+    if(ligneCT>rvMax)rvMax=ligneCT;
+    P.dette[a]={ouverture:soldeDebut,tirage:tirageDette,remboursement:remb,interets:(isOp?interets:idc),interetsCT:interetsCT,commissionCT:commCT,ligneCT:ligneCT,besoinCT:besoinCT,cloture:dette,div:div,idc:(isOp?0:idc),construction:!isOp,
       ccaOuverture:ccaDebut,ccaTirage:tirageCCA,ccaRemb:rembCCA,ccaInterets:intCCA,ccaCloture:ccaSolde};
     P.tft[a]=t; P.tft[a].ECART=t.ZG-treso;
     bfrP=bfr;tresoP=treso;rnPrec=rn;
   });
   /* synthèse Sources & Emplois (base KFCFA) — pas de bilan d'ouverture */
   P.modeProjet=true;   /* BP sans historique : les états sont synthétiques (dernière année projetée) */
+  P.revolver={plafond:rvPlaf*1000,taux:rvTaux,commission:rvComm,seuil:rvSeuil*1000,
+    tirageMax:rvMax,sature:rvSature,illimite:!(rvPlaf>0)};
   P.financement={mode:(fin.mode||"manuel"),partFP:partFP,moisBFR:moisBFR,dureeConstruction:Nc,anneeExploit:anneeExploit,
     capexFinance:capexFinance,bfrDemarrage:bfrDem,idc:idcTotal,subvention:subv,
     capital:capital,primes:primes,cca:cca0,ccaTaux:ccaTaux,ccaMode:ccaMode,ccaDuree:ccaDuree,

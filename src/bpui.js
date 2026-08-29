@@ -363,6 +363,8 @@ function assurerModele(){
   if(!M.scenarios){M.scenarios=modeleScenariosDefaut();M.scenario="central";}
   if(!M.coutsDirects)M.coutsDirects=[];
   if(!M.ouverture)M.ouverture={};   /* situation d'ouverture (entreprise existante) — vide = projet neuf */
+  /* ligne de crédit renouvelable — plafond 0 = illimité (comportement historique) */
+  if(!M.revolver)M.revolver={plafond:0,taux:(M.decouvert_taux!=null?M.decouvert_taux:0.12),commission:0,seuil:0};
   /* ids stables sur les lignes de revenus (référencés par le périmètre des coûts directs) */
   (M.revenus||[]).forEach(function(L){ if(!L.id){ M._seq=(M._seq||0)+1; L.id='L'+M._seq; } });
   /* MIGRATION : le coût qui était au bas de chaque ligne de revenus (L.cout) devient une ligne
@@ -653,6 +655,7 @@ function mControlesHyp(M,P){
   (M.revenus||[]).forEach(function(L){ (L.rows||[]).forEach(function(r){
     if(nb<2&&gEstPct(r)){ var v=gIndVal(r,0); if(v>100){ nb++;
       out.push(['warn','« '+esc(r.name||'inducteur')+' » vaut '+gN(v)+" % : au-delà de 100 %, vérifie l'unité ou la valeur."]); } } }); });
+  if(P.revolver&&P.revolver.sature) out.push(['err',"Plafond de la ligne de crédit insuffisant : le besoin de trésorerie le dépasse — le plan n'est pas finançable en l'état."]);
   var is=(M.is_taux!=null?+M.is_taux:0.30);
   if(is<0||is>0.6) out.push(['warn',"Taux d'impôt sur les sociétés à "+Math.round(is*100)+' % : hors des valeurs usuelles.']);
   if(!(M.capex||[]).length&&caL>0) out.push(['warn',"Aucun investissement saisi : vérifie que l'activité ne nécessite pas d'équipement."]);
@@ -984,6 +987,19 @@ function vueModele(){
       +'<div class="hyp-g"><span>Emprunt — différé de remboursement <span class="mut">· grâce : intérêts payés, capital décalé</span></span><input class="sel" value="'+(e.grace||0)+'" onchange="mSet(\'financement.emprunt.grace\',this.value,1)"><span class="suf">ans</span></div>'
       +'<div class="hyp-g"><span>Distribution de dividendes <span class="mut">· % du résultat net N−1, si bénéficiaire</span></span><input class="sel" value="'+((M.dividendes_payout||0)*100)+'" onchange="mSet(\'dividendes_payout\',(numFR(this.value)||0)/100)"><span class="suf">%</span></div>'
       +'<div class="hyp-g"><span>Trésorerie minimale avant distribution <span class="mut">· le dividende est toujours plafonné par la trésorerie d\'ouverture (vide = plancher 0)</span></span><input class="sel ninm" value="'+(M.dividendes_seuilCash!=null?mAmt(M.dividendes_seuilCash):'')+'" oninput="mSep(this)" onchange="mDivSeuil(this.value)"><span class="suf">FCFA</span></div>';
+    /* ---- ligne de crédit renouvelable (revolver) ---- */
+    var RV=M.revolver||{}, PR=(P.revolver||{});
+    var rvBloc='<div class="card" style="margin-top:12px"><div class="sec-titre" style="margin-top:0">Ligne de crédit renouvelable <span class="mut" style="font-weight:400">· revolver / découvert autorisé</span></div>'
+      +'<div class="mut" style="margin:-4px 0 10px">Tirée automatiquement quand la trésorerie passe sous le seuil, remboursée dès qu\'elle repasse au-dessus. Laisser le plafond à 0 = ligne <b>illimitée</b> (la trésorerie ne peut jamais manquer, hypothèse optimiste).</div>'
+      +'<div class="hyp-g"><span>Plafond autorisé <span class="mut">· 0 = illimité</span></span><input class="sel ninm" value="'+mAmt(RV.plafond||0)+'" oninput="mSep(this)" onchange="mSet(\'revolver.plafond\',this.value,1)"><span class="suf">FCFA</span></div>'
+      +'<div class="hyp-g"><span>Taux d\'intérêt sur le tiré</span><input class="sel" value="'+((RV.taux!=null?RV.taux:0.12)*100)+'" onchange="mSet(\'revolver.taux\',(numFR(this.value)||0)/100)"><span class="suf">%</span></div>'
+      +'<div class="hyp-g"><span>Commission d\'engagement <span class="mut">· sur la part non tirée</span></span><input class="sel" value="'+((RV.commission||0)*100)+'" onchange="mSet(\'revolver.commission\',(numFR(this.value)||0)/100)"><span class="suf">%</span></div>'
+      +'<div class="hyp-g"><span>Trésorerie plancher à maintenir</span><input class="sel ninm" value="'+mAmt(RV.seuil||0)+'" oninput="mSep(this)" onchange="mSet(\'revolver.seuil\',this.value,1)"><span class="suf">FCFA</span></div>'
+      +'<div class="hyp-l" style="border-top:1px solid #dbe3ee;margin-top:6px;padding-top:7px"><span>Tirage maximal sur le plan</span><b style="color:'+(PR.sature?'#c0392b':'#224289')+'">'+fmt(PR.tirageMax||0)+' '+u.suf+'</b></div>'
+      +(PR.sature
+        ?'<div style="border:1px solid #f0b4a8;background:#FDF2F0;border-radius:8px;padding:10px;margin-top:8px"><b style="color:#c0392b">Plafond insuffisant</b><div class="mut">Le besoin de trésorerie dépasse le plafond autorisé : la trésorerie reste négative et le plan n\'est pas finançable en l\'état. Relevez le plafond, renforcez les fonds propres, ou étalez les investissements.</div></div>'
+        :(PR.illimite?'<div class="mut" style="margin-top:6px">Ligne illimitée : pensez à saisir un plafond réaliste pour tester la solidité du montage devant un banquier.</div>':''))
+      +'</div>';
     /* ---- situation d'ouverture : entreprise déjà en activité (symétrique actif / passif) ---- */
     var O=M.ouverture||{}, PO=(Pf.ouverture||{}), aOuv=(PO.actif||PO.passif);
     var ouvBloc='<div class="card" style="margin-top:12px"><div class="sec-titre" style="margin-top:0">Situation d\'ouverture <span class="mut" style="font-weight:400">· entreprise déjà en activité — laisser vide pour un projet neuf</span></div>'
@@ -1050,7 +1066,7 @@ function vueModele(){
         +'<div class="hyp-g"><span>Part de fonds propres (gearing cible)</span><input class="sel" value="'+(Math.round((f.partFP!=null?f.partFP:0.30)*1000)/10)+'" onchange="mSet(\'financement.partFP\',(numFR(this.value)||0)/100)"><span class="suf">%</span></div>'
         +'<div class="hyp-g"><span>BFR de démarrage</span><input class="sel" value="'+(f.moisBFR!=null?f.moisBFR:3)+'" onchange="mSet(\'financement.moisBFR\',this.value,1)"><span class="suf">mois de charges</span></div>'
         +'<div class="hyp-g"><span>Subvention (optionnel)</span><input class="sel ninm" value="'+mAmt(f.subvention||0)+'" oninput="mSep(this)" onchange="mSet(\'financement.subvention\',this.value,1)"><span class="suf"></span></div>'
-        +empBloc+ouvBloc+su
+        +empBloc+rvBloc+ouvBloc+su
         +'<div class="mut" style="margin-top:8px">Le besoin (investissements + BFR de démarrage + IDC) est réparti fonds propres / dette selon la part choisie ; amortissement et remboursement démarrent à la mise en service. En automatique, les fonds propres sont entièrement en capital social — pour <b>répartir</b> entre capital social, primes liées au capital et comptes courants d\'associés (CCA), passez en mode <b>Manuel</b>.</div></div>';
     } else {
       var ccaMode=(f.ccaMode||"maintenu"), plug=(f.plug||"");
@@ -1089,7 +1105,7 @@ function vueModele(){
         +(ccaMode!=="maintenu"?'<div class="hyp-g"><span>CCA — '+(ccaMode==="infine"?'année de remboursement':'durée de remboursement')+'</span><input class="sel" value="'+(f.ccaDuree||(M.nb||5))+'" onchange="mSet(\'financement.ccaDuree\',this.value,1)"><span class="suf">'+(ccaMode==="infine"?'(année du plan)':'ans')+'</span></div>':'')
         +'<div class="hyp-g"><span>Subvention</span><input class="sel ninm" value="'+mAmt(f.subvention||0)+'" oninput="mSep(this)" onchange="mSet(\'financement.subvention\',this.value,1)"><span class="suf"></span></div>'
         +'<div class="hyp-g"><span>Emprunt — montant</span>'+(champFin("dette",Pf.dette)||'<input class="sel ninm" value="'+mAmt(e.montant||0)+'" oninput="mSep(this)" onchange="mSet(\'financement.emprunt.montant\',this.value,1)">')+'<span class="suf"></span></div>'
-        +empBloc+ouvBloc+su
+        +empBloc+rvBloc+ouvBloc+su
         +'<div class="mut" style="margin-top:8px">Le financement est tiré en année 1 ; en cas de construction, les intérêts courent et sont capitalisés dans la dette (IDC). Le CCA est une dette financière (quasi-fonds propres) : inclus dans la dette nette de la valorisation, reclassable dans le pont. La trésorerie d\'ouverture finance une partie du démarrage ; les <b>créances et dettes d\'ouverture ne figurent pas dans ce montage</b> — elles vivent dans le bilan et la trésorerie du plan (encaissement / règlement étalés), pas dans le besoin initial.</div></div>';
     }
   } else if(SOUS_MODELE==="bfr"){
