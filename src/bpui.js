@@ -665,6 +665,100 @@ function mTableRevenus(M){
     +'<div class="glg"><span><i class="a"></i>à saisir</span><span><i class="b"></i>calculé</span>'
     +'<span style="margin-left:6px">Modèle de départ pour une nouvelle ligne : <select class="sel" style="width:auto;font-size:11.5px;padding:4px 8px" onchange="mAddLigneTpl(this.value)"><option value="">— choisir —</option>'+opts+'</select></span></div>';
 }
+/* =====================================================================
+   GRILLE DES COÛTS DIRECTS — même langage visuel que les revenus.
+   Les montants affichés viennent de P.pl.CDIND_DETAIL, c'est-à-dire du
+   MOTEUR lui-même (scénario appliqué) : aucune reproduction de formule ici.
+   ===================================================================== */
+function gCoutIndVal(r,i,revs){
+  if(r&&r.refLigne){ var L=null;(revs||[]).forEach(function(x,k){if((x.id||('L'+k))===r.refLigne)L=x;});
+    return L?volPhysique(L,i):0; }
+  return gIndVal(r,i);
+}
+function mTableCouts(M,P){
+  var N=M.nb||5, CD=(M.coutsDirects||[]), revs=(M.revenus||[]), A=P.annees, u=uni(), i;
+  var head='<tr><th class="l gc1">Coût direct</th>'+(G_FX?'<th class="l gc2">Méthode</th>':'');
+  for(i=0;i<N;i++)head+='<th>An '+(i+1)+'</th>';
+  head+='</tr>';
+  var tot=[]; for(i=0;i<N;i++)tot.push(0);
+  var body='';
+  if(!CD.length) body='<tr><td class="l gc1" colspan="'+(N+(G_FX?2:1))+'" style="color:var(--muted)">Aucun coût direct pour l\'instant.</td></tr>';
+  CD.forEach(function(cl,ci){
+    var m=(cl.m||'ind'), scope=(cl.scope||'all'), id='C'+ci, ferme=!!G_CLOSED[id];
+    var det=(P.pl.CDIND_DETAIL||{})['CDI'+ci]||{vals:{}};
+    var vals=[]; for(var k=0;k<N;k++){ var v=Math.abs(+det.vals[A[k]]||0); vals.push(v); tot[k]+=v; }
+    var opts=(m==='pct'?('<option value="all"'+(scope==='all'?' selected':'')+'>l\'ensemble du CA</option>'):'');
+    revs.forEach(function(L,k){var lid=L.id||('L'+k);
+      opts+='<option value="'+lid+'"'+(scope===lid?' selected':'')+'>'+esc(L.name||'Ligne')+'</option>';});
+    var meth;
+    if(m==='pct') meth='<span class="gfx"><input value="'+(cl.pct!=null?cl.pct:0)+'" onchange="mCoutPct('+ci+',this.value)"> % de '
+      +'<select class="gsel" onchange="mCoutScope('+ci+',this.value)">'+opts+'</select></span>';
+    else if(m==='unit') meth='<span class="gfx"><input style="width:66px" value="'+mAmt(cl.val||0)+'" onchange="mCoutVal('+ci+',this.value)"> F &times; volume de '
+      +'<select class="gsel" onchange="mCoutScope('+ci+',this.value)">'+opts+'</select></span>';
+    else { var nbi=(cl.rows||[]).length;
+      meth='<span class="gfx"><span class="gchip">'+nbi+' inducteur'+(nbi>1?'s':'')+'</span>'
+        +'<span class="xx">&times;</span><span class="gchip sys">taux</span>'
+        +(ferme?' <span style="color:var(--muted)">— déplier pour éditer</span>':'')+'</span>'; }
+    body+='<tr class="grp"><td class="l gc1">'
+      +(m==='ind'?'<span class="gcar" onclick="mPlier(\''+id+'\')" title="Plier / déplier">'+(ferme?'&#9656;':'&#9662;')+'</span>':'<span class="gcar"></span>')
+      +'<input class="gnm big" value="'+esc(cl.name||'')+'" onchange="mCoutNom('+ci+',this.value)">'
+      +'<select class="gsel" title="Méthode de calcul" onchange="mCoutMethode('+ci+',this.value)">'
+      +'<option value="pct"'+(m==='pct'?' selected':'')+'>% du CA</option>'
+      +'<option value="unit"'+(m==='unit'?' selected':'')+'>coût unitaire</option>'
+      +'<option value="ind"'+(m==='ind'?' selected':'')+'>inducteurs</option></select>'
+      +'<button class="gx" title="Retirer ce coût" onclick="mDelCout('+ci+')">&#10005;</button></td>'
+      +(G_FX?'<td class="l gc2">'+meth+'</td>':'')
+      +vals.map(function(v){return '<td class="num">'+fmt(v)+'</td>';}).join('')+'</tr>';
+    if(m!=='ind'||ferme)return;
+    (cl.rows||[]).forEach(function(r,ri){
+      var ref=!!r.refLigne, yearly=(r.mode==='yearly'), cells='';
+      for(var k2=0;k2<N;k2++){
+        var val=gCoutIndVal(r,k2,revs);
+        if(ref||(!yearly&&k2>0))
+          cells+='<td><span class="gcell gcalc num"'+(ref?'':' title="Calculé depuis l&#39;an 1 — cliquer pour saisir année par année" onclick="mCoutIndMode('+ci+','+ri+',\'yearly\')"')+'>'+gN(val)+'</span></td>';
+        else
+          cells+='<td><input class="gcell gin num" value="'+mAmt(val)+'" oninput="mSep(this)" onchange="'
+            +(yearly?('mCoutIndYv('+ci+','+ri+','+k2+',this.value)'):('mCoutInd('+ci+','+ri+',\'val\',this.value)'))+'"></td>';
+      }
+      var refSel='<select class="gsel" onchange="mCoutIndRef('+ci+','+ri+',this.value)"><option value="">valeur saisie</option>'
+        +revs.map(function(L,k3){var lid=L.id||('L'+k3);
+          return '<option value="'+lid+'"'+(r.refLigne===lid?' selected':'')+'>effectif — '+esc(L.name||'Ligne')+'</option>';}).join('')+'</select>';
+      var fx=ref?('<span class="gfx">'+refSel+'</span>')
+        :(yearly?'<span class="gfx">année par année <button class="gx" title="Repasser en croissance" onclick="mCoutIndMode('+ci+','+ri+',\'grow\')">&#8634;</button>'+refSel+'</span>'
+                :'<span class="gfx">an 1, puis <input value="'+(r.g||0)+'" onchange="mCoutInd('+ci+','+ri+',\'g\',this.value)"> %/an '+refSel+'</span>');
+      body+='<tr><td class="l gc1"><div class="gdrv"><button class="gop" title="Basculer &times; / &divide;" onclick="mCoutIndOp('+ci+','+ri+')">'+(r.op==='d'?'&divide;':'&times;')+'</button>'
+        +'<input class="gnm" placeholder="Nom" value="'+esc(r.name||'')+'" onchange="mCoutInd('+ci+','+ri+',\'name\',this.value)">'
+        +(ref?'':'<input class="gnm u" placeholder="unité" value="'+esc(r.unit||'')+'" onchange="mCoutInd('+ci+','+ri+',\'unit\',this.value)">'
+          +'<button class="gpct'+(gEstPct(r)?' on':'')+'" title="Pourcentage : la valeur est traitée comme un ratio" onclick="mCoutIndPct('+ci+','+ri+')">%</button>')
+        +'<button class="gpct'+(r.ceil?' on':'')+'" title="Arrondi supérieur du produit courant (ex. nombre de classes)" onclick="mCoutIndCeil('+ci+','+ri+')">&#8968;</button>'
+        +'<button class="gx" title="Retirer cet inducteur" onclick="mDelCoutInd('+ci+','+ri+')">&#10005;</button></div></td>'
+        +(G_FX?'<td class="l gc2">'+fx+'</td>':'')+cells+'</tr>';
+    });
+    var qte=[],tx=[];
+    for(i=0;i<N;i++){ qte.push(volInducteurs(cl.rows,i,{revenus:revs,fCA:1})); tx.push(valAnnee(cl.prix,i)); }
+    body+='<tr class="gres"><td class="l gc1"><div class="gdrv"><span class="gop eq">=</span> Quantité</div></td>'
+      +(G_FX?'<td class="gc2"></td>':'')
+      +qte.map(function(v){return '<td><span class="gcell gcalc num">'+gN(v)+'</span></td>';}).join('')+'</tr>';
+    var tcells='';
+    for(i=0;i<N;i++) tcells+=(i===0)
+      ? '<td><input class="gcell gin num" value="'+mAmt(tx[0])+'" oninput="mSep(this)" onchange="mCoutTaux('+ci+',\'val\',this.value)"></td>'
+      : '<td><span class="gcell gcalc num">'+gN(tx[i])+'</span></td>';
+    body+='<tr><td class="l gc1"><div class="gdrv"><span class="gop">&times;</span> Taux unitaire'
+      +'<input class="gnm u" placeholder="unité" value="'+esc((cl.prix&&cl.prix.unit)||'')+'" onchange="mCoutTaux('+ci+',\'unit\',this.value)"></div></td>'
+      +(G_FX?'<td class="l gc2"><span class="gfx">an 1, puis <input value="'+((cl.prix&&cl.prix.g)||0)+'" onchange="mCoutTaux('+ci+',\'g\',this.value)"> %/an</span></td>':'')
+      +tcells+'</tr>';
+    body+='<tr><td class="l gc1" style="padding-bottom:6px"><button class="gdash" onclick="mAddCoutInd('+ci+')">+ inducteur</button></td>'
+      +(G_FX?'<td class="gc2"></td>':'')+'<td colspan="'+N+'"></td></tr>';
+  });
+  body+='<tr class="gtot"><td class="l gc1">Total des coûts directs</td>'
+    +(G_FX?'<td class="l gc2" style="font-size:11px;color:var(--muted)">&Sigma; des lignes &middot; '+u.lib+'</td>':'')
+    +tot.map(function(c){return '<td class="num v" style="color:var(--red)">'+fmt(c)+'</td>';}).join('')+'</tr>';
+  return '<div class="gbar"><span class="gt">Coûts directs</span>'
+    +'<button class="btn sm'+(G_FX?' primary':'')+'" onclick="mFxToggle()" title="Afficher / masquer la colonne Méthode">Méthodes</button>'
+    +'<span class="push"></span><button class="btn sm primary" onclick="mAddCout()">+ Coût direct</button></div>'
+    +'<div class="gwrap"><div class="gscroll"><table class="gtab"><thead>'+head+'</thead><tbody>'+body+'</tbody></table></div>'
+    +'<div class="gfoot"><span><b>% du CA</b> : part du chiffre d\'affaires &middot; <b>coût unitaire</b> : montant &times; volume vendu &middot; <b>inducteurs</b> : chaîne indépendante du CA.</span></div></div>';
+}
 function mAddLigneTpl(tpl){ if(!tpl)return; var M=assurerModele();
   M.revenus.push({name:M_PRESETS[tpl].lab,tpl:tpl,rows:JSON.parse(JSON.stringify(M_PRESETS[tpl].rows)),prix:{val:1000,unit:"FCFA",g:2}});
   sauverDossier();rendre(); }
@@ -750,6 +844,8 @@ function vueModele(){
   if(SOUS_MODELE==="rev"){
     corps=mBlocSecteur()+mTableRevenus(M);
   } else if(SOUS_MODELE==="cout"){
+    corps=mTableCouts(M,P);
+  } else if(SOUS_MODELE==="__cout_ancien"){
     var CDL=(M.coutsDirects||[]);
     corps='<div class="mut" style="margin-bottom:10px">Tous les coûts directs se paramètrent ici. Pour chaque coût, choisis sa <b>méthode</b> et son <b>périmètre</b> : <b>% du CA</b> (d\'une ligne de produit ou de l\'ensemble), <b>coût unitaire × volume</b> d\'une ligne, ou <b>inducteurs</b> (indépendant du CA — ex. école : <i>Vacataires</i> = Nb classes × Heures/classe/an × 20 000 F/h).</div>'
       +(CDL.length?CDL.map(function(cl,ci){return mCarteCout(cl,ci);}).join(""):'<div class="mut" style="margin-bottom:8px">Aucun coût direct pour l\'instant.</div>')
