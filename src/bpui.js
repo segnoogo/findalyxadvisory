@@ -601,9 +601,9 @@ function mTableRevenus(M){
     for(j=0;j<N;j++){ var v=volInducteurs(L.rows,j), p=valAnnee(L.prix,j);
       vols.push(v); prixs.push(p); cas.push(v*p); tot[j]+=v*p; }
     /* --- ligne produit : le CA de la ligne (sert aussi de résumé quand c'est replié) --- */
-    body+='<tr class="grp"><td class="l gc1"><span class="gcar" onclick="mPlier(\''+id+'\')" title="Plier / déplier">'+(ferme?'&#9656;':'&#9662;')+'</span>'
+    body+='<tr class="grp"><td class="l gc1"><div class="ghead"><span class="gcar" onclick="mPlier(\''+id+'\')" title="Plier / déplier">'+(ferme?'&#9656;':'&#9662;')+'</span>'
       +'<input class="gnm big" value="'+esc(L.name||'')+'" onchange="mLigneNom('+li+',this.value)">'
-      +'<button class="gx" title="Retirer cette ligne de revenus" onclick="mDelLigne('+li+')">&#10005;</button></td>'
+      +'<button class="gx" title="Retirer cette ligne de revenus" onclick="mDelLigne('+li+')">&#10005;</button></div></td>'
       +(G_FX?'<td class="l gc2"><span class="gfx"><span class="gchip">Volume</span><span class="xx">&times;</span><span class="gchip">Prix</span></span></td>':'')
       +cas.map(function(c){return '<td class="num">'+fmt(c/1000)+'</td>';}).join('')+'</tr>';
     if(ferme)return;
@@ -699,14 +699,14 @@ function mTableCouts(M,P){
       meth='<span class="gfx"><span class="gchip">'+nbi+' inducteur'+(nbi>1?'s':'')+'</span>'
         +'<span class="xx">&times;</span><span class="gchip sys">taux</span>'
         +(ferme?' <span style="color:var(--muted)">— déplier pour éditer</span>':'')+'</span>'; }
-    body+='<tr class="grp"><td class="l gc1">'
+    body+='<tr class="grp"><td class="l gc1"><div class="ghead">'
       +(m==='ind'?'<span class="gcar" onclick="mPlier(\''+id+'\')" title="Plier / déplier">'+(ferme?'&#9656;':'&#9662;')+'</span>':'<span class="gcar"></span>')
       +'<input class="gnm big" value="'+esc(cl.name||'')+'" onchange="mCoutNom('+ci+',this.value)">'
       +'<select class="gsel" title="Méthode de calcul" onchange="mCoutMethode('+ci+',this.value)">'
       +'<option value="pct"'+(m==='pct'?' selected':'')+'>% du CA</option>'
       +'<option value="unit"'+(m==='unit'?' selected':'')+'>coût unitaire</option>'
       +'<option value="ind"'+(m==='ind'?' selected':'')+'>inducteurs</option></select>'
-      +'<button class="gx" title="Retirer ce coût" onclick="mDelCout('+ci+')">&#10005;</button></td>'
+      +'<button class="gx" title="Retirer ce coût" onclick="mDelCout('+ci+')">&#10005;</button></div></td>'
       +(G_FX?'<td class="l gc2">'+meth+'</td>':'')
       +vals.map(function(v){return '<td class="num">'+fmt(v)+'</td>';}).join('')+'</tr>';
     if(m!=='ind'||ferme)return;

@@ -243,8 +243,8 @@ border-left:4px solid var(--orange)}
 .gtab .l{text-align:left}
 .gtab .num{font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1}
 .gtab tbody tr:hover td{background:#FAFBFE}
-.gc1{position:sticky;left:0;z-index:2;background:#fff;min-width:262px}
-.gc2{position:sticky;left:262px;z-index:2;background:#fff;min-width:210px;max-width:340px;
+.gc1{position:sticky;left:0;z-index:2;background:#fff;min-width:310px;max-width:310px}
+.gc2{position:sticky;left:310px;z-index:2;background:#fff;min-width:210px;max-width:320px;
   white-space:normal;border-right:1px solid #E3E7EF}
 .gtab thead .gc1,.gtab thead .gc2{z-index:5;background:#F8FAFC}
 .gtab tbody tr:hover .gc1,.gtab tbody tr:hover .gc2{background:#FAFBFE}
@@ -263,7 +263,9 @@ border-left:4px solid var(--orange)}
 .gnm:hover{background:#F2F5FA}
 .gnm:focus{background:#fff;border-color:#C3CEE2;outline:none}
 .gnm.u{width:52px;color:var(--muted);font-size:11.5px}
-.gnm.big{font-weight:650;width:180px;color:var(--navy)}
+.gnm.big{font-weight:650;flex:1;min-width:90px;width:auto;color:var(--navy)}
+.ghead{display:flex;align-items:center;gap:6px;min-width:0}
+.ghead .gsel{flex:0 0 auto;max-width:112px}
 .gx{border:0;background:transparent;color:#B9C2D2;cursor:pointer;font-size:12px;padding:2px 4px;font-family:inherit}
 .gx:hover{color:var(--red)}
 .gfx{display:flex;align-items:center;gap:5px 6px;font-size:11.5px;color:var(--muted);flex-wrap:wrap;
@@ -10063,9 +10065,9 @@ function mTableRevenus(M){
     for(j=0;j<N;j++){ var v=volInducteurs(L.rows,j), p=valAnnee(L.prix,j);
       vols.push(v); prixs.push(p); cas.push(v*p); tot[j]+=v*p; }
     /* --- ligne produit : le CA de la ligne (sert aussi de résumé quand c'est replié) --- */
-    body+='<tr class="grp"><td class="l gc1"><span class="gcar" onclick="mPlier(\''+id+'\')" title="Plier / déplier">'+(ferme?'&#9656;':'&#9662;')+'</span>'
+    body+='<tr class="grp"><td class="l gc1"><div class="ghead"><span class="gcar" onclick="mPlier(\''+id+'\')" title="Plier / déplier">'+(ferme?'&#9656;':'&#9662;')+'</span>'
       +'<input class="gnm big" value="'+esc(L.name||'')+'" onchange="mLigneNom('+li+',this.value)">'
-      +'<button class="gx" title="Retirer cette ligne de revenus" onclick="mDelLigne('+li+')">&#10005;</button></td>'
+      +'<button class="gx" title="Retirer cette ligne de revenus" onclick="mDelLigne('+li+')">&#10005;</button></div></td>'
       +(G_FX?'<td class="l gc2"><span class="gfx"><span class="gchip">Volume</span><span class="xx">&times;</span><span class="gchip">Prix</span></span></td>':'')
       +cas.map(function(c){return '<td class="num">'+fmt(c/1000)+'</td>';}).join('')+'</tr>';
     if(ferme)return;
@@ -10161,14 +10163,14 @@ function mTableCouts(M,P){
       meth='<span class="gfx"><span class="gchip">'+nbi+' inducteur'+(nbi>1?'s':'')+'</span>'
         +'<span class="xx">&times;</span><span class="gchip sys">taux</span>'
         +(ferme?' <span style="color:var(--muted)">— déplier pour éditer</span>':'')+'</span>'; }
-    body+='<tr class="grp"><td class="l gc1">'
+    body+='<tr class="grp"><td class="l gc1"><div class="ghead">'
       +(m==='ind'?'<span class="gcar" onclick="mPlier(\''+id+'\')" title="Plier / déplier">'+(ferme?'&#9656;':'&#9662;')+'</span>':'<span class="gcar"></span>')
       +'<input class="gnm big" value="'+esc(cl.name||'')+'" onchange="mCoutNom('+ci+',this.value)">'
       +'<select class="gsel" title="Méthode de calcul" onchange="mCoutMethode('+ci+',this.value)">'
       +'<option value="pct"'+(m==='pct'?' selected':'')+'>% du CA</option>'
       +'<option value="unit"'+(m==='unit'?' selected':'')+'>coût unitaire</option>'
       +'<option value="ind"'+(m==='ind'?' selected':'')+'>inducteurs</option></select>'
-      +'<button class="gx" title="Retirer ce coût" onclick="mDelCout('+ci+')">&#10005;</button></td>'
+      +'<button class="gx" title="Retirer ce coût" onclick="mDelCout('+ci+')">&#10005;</button></div></td>'
       +(G_FX?'<td class="l gc2">'+meth+'</td>':'')
       +vals.map(function(v){return '<td class="num">'+fmt(v)+'</td>';}).join('')+'</tr>';
     if(m!=='ind'||ferme)return;
