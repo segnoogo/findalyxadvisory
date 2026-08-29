@@ -510,19 +510,20 @@ function mCarteRevenu(L,li){
       +vals+'</div>';
   }).join('');
   var vol=volInducteurs(L.rows,0), prix=(L.prix&&L.prix.val)||0, ca=vol*prix;
-  return '<div class="card" style="padding:0">'
-    +'<div class="bande" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><input class="sel" style="flex:1;min-width:160px;font-weight:700" value="'+esc(L.name)+'" onchange="mLigneNom('+li+',this.value)">'
-    +'<span class="mut">Modèle</span><select class="sel" style="width:auto" onchange="mTpl('+li+',this.value)">'+opts+'</select>'
-    +'<button class="btn sm" title="Supprimer la ligne" onclick="mDelLigne('+li+')">Supprimer</button></div>'
-    +'<div style="padding:12px 14px">'
-    +'<div class="mut" style="text-transform:uppercase;letter-spacing:.5px;font-size:11px;font-weight:700;margin-bottom:8px">Inducteurs de volume (× ou ÷ · unité % = ratio)</div>'
+  return '<div class="mrev">'
+    +'<div class="mrev-h"><div class="lft"><div class="mrev-eyebrow"><span class="dot"></span>Ligne de revenus</div>'
+    +'<input class="mrev-titre" value="'+esc(L.name)+'" onchange="mLigneNom('+li+',this.value)"></div>'
+    +'<div class="rgt"><span class="mrev-chip">Modèle <select onchange="mTpl('+li+',this.value)">'+opts+'</select></span>'
+    +'<button class="mghost" title="Supprimer la ligne" onclick="mDelLigne('+li+')">Retirer</button></div></div>'
+    +'<div class="mrev-b">'
+    +'<div class="mrev-sect">Inducteurs de volume <span>× ou ÷ · une unité en % = ratio</span></div>'
     +rows
     +'<button class="btn sm" style="margin-top:2px" onclick="mAddInd('+li+')">+ inducteur</button>'
     +'<div class="mind-res"><div class="mind-price"><span class="x">=</span> <span class="mind-lbl">Volume an&nbsp;1</span> <b style="font-size:15px">'+Math.round(vol).toLocaleString("fr-FR").replace(/[  ]/g," ")+'</b> <span class="mut">unités (pas des FCFA)</span></div>'
     +'<div class="mind-price"><span class="x">×</span> <span class="mut">Prix an 1 (FCFA)</span> <input class="nin ninm" value="'+mAmt(prix)+'" oninput="mSep(this)" onchange="mPrix('+li+',\'val\',this.value)"><input class="nin" style="width:70px" value="'+esc(L.prix.unit||'')+'" onchange="mPrix('+li+',\'unit\',this.value)">'
     +'<span class="mut">croissance</span> <input class="nin" style="width:60px" value="'+(L.prix.g||0)+'" onchange="mPrix('+li+',\'g\',this.value)"> %'
     +'<span class="mind-ca">CA an 1 · '+fmt(ca/1000)+' '+uni().suf+'</span></div></div>'
-    +'<div class="mut" style="border-top:1px dashed #e3e9f2;padding-top:8px;margin-top:6px;font-size:12px">Les coûts directs se paramètrent dans l\'onglet <b>Coûts directs</b> (choix du périmètre : cette ligne, l\'ensemble, ou indépendant).</div>'
+    +'<div class="mrev-note">Les coûts directs se paramètrent dans l\'onglet <b>Coûts directs</b> (choix du périmètre : cette ligne, l\'ensemble, ou indépendant).</div>'
     +'</div></div>';
 }
 function mCarteCout(cl,ci){
@@ -558,7 +559,7 @@ function mCarteCout(cl,ci){
       var apresCeil='';
       if(r.ceil){var sub=(cl.rows||[]).slice(0,ri+1),cs='';for(var kc=0;kc<N;kc++){cs+=(kc?' · ':'')+Math.round(volInducteurs(sub,kc,{revenus:revs,fCA:1}));}
         apresCeil='<div class="mut" style="padding:2px 0 0 44px">= après arrondi supérieur : <b>'+cs+'</b></div>';}
-      return '<div class="mind"><div class="mind-top"><button class="btn sm" title="× ou ÷" onclick="mCoutIndOp('+ci+','+ri+')" style="min-width:34px;font-weight:700">'+(r.op==='d'?'÷':'×')+'</button>'
+      return '<div class="mind"><div class="mind-top"><button class="btn sm mind-op" title="× ou ÷" onclick="mCoutIndOp('+ci+','+ri+')">'+(r.op==='d'?'÷':'×')+'</button>'
         +'<input class="sel" style="flex:1;min-width:130px" placeholder="Nom de l\'inducteur" value="'+esc(r.name||'')+'" onchange="mCoutInd('+ci+','+ri+',\'name\',this.value)">'
         +refSel+ceilBtn
         +(r.refLigne?'':'<input class="nin" style="width:78px" placeholder="unité" value="'+esc(r.unit||'')+'" onchange="mCoutInd('+ci+','+ri+',\'unit\',this.value)">'
@@ -567,7 +568,7 @@ function mCarteCout(cl,ci){
     }).join('');
     var q=volInducteurs(cl.rows,0,{revenus:revs,fCA:1}), taux=(cl.prix&&cl.prix.val)||0, cout=q*taux;
     var qS='';for(var kq=0;kq<N;kq++){qS+=(kq?' · ':'')+Math.round(volInducteurs(cl.rows,kq,{revenus:revs,fCA:1})).toLocaleString("fr-FR").replace(/[  ]/g," ");}
-    corps='<div class="mut" style="text-transform:uppercase;letter-spacing:.5px;font-size:11px;font-weight:700;margin-bottom:8px">Inducteurs de quantité (× ou ÷ · unité % = ratio)</div>'
+    corps='<div class="mrev-sect">Inducteurs de quantité <span>× ou ÷ · une unité en % = ratio</span></div>'
     +rows
     +'<button class="btn sm" style="margin-top:2px" onclick="mAddCoutInd('+ci+')">+ inducteur</button>'
     +'<div class="mind-price"><span class="x">= Quantité par année : <b>'+qS+'</b></span></div>'
@@ -575,10 +576,11 @@ function mCarteCout(cl,ci){
     +'<span class="mut">croissance</span> <input class="nin" style="width:60px" value="'+((cl.prix&&cl.prix.g)||0)+'" onchange="mCoutTaux('+ci+',\'g\',this.value)"> %'
     +'<span style="margin-left:auto;font-weight:700;color:#c0392b">Coût an 1 : '+fmt(cout/1000)+' '+uni().suf+'</span></div>';
   }
-  return '<div class="card" style="padding:0">'
-    +'<div class="bande" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><input class="sel" style="flex:1;min-width:160px;font-weight:700" value="'+esc(cl.name||'')+'" onchange="mCoutNom('+ci+',this.value)">'
-    +'<button class="btn sm" title="Supprimer" onclick="mDelCout('+ci+')">Supprimer</button></div>'
-    +'<div style="padding:12px 14px">'+methode+scopeSel+corps
+  return '<div class="mrev">'
+    +'<div class="mrev-h"><div class="lft"><div class="mrev-eyebrow"><span class="dot"></span>Coût direct</div>'
+    +'<input class="mrev-titre" placeholder="Nom du coût" value="'+esc(cl.name||'')+'" onchange="mCoutNom('+ci+',this.value)"></div>'
+    +'<div class="rgt"><button class="mghost" title="Supprimer" onclick="mDelCout('+ci+')">Retirer</button></div></div>'
+    +'<div class="mrev-b">'+methode+scopeSel+corps
     +'</div></div>';
 }
 function vueModele(){
