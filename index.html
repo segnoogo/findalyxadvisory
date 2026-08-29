@@ -10456,6 +10456,28 @@ function vueModele(){
         +(PO.actif&&!PO.passif?'<div style="border:1px solid #f0c98a;background:#FFF9F0;border-radius:8px;padding:10px;margin-top:8px"><b style="color:#8a5a00">⚠ Actif renseigné sans aucun passif</b><div class="mut">Un acquéreur lira une situation d\'ouverture asymétrique — donc suspecte. Renseignez les dettes connues (fournisseurs, impôts, charges sociales, arriérés de salaires), même approximatives, ou justifiez leur absence dans le rapport.</div></div>':'')
         +'<div class="mut" style="margin-top:8px;font-style:italic">À reprendre dans les livrables : éléments <b>déclarés par la direction, non audités et non exhaustifs</b> ; l\'écart éventuel relève d\'une garantie d\'actif et de passif (cession de titres) ou d\'un ajustement de prix au closing.</div>'):'')
       +'</div>';
+    /* ---- structure du capital : parts en %, dans les DEUX modes (auto et manuel) ----
+       Le % n'était affiché qu'en mode automatique (part cible saisie) ; en manuel,
+       l'analyste saisit des montants et ne voyait pas le gearing qui en résulte. */
+    var tR=(Pf.sources||0);
+    var pcR=function(x){ return tR>0?(' <span class="mut">· '+(Math.round((x||0)/tR*1000)/10).toString().replace('.',',')+' %</span>'):''; };
+    var fpTot=(Pf.capital||0)+(Pf.primes||0)+(Pf.subvention||0), ccaTot=(Pf.cca||0), detTot=(Pf.detteAvecIDC||0);
+    var baseSt=fpTot+ccaTot+detTot;
+    var pSt=function(x){ return baseSt>0?(Math.round((x||0)/baseSt*1000)/10).toString().replace('.',',')+' %':'—'; };
+    var larg=function(x){ return baseSt>0?((x||0)/baseSt*100):0; };
+    var structBloc=baseSt<=0?'':('<div style="margin-top:14px;border-top:1px dashed #cfd8e6;padding-top:11px">'
+      +'<div class="mut" style="font-weight:700;text-transform:uppercase;font-size:11px;letter-spacing:.5px;margin-bottom:7px">Structure du financement</div>'
+      +'<div style="display:flex;height:11px;border-radius:6px;overflow:hidden;margin-bottom:10px;background:#e6ebf3">'
+        +'<div style="width:'+larg(fpTot)+'%;background:#16904E" title="Fonds propres"></div>'
+        +(ccaTot?'<div style="width:'+larg(ccaTot)+'%;background:#E0913F" title="Comptes courants d\'associés"></div>':'')
+        +'<div style="width:'+larg(detTot)+'%;background:#224289" title="Dette financière"></div></div>'
+      +'<div class="hyp-l"><span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#16904E;margin-right:7px"></span>Fonds propres <span class="mut">· capital, primes, subvention</span></span><b>'+fmt(fpTot)+' '+u.suf+' &nbsp;<span style="color:#16904E">'+pSt(fpTot)+'</span></b></div>'
+      +(ccaTot?'<div class="hyp-l"><span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#E0913F;margin-right:7px"></span>Comptes courants d\'associés <span class="mut">· quasi-fonds propres</span></span><b>'+fmt(ccaTot)+' '+u.suf+' &nbsp;<span style="color:#8a5a00">'+pSt(ccaTot)+'</span></b></div>':'')
+      +'<div class="hyp-l"><span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#224289;margin-right:7px"></span>Dette financière</span><b>'+fmt(detTot)+' '+u.suf+' &nbsp;<span style="color:#224289">'+pSt(detTot)+'</span></b></div>'
+      +'<div class="hyp-l" style="border-top:1px solid #dbe3ee;margin-top:4px;padding-top:6px"><span><b>Levier</b> <span class="mut">· dette / fonds propres</span></span><b>'
+        +(fpTot>0?(Math.round(detTot/fpTot*100)/100).toString().replace('.',',')+' ×':'—')+'</b></div>'
+      +((Pf.ouverture&&Pf.ouverture.treso)?'<div class="mut" style="margin-top:6px">La trésorerie d\'ouverture ('+fmt(Pf.ouverture.treso)+' '+u.suf+') est une ressource du montage mais n\'entre pas dans cette structure : elle est déjà en caisse, elle n\'est ni levée ni empruntée.</div>':'')
+      +'</div>');
     var su='<div class="card" style="background:#f6f8fc;margin-top:12px"><div class="sec-titre" style="margin-top:0">Sources & Emplois du montage</div>'
       +'<div class="mut" style="margin:-4px 0 10px">'+(Pf.dureeConstruction>0?('Construction sur '+Pf.dureeConstruction+' an(s) ; exploitation à partir de l\'année '+Pf.anneeExploit+'. Intérêts de construction (IDC) capitalisés dans la dette.'):'Pas de période de construction : investissement et exploitation dès l\'année 1.')+'</div>'
       +'<div class="row" style="gap:24px;flex-wrap:wrap;align-items:stretch">'
@@ -10465,15 +10487,16 @@ function vueModele(){
           +(Pf.idc>0.01?'<div class="hyp-l"><span>Intérêts de construction (IDC)</span><b>'+fmt(Pf.idc)+' '+u.suf+'</b></div>':'')
           +'<div class="hyp-l" style="margin-top:auto;border-top:2px solid #224289;padding-top:6px"><span><b>Total emplois</b></span><b>'+fmt(Pf.emplois)+' '+u.suf+'</b></div></div>'
         +'<div style="flex:1;min-width:230px;display:flex;flex-direction:column"><div class="mut" style="font-weight:700;text-transform:uppercase;font-size:11px;letter-spacing:.5px;margin-bottom:4px">Ressources</div>'
-          +'<div class="hyp-l"><span>Capital social'+(Pf.mode==="auto"?' ('+Math.round(Pf.partFP*100)+' %)':'')+'</span><b style="color:#16904E">'+fmt(Pf.capital)+' '+u.suf+'</b></div>'
-          +(Pf.primes?'<div class="hyp-l"><span>Primes liées au capital</span><b style="color:#16904E">'+fmt(Pf.primes)+' '+u.suf+'</b></div>':'')
+          +'<div class="hyp-l"><span>Capital social'+pcR(Pf.capital)+'</span><b style="color:#16904E">'+fmt(Pf.capital)+' '+u.suf+'</b></div>'
+          +(Pf.primes?'<div class="hyp-l"><span>Primes liées au capital'+pcR(Pf.primes)+'</span><b style="color:#16904E">'+fmt(Pf.primes)+' '+u.suf+'</b></div>':'')
           +(Pf.cca?'<div class="hyp-l"><span>Comptes courants d\'associés (CCA'+(Pf.ccaTaux?', '+(Pf.ccaTaux*100).toFixed(1)+' %':', 0 %')+' · '+(Pf.ccaMode==='infine'?'in fine':Pf.ccaMode==='lineaire'?'linéaire':'maintenu')+')</span><b style="color:#8a5a00">'+fmt(Pf.cca)+' '+u.suf+'</b></div>':'')
           +((Pf.ouverture&&Pf.ouverture.treso)?'<div class="hyp-l"><span>Trésorerie d\'ouverture <span class="mut">· déjà en caisse</span></span><b style="color:#16904E">'+fmt(Pf.ouverture.treso)+' '+u.suf+'</b></div>':'')
           +(Pf.subvention?'<div class="hyp-l"><span>Subvention</span><b>'+fmt(Pf.subvention)+' '+u.suf+'</b></div>':'')
-          +'<div class="hyp-l"><span>Dette'+(Pf.idc>0.01?' (dont IDC)':'')+'</span><b style="color:#224289">'+fmt(Pf.detteAvecIDC)+' '+u.suf+'</b></div>'
+          +'<div class="hyp-l"><span>Dette'+(Pf.idc>0.01?' (dont IDC)':'')+pcR(Pf.detteAvecIDC)+'</span><b style="color:#224289">'+fmt(Pf.detteAvecIDC)+' '+u.suf+'</b></div>'
           +'<div class="hyp-l" style="margin-top:auto;border-top:2px solid #224289;padding-top:6px"><span><b>Total ressources</b></span><b>'+fmt(Pf.sources)+' '+u.suf+'</b></div>'
           +'</div>'
       +'</div>'
+      +structBloc
       +((!auto&&Math.abs(Pf.sources-Pf.emplois)>0.5)?'<div class="hyp-l" style="margin-top:8px;color:'+(Pf.sources<Pf.emplois?'#c0392b':'#8a5a00')+'"><span><b>'+(Pf.sources<Pf.emplois?'Besoin non couvert (part en découvert à défaut)':'Excédent de financement (trésorerie initiale)')+'</b></span><b>'+fmt(Math.abs(Pf.sources-Pf.emplois))+' '+u.suf+'</b></div>':'')
       +'</div>';
     if(auto){
