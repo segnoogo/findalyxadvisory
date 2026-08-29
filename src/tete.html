@@ -292,6 +292,19 @@ border-left:4px solid var(--orange)}
 .glg i.b{position:relative}
 .glg i.b:before{content:"";position:absolute;left:0;top:1px;bottom:1px;width:3px;border-radius:2px;
   background:repeating-linear-gradient(180deg,#B9C2D2 0 3px,transparent 3px 6px)}
+/* bascule « cet inducteur est un pourcentage » */
+.gpct{border:1px solid #D5DCE8;background:#fff;color:var(--muted);border-radius:6px;width:24px;height:24px;
+  font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;padding:0;flex-shrink:0}
+.gpct:hover{border-color:var(--pri);color:var(--pri)}
+.gpct.on{background:#EEF3FC;border-color:var(--pri);color:var(--pri)}
+/* bande de contrôles de cohérence des hypothèses */
+.gchk{background:#FFF8EC;border:1px solid #F3DFC0;border-left:4px solid #E0913F;border-radius:11px;
+  padding:11px 15px;margin:0 0 14px}
+.gchk b{color:#B45309;font-size:12.5px}
+.gchk ul{margin:7px 0 0;padding-left:19px}
+.gchk li{font-size:12px;margin:3px 0;line-height:1.5;color:var(--ink)}
+.gchk li.err{color:var(--red)}
+.gchk .ok{color:var(--green)}
 .bande{background:var(--navy);color:#fff;font-weight:600;font-size:11.2px;padding:8px 12px;
 border-radius:16px 16px 0 0}
 .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:16px}

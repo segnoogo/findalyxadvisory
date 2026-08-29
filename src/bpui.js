@@ -540,6 +540,53 @@ function mPlier(id){G_CLOSED[id]=!G_CLOSED[id];rendre();}
 function mPlierTout(ouvrir){var M=assurerModele();(M.revenus||[]).forEach(function(L,li){G_CLOSED[L.id||('L'+li)]=!ouvrir;});rendre();}
 /* valeur BRUTE d'un inducteur à l'année i (90 pour « 90 % », pas 0,9) */
 function gIndVal(r,i){ if(r&&r.mode==='yearly')return valSerie(r.vals,i); return (+((r&&r.val))||0)*Math.pow(1+(+((r&&r.g))||0)/100,i); }
+function gEstPct(r){ return String((r&&r.unit)||'').indexOf('%')>=0; }
+/* Rend EXPLICITE la règle du moteur « unité contenant % = ratio (÷100) » : au lieu de
+   devoir deviner qu'il faut taper « % » dans l'unité, on bascule l'inducteur d'un clic. */
+function mIndPct(li,ri){ var r=assurerModele().revenus[li].rows[ri];
+  r.unit=gEstPct(r)?'':'%'; sauverDossier();rendre(); }
+function mCoutIndPct(ci,ri){ var r=assurerModele().coutsDirects[ci].rows[ri];
+  r.unit=gEstPct(r)?'':'%'; sauverDossier();rendre(); }
+/* recopie la valeur de l'an 1 sur toutes les années (mode « année par année ») */
+function mIndFill(li,ri){ var M=assurerModele(), r=M.revenus[li].rows[ri], N=M.nb||5;
+  if(r.mode!=='yearly')return; var v=valSerie(r.vals,0); r.vals=[];
+  for(var k=0;k<N;k++)r.vals.push(v); sauverDossier();rendre(); }
+/* ---------------------------------------------------------------------
+   CONTRÔLES DE COHÉRENCE DES HYPOTHÈSES — non bloquants.
+   Aucun des outils concurrents étudiés ne le fait : on signale ce qui cloche
+   AVANT que l'analyste ne défende son plan devant un banquier.
+   --------------------------------------------------------------------- */
+function mControlesHyp(M,P){
+  var out=[], A=P.annees, N=A.length, i, u=uni();
+  var ca1=P.pl.CA[A[0]]||0, caL=P.pl.CA[A[N-1]]||0;
+  if(!(caL>0)) out.push(['err',"Aucun chiffre d'affaires : renseigne le volume et le prix d'au moins une ligne de revenus."]);
+  for(i=0;i<N;i++){ if((P.pl.CA[A[i]]||0)>0 && P.pl.MARGE_BRUTE[A[i]]<0){
+    out.push(['err','Marge brute négative en an '+(i+1)+" : les coûts directs dépassent le chiffre d'affaires."]); break; } }
+  for(i=0;i<N;i++){ if(P.bs.TRESO[A[i]]<0){
+    out.push(['err','Trésorerie négative en an '+(i+1)+' ('+fmt(P.bs.TRESO[A[i]])+' '+u.suf+') : renforce le financement ou étale les investissements.']); break; } }
+  var jamais=true; for(i=0;i<N;i++) if((P.pl.EBITDA[A[i]]||0)>=0) jamais=false;
+  if(jamais&&caL>0) out.push(['warn',"EBITDA négatif sur toute la durée : le plan n'atteint jamais l'équilibre d'exploitation."]);
+  if(ca1>0&&N>1){ var g=Math.pow(caL/ca1,1/(N-1))-1;
+    if(g>1) out.push(['warn','Croissance du CA de '+Math.round(g*100)+' %/an : très élevée, prépare une justification.']); }
+  var b=M.bfr||{};
+  [['dso','délai de paiement clients (DSO)'],['dio','rotation des stocks (DIO)'],['dpo','délai fournisseurs (DPO)']].forEach(function(x){
+    if((+b[x[0]]||0)>365) out.push(['warn','Le '+x[1]+' dépasse une année ('+Math.round(b[x[0]])+' jours).']); });
+  var nb=0;
+  (M.revenus||[]).forEach(function(L){ (L.rows||[]).forEach(function(r){
+    if(nb<2&&gEstPct(r)){ var v=gIndVal(r,0); if(v>100){ nb++;
+      out.push(['warn','« '+esc(r.name||'inducteur')+' » vaut '+gN(v)+" % : au-delà de 100 %, vérifie l'unité ou la valeur."]); } } }); });
+  var is=(M.is_taux!=null?+M.is_taux:0.30);
+  if(is<0||is>0.6) out.push(['warn',"Taux d'impôt sur les sociétés à "+Math.round(is*100)+' % : hors des valeurs usuelles.']);
+  if(!(M.capex||[]).length&&caL>0) out.push(['warn',"Aucun investissement saisi : vérifie que l'activité ne nécessite pas d'équipement."]);
+  return out;
+}
+function mBandeControles(M,P){
+  var c; try{ c=mControlesHyp(M,P); }catch(e){ return ''; }
+  if(!c.length)return '';
+  return '<div class="gchk"><b>'+c.length+' point'+(c.length>1?'s':'')+' à vérifier dans les hypothèses</b><ul>'
+    +c.slice(0,8).map(function(x){return '<li'+(x[0]==='err'?' class="err"':'')+'>'+x[1]+'</li>';}).join('')
+    +'</ul></div>';
+}
 function gN(v){ v=+v||0; var r=(Math.abs(v)>=100)?Math.round(v):Math.round(v*100)/100;
   return r.toLocaleString('fr-FR').replace(/[  ]/g,' '); }
 function mTableRevenus(M){
@@ -572,11 +619,13 @@ function mTableRevenus(M){
           cells+='<td><span class="gcell gcalc num" title="Calculé depuis l&#39;an 1 — cliquer pour saisir année par année" onclick="mIndMode('+li+','+ri+',\'yearly\')">'+gN(val)+'</span></td>';
       }
       var fx=yearly
-        ? '<span class="gfx">saisie année par année <button class="gx" title="Repasser en croissance" onclick="mIndMode('+li+','+ri+',\'grow\')">&#8634;</button></span>'
+        ? '<span class="gfx">année par année <button class="gx" title="Recopier l&#39;an 1 sur toutes les années" onclick="mIndFill('+li+','+ri+')">&#8594;</button>'
+          +'<button class="gx" title="Repasser en croissance" onclick="mIndMode('+li+','+ri+',\'grow\')">&#8634;</button></span>'
         : '<span class="gfx">an 1, puis <input value="'+(r.g||0)+'" onchange="mInd('+li+','+ri+',\'g\',this.value)"> %/an</span>';
       body+='<tr><td class="l gc1"><div class="gdrv"><button class="gop" title="Basculer &times; / &divide;" onclick="mIndOp('+li+','+ri+')">'+(r.op==='d'?'&divide;':'&times;')+'</button>'
         +'<input class="gnm" placeholder="Nom" value="'+esc(r.name||'')+'" onchange="mInd('+li+','+ri+',\'name\',this.value)">'
         +'<input class="gnm u" placeholder="unité" value="'+esc(r.unit||'')+'" onchange="mInd('+li+','+ri+',\'unit\',this.value)">'
+        +'<button class="gpct'+(gEstPct(r)?' on':'')+'" title="Pourcentage : la valeur est traitée comme un ratio (90 = 90 %)" onclick="mIndPct('+li+','+ri+')">%</button>'
         +'<button class="gx" title="Retirer cet inducteur" onclick="mDelInd('+li+','+ri+')">&#10005;</button></div></td>'
         +(G_FX?'<td class="l gc2">'+fx+'</td>':'')+cells+'</tr>';
     });
@@ -656,6 +705,7 @@ function mCarteCout(cl,ci){
         +'<input class="sel" style="flex:1;min-width:130px" placeholder="Nom de l\'inducteur" value="'+esc(r.name||'')+'" onchange="mCoutInd('+ci+','+ri+',\'name\',this.value)">'
         +refSel+ceilBtn
         +(r.refLigne?'':'<input class="nin" style="width:78px" placeholder="unité" value="'+esc(r.unit||'')+'" onchange="mCoutInd('+ci+','+ri+',\'unit\',this.value)">'
+        +'<button class="gpct'+(gEstPct(r)?' on':'')+'" title="Pourcentage : la valeur est traitée comme un ratio (90 = 90 %)" onclick="mCoutIndPct('+ci+','+ri+')">%</button>'
         +'<span class="segvue"><button class="'+(r.mode==='yearly'?'':'on')+'" onclick="mCoutIndMode('+ci+','+ri+',\'grow\')">Croissance</button><button class="'+(r.mode==='yearly'?'on':'')+'" onclick="mCoutIndMode('+ci+','+ri+',\'yearly\')">Par année</button></span>')
         +'<button class="btn sm" title="Retirer" onclick="mDelCoutInd('+ci+','+ri+')">✕</button></div>'+vals+apresCeil+'</div>';
     }).join('');
@@ -873,6 +923,7 @@ function vueModele(){
   return '<h1>Business plan <span class="chip" style="background:#fff4e8;color:#b45608">Projet</span></h1>'
     +pillsScenariosModele(M)
     +kpis
+    +(enHyp?mBandeControles(M,P):'')
     +'<div class="row" style="margin:14px 0 12px;align-items:center;flex-wrap:wrap">'+barre+vueBtn+'</div>'
     +subTabs
     +corps;
