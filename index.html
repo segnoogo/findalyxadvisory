@@ -228,6 +228,70 @@ border-left:4px solid var(--orange)}
 .mrev .mind{background:#FBFCFE;border-color:#E9EDF4}
 .mrev .mind-res{background:#F4F7FC;border-color:#DFE6F1}
 .mrev-note{border-top:1px dashed #E7EDF5;padding-top:10px;margin-top:12px;font-size:11.5px;color:var(--muted)}
+
+/* ===== Grille des hypothèses (inspirée des standards FP&A : ligne = inducteur, colonnes = années) ===== */
+.gbar{display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap}
+.gbar .gt{font-size:14.5px;font-weight:650;letter-spacing:-.01em;margin-right:4px}
+.gbar .push{margin-left:auto}
+.gwrap{background:#fff;border:1px solid #E3E7EF;border-radius:12px;overflow:hidden;box-shadow:0 1px 2px rgba(20,28,46,.04)}
+.gscroll{overflow-x:auto}
+.gtab{width:100%;border-collapse:separate;border-spacing:0;font-size:12.5px}
+.gtab th,.gtab td{padding:0 12px;height:38px;white-space:nowrap;text-align:right}
+.gtab thead th{position:sticky;top:0;z-index:4;background:#F8FAFC;border-bottom:1px solid #E3E7EF;
+  font-size:10px;letter-spacing:.4px;text-transform:uppercase;color:var(--muted);font-weight:700}
+.gtab td{border-bottom:1px solid #EFF2F7}
+.gtab .l{text-align:left}
+.gtab .num{font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1}
+.gtab tbody tr:hover td{background:#FAFBFE}
+.gc1{position:sticky;left:0;z-index:2;background:#fff;min-width:262px}
+.gc2{position:sticky;left:262px;z-index:2;background:#fff;min-width:210px;border-right:1px solid #E3E7EF}
+.gtab thead .gc1,.gtab thead .gc2{z-index:5;background:#F8FAFC}
+.gtab tbody tr:hover .gc1,.gtab tbody tr:hover .gc2{background:#FAFBFE}
+.grp td{background:#F4F7FC!important;font-weight:650;color:var(--navy);height:40px}
+.gres td{background:#FBFCFE!important;font-weight:650}
+.gtot td{border-top:1.6px solid var(--navy);border-bottom:0;font-weight:750;height:44px;background:#F6FAF8!important}
+.gtot .v{color:var(--green);font-size:14px}
+.gcar{display:inline-block;width:15px;color:var(--muted);font-size:10px;cursor:pointer;user-select:none}
+.gdrv{display:flex;align-items:center;gap:7px}
+.gop{width:21px;height:21px;border-radius:6px;background:#FDEEE2;color:var(--orange);border:0;
+  display:grid;place-items:center;font-weight:800;font-size:11px;flex-shrink:0;cursor:pointer;font-family:inherit;padding:0}
+.gop:hover{background:#FBDCC4}
+.gop.eq{background:#E7F1FB;color:var(--pri);cursor:default}
+.gnm{border:1px solid transparent;background:transparent;border-radius:6px;padding:4px 6px;font:inherit;
+  font-size:12.5px;color:var(--ink);width:118px;font-family:inherit}
+.gnm:hover{background:#F2F5FA}
+.gnm:focus{background:#fff;border-color:#C3CEE2;outline:none}
+.gnm.u{width:52px;color:var(--muted);font-size:11.5px}
+.gnm.big{font-weight:650;width:180px;color:var(--navy)}
+.gx{border:0;background:transparent;color:#B9C2D2;cursor:pointer;font-size:12px;padding:2px 4px;font-family:inherit}
+.gx:hover{color:var(--red)}
+.gfx{display:flex;align-items:center;gap:5px;font-size:11.5px;color:var(--muted);flex-wrap:nowrap}
+.gchip{background:#EEF3FC;color:var(--pri);border-radius:5px;padding:2px 7px;font-weight:600;font-size:11px}
+.gchip.sys{background:#F3EEFB;color:#6D46B8}
+.gfx .xx{color:var(--orange);font-weight:800}
+.gfx input{width:44px;border:1px solid #CBD5E6;border-radius:5px;padding:2px 5px;font:inherit;font-size:11.5px;
+  text-align:right;background:#fff;font-family:inherit}
+.gcell{display:inline-block;min-width:82px;text-align:right;padding:5px 9px;border-radius:6px;
+  border:1px solid transparent;font:inherit;font-size:12.5px;background:transparent;font-family:inherit;
+  font-variant-numeric:tabular-nums}
+.gin{border-color:#B9C2D2;background:#fff;cursor:text}
+.gin:hover{border-color:var(--pri)}
+.gin:focus{outline:none;border-color:var(--pri);box-shadow:0 0 0 3px rgba(43,74,139,.13)}
+.gcalc{position:relative;padding-left:13px;color:var(--ink);cursor:pointer}
+.gcalc:before{content:"";position:absolute;left:0;top:6px;bottom:6px;width:3px;border-radius:2px;
+  background:repeating-linear-gradient(180deg,#B9C2D2 0 3px,transparent 3px 6px)}
+.gcalc:hover{background:#F2F5FA}
+.gfoot{display:flex;align-items:center;gap:10px;padding:11px 14px;border-top:1px solid #EFF2F7;
+  font-size:11.5px;color:var(--muted);flex-wrap:wrap}
+.gdash{border:1px dashed #C2CCDD;background:#fff;color:var(--pri);border-radius:8px;padding:6px 12px;
+  font-size:11.5px;font-weight:600;cursor:pointer;font-family:inherit}
+.gdash:hover{background:#F8FAFC;border-color:var(--pri)}
+.glg{display:flex;gap:15px;align-items:center;font-size:11px;color:var(--muted);margin-top:10px;flex-wrap:wrap}
+.glg i{font-style:normal;display:inline-block;width:24px;height:15px;border-radius:4px;vertical-align:middle;margin-right:5px}
+.glg i.a{border:1px solid #B9C2D2;background:#fff}
+.glg i.b{position:relative}
+.glg i.b:before{content:"";position:absolute;left:0;top:1px;bottom:1px;width:3px;border-radius:2px;
+  background:repeating-linear-gradient(180deg,#B9C2D2 0 3px,transparent 3px 6px)}
 .bande{background:var(--navy);color:#fff;font-weight:600;font-size:11.2px;padding:8px 12px;
 border-radius:16px 16px 0 0}
 .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:16px}
@@ -9906,6 +9970,99 @@ function mCarteRevenu(L,li){
     +'<div class="mrev-note">Les coûts directs se paramètrent dans l\'onglet <b>Coûts directs</b> (choix du périmètre : cette ligne, l\'ensemble, ou indépendant).</div>'
     +'</div></div>';
 }
+/* =====================================================================
+   GRILLE DES HYPOTHÈSES DE REVENUS — une LIGNE par inducteur, une COLONNE
+   par année. Reprend les partis pris des outils FP&A de référence (Causal,
+   Runway, Pigment, Jirav) : la formule est VISIBLE (colonne dédiée), les
+   années sont côte à côte, et la BORDURE dit si la cellule est saisie ou
+   calculée. Aucun changement du moteur : les valeurs affichées sont celles
+   que projeterModele consomme (mêmes helpers volInducteurs / valAnnee).
+   ===================================================================== */
+var G_FX=true, G_CLOSED={};
+function mFxToggle(){G_FX=!G_FX;rendre();}
+function mPlier(id){G_CLOSED[id]=!G_CLOSED[id];rendre();}
+function mPlierTout(ouvrir){var M=assurerModele();(M.revenus||[]).forEach(function(L,li){G_CLOSED[L.id||('L'+li)]=!ouvrir;});rendre();}
+/* valeur BRUTE d'un inducteur à l'année i (90 pour « 90 % », pas 0,9) */
+function gIndVal(r,i){ if(r&&r.mode==='yearly')return valSerie(r.vals,i); return (+((r&&r.val))||0)*Math.pow(1+(+((r&&r.g))||0)/100,i); }
+function gN(v){ v=+v||0; var r=(Math.abs(v)>=100)?Math.round(v):Math.round(v*100)/100;
+  return r.toLocaleString('fr-FR').replace(/[  ]/g,' '); }
+function mTableRevenus(M){
+  var N=M.nb||5, nc=(M.dureeConstruction||0), u=uni(), i;
+  var head='<tr><th class="l gc1">Inducteur</th>'+(G_FX?'<th class="l gc2">Formule</th>':'');
+  for(i=0;i<N;i++)head+='<th>An '+(i+1)+(i<nc?' · constr.':'')+'</th>';
+  head+='</tr>';
+  var tot=[]; for(i=0;i<N;i++)tot.push(0);
+  var body='';
+  (M.revenus||[]).forEach(function(L,li){
+    var id=L.id||('L'+li), ferme=!!G_CLOSED[id], vols=[], prixs=[], cas=[], j;
+    for(j=0;j<N;j++){ var v=volInducteurs(L.rows,j), p=valAnnee(L.prix,j);
+      vols.push(v); prixs.push(p); cas.push(v*p); tot[j]+=v*p; }
+    /* --- ligne produit : le CA de la ligne (sert aussi de résumé quand c'est replié) --- */
+    body+='<tr class="grp"><td class="l gc1"><span class="gcar" onclick="mPlier(\''+id+'\')" title="Plier / déplier">'+(ferme?'&#9656;':'&#9662;')+'</span>'
+      +'<input class="gnm big" value="'+esc(L.name||'')+'" onchange="mLigneNom('+li+',this.value)">'
+      +'<button class="gx" title="Retirer cette ligne de revenus" onclick="mDelLigne('+li+')">&#10005;</button></td>'
+      +(G_FX?'<td class="l gc2"><span class="gfx"><span class="gchip">Volume</span><span class="xx">&times;</span><span class="gchip">Prix</span></span></td>':'')
+      +cas.map(function(c){return '<td class="num">'+fmt(c/1000)+'</td>';}).join('')+'</tr>';
+    if(ferme)return;
+    /* --- un inducteur par ligne --- */
+    (L.rows||[]).forEach(function(r,ri){
+      var yearly=(r.mode==='yearly'), cells='';
+      for(var k=0;k<N;k++){
+        var val=gIndVal(r,k);
+        if(yearly||k===0)
+          cells+='<td><input class="gcell gin num" value="'+mAmt(val)+'" oninput="mSep(this)" onchange="'
+            +(yearly?('mIndYv('+li+','+ri+','+k+',this.value)'):('mInd('+li+','+ri+',\'val\',this.value)'))+'"></td>';
+        else
+          cells+='<td><span class="gcell gcalc num" title="Calculé depuis l&#39;an 1 — cliquer pour saisir année par année" onclick="mIndMode('+li+','+ri+',\'yearly\')">'+gN(val)+'</span></td>';
+      }
+      var fx=yearly
+        ? '<span class="gfx">saisie année par année <button class="gx" title="Repasser en croissance" onclick="mIndMode('+li+','+ri+',\'grow\')">&#8634;</button></span>'
+        : '<span class="gfx">an 1, puis <input value="'+(r.g||0)+'" onchange="mInd('+li+','+ri+',\'g\',this.value)"> %/an</span>';
+      body+='<tr><td class="l gc1"><div class="gdrv"><button class="gop" title="Basculer &times; / &divide;" onclick="mIndOp('+li+','+ri+')">'+(r.op==='d'?'&divide;':'&times;')+'</button>'
+        +'<input class="gnm" placeholder="Nom" value="'+esc(r.name||'')+'" onchange="mInd('+li+','+ri+',\'name\',this.value)">'
+        +'<input class="gnm u" placeholder="unité" value="'+esc(r.unit||'')+'" onchange="mInd('+li+','+ri+',\'unit\',this.value)">'
+        +'<button class="gx" title="Retirer cet inducteur" onclick="mDelInd('+li+','+ri+')">&#10005;</button></div></td>'
+        +(G_FX?'<td class="l gc2">'+fx+'</td>':'')+cells+'</tr>';
+    });
+    /* --- volume = produit des inducteurs --- */
+    var chips=(L.rows||[]).map(function(r,ri){
+      return (ri?'<span class="xx">'+(r.op==='d'?'&divide;':'&times;')+'</span>':'')
+        +'<span class="gchip">'+esc(r.name||('inducteur '+(ri+1)))+'</span>';}).join('');
+    body+='<tr class="gres"><td class="l gc1"><div class="gdrv"><span class="gop eq">=</span> Volume</div></td>'
+      +(G_FX?'<td class="l gc2"><span class="gfx">'+chips+'</span></td>':'')
+      +vols.map(function(v){return '<td><span class="gcell gcalc num">'+gN(v)+'</span></td>';}).join('')+'</tr>';
+    /* --- prix : an 1 saisi, années suivantes indexées --- */
+    var pcells='';
+    for(j=0;j<N;j++){
+      if(j===0)pcells+='<td><input class="gcell gin num" value="'+mAmt(prixs[0])+'" oninput="mSep(this)" onchange="mPrix('+li+',\'val\',this.value)"></td>';
+      else pcells+='<td><span class="gcell gcalc num" title="Prix de l&#39;an 1 indexé">'+gN(prixs[j])+'</span></td>';
+    }
+    body+='<tr><td class="l gc1"><div class="gdrv"><span class="gop">&times;</span> Prix de vente'
+      +'<input class="gnm u" placeholder="unité" value="'+esc((L.prix&&L.prix.unit)||'')+'" onchange="mPrix('+li+',\'unit\',this.value)"></div></td>'
+      +(G_FX?'<td class="l gc2"><span class="gfx">an 1, puis <input value="'+((L.prix&&L.prix.g)||0)+'" onchange="mPrix('+li+',\'g\',this.value)"> %/an</span></td>':'')
+      +pcells+'</tr>';
+    body+='<tr><td class="l gc1" style="padding-top:2px;padding-bottom:6px"><button class="gdash" onclick="mAddInd('+li+')">+ inducteur</button></td>'
+      +(G_FX?'<td class="gc2"></td>':'')+'<td colspan="'+N+'"></td></tr>';
+  });
+  body+='<tr class="gtot"><td class="l gc1">Chiffre d\'affaires total</td>'
+    +(G_FX?'<td class="l gc2" style="font-size:11px;color:var(--muted)">&Sigma; des lignes &middot; '+u.lib+'</td>':'')
+    +tot.map(function(c){return '<td class="num v">'+fmt(c/1000)+'</td>';}).join('')+'</tr>';
+  var opts=M_GROUPS.map(function(g){return '<optgroup label="'+g[0]+'">'+g[1].map(function(k){
+    return '<option value="'+k+'">'+M_PRESETS[k].lab+'</option>';}).join('')+'</optgroup>';}).join('');
+  return '<div class="gbar"><span class="gt">Lignes de revenus</span>'
+    +'<button class="gh sm btn'+(G_FX?' primary':'')+'" onclick="mFxToggle()" title="Afficher / masquer la colonne Formule">Formules</button>'
+    +'<button class="btn sm" onclick="mPlierTout(true)">Tout déplier</button>'
+    +'<button class="btn sm" onclick="mPlierTout(false)">Tout replier</button>'
+    +'<span class="push"></span><button class="btn sm primary" onclick="mAddLigne()">+ Ligne de revenus</button></div>'
+    +'<div class="gwrap"><div class="gscroll"><table class="gtab"><thead>'+head+'</thead><tbody>'+body+'</tbody></table></div>'
+    +'<div class="gfoot"><span>Cliquer une valeur <b>calculée</b> la passe en saisie année par année.</span>'
+    +'<span style="margin-left:auto">Les coûts directs se paramètrent dans leur onglet.</span></div></div>'
+    +'<div class="glg"><span><i class="a"></i>à saisir</span><span><i class="b"></i>calculé</span>'
+    +'<span style="margin-left:6px">Modèle de départ pour une nouvelle ligne : <select class="sel" style="width:auto;font-size:11.5px;padding:4px 8px" onchange="mAddLigneTpl(this.value)"><option value="">— choisir —</option>'+opts+'</select></span></div>';
+}
+function mAddLigneTpl(tpl){ if(!tpl)return; var M=assurerModele();
+  M.revenus.push({name:M_PRESETS[tpl].lab,tpl:tpl,rows:JSON.parse(JSON.stringify(M_PRESETS[tpl].rows)),prix:{val:1000,unit:"FCFA",g:2}});
+  sauverDossier();rendre(); }
 function mCarteCout(cl,ci){
   /* coût direct additionnel : soit % du CA, soit chaîne d'inducteurs (× ou ÷) × taux unitaire */
   var Mm=assurerModele(), N=Mm.nb||5, m=(cl.m||'ind'), scope=(cl.scope||'all'), revs=(Mm.revenus||[]);
@@ -9985,9 +10142,7 @@ function vueModele(){
     +'</div>';
   var corps="";
   if(SOUS_MODELE==="rev"){
-    corps=mBlocSecteur()+'<div class="mut" style="margin-bottom:10px">Chaque ligne construit son volume avec ses propres inducteurs (× ou ÷), puis × prix = CA. Les modèles sont des points de départ modifiables.</div>'
-      +M.revenus.map(function(L,li){return mCarteRevenu(L,li);}).join("")
-      +'<button class="btn" onclick="mAddLigne()">+ Ajouter une ligne de revenus</button>';
+    corps=mBlocSecteur()+mTableRevenus(M);
   } else if(SOUS_MODELE==="cout"){
     var CDL=(M.coutsDirects||[]);
     corps='<div class="mut" style="margin-bottom:10px">Tous les coûts directs se paramètrent ici. Pour chaque coût, choisis sa <b>méthode</b> et son <b>périmètre</b> : <b>% du CA</b> (d\'une ligne de produit ou de l\'ensemble), <b>coût unitaire × volume</b> d\'une ligne, ou <b>inducteurs</b> (indépendant du CA — ex. école : <i>Vacataires</i> = Nb classes × Heures/classe/an × 20 000 F/h).</div>'
