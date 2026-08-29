@@ -1000,6 +1000,20 @@ function vueModele(){
       +'<div class="hyp-g"><span>Emprunt — différé de remboursement <span class="mut">· grâce : intérêts payés, capital décalé</span></span><input class="sel" value="'+(e.grace||0)+'" onchange="mSet(\'financement.emprunt.grace\',this.value,1)"><span class="suf">ans</span></div>'
       +'<div class="hyp-g"><span>Distribution de dividendes <span class="mut">· % du résultat net N−1, si bénéficiaire</span></span><input class="sel" value="'+((M.dividendes_payout||0)*100)+'" onchange="mSet(\'dividendes_payout\',(numFR(this.value)||0)/100)"><span class="suf">%</span></div>'
       +'<div class="hyp-g"><span>Trésorerie minimale avant distribution <span class="mut">· le dividende est toujours plafonné par la trésorerie d\'ouverture (vide = plancher 0)</span></span><input class="sel ninm" value="'+(M.dividendes_seuilCash!=null?mAmt(M.dividendes_seuilCash):'')+'" oninput="mSep(this)" onchange="mDivSeuil(this.value)"><span class="suf">FCFA</span></div>';
+    /* ---- BFR : dimensionnement (Sources & Emplois) vs besoin réellement constitué ----
+       Question de Salif : « le BFR de démarrage rentre où, c'est dans l'exploitation ? ».
+       Oui : ce n'est PAS un flux séparé du TFT. C'est un montant de DIMENSIONNEMENT
+       (n mois de charges) qui sert à calibrer le financement ; dans le tableau de flux,
+       le BFR se lit en activités OPÉRATIONNELLES (variation créances + stocks + dettes).
+       Les deux calculs sont distincts (mois de charges vs délais DSO/DIO/DPO) et peuvent
+       diverger — on le montre, avec une alerte si le dimensionnement sous-couvre. */
+    var bfrReel=(P.bs.BFR&&P.bs.BFR[A[0]])||0, bfrDim=(Pf.bfrDemarrage||0), ecBfr=bfrReel-bfrDim;
+    var bfrNote=(bfrDim>0||bfrReel>0)?('<div style="margin-top:12px;border-top:1px dashed #cfd8e6;padding-top:10px">'
+      +'<div class="hyp-l"><span>BFR réellement constitué fin an 1 <span class="mut">· selon vos délais clients / stocks / fournisseurs</span></span>'
+      +'<b style="color:'+(ecBfr>0.5?'#8a5a00':'#16904E')+'">'+fmt(bfrReel)+' '+u.suf+'</b></div>'
+      +'<div class="mut" style="margin-top:5px">Le <b>BFR de démarrage</b> ci-dessus ('+Pf.moisBFR+' mois de charges) sert à <b>calibrer le financement</b> — ce n\'est pas un flux du tableau de trésorerie. Dans le TFT, le besoin en fonds de roulement se lit en <b>activités opérationnelles</b> (variation des créances, des stocks et des dettes d\'exploitation).</div>'
+      +(ecBfr>0.5?'<div style="border:1px solid #f0c98a;background:#FFF9F0;border-radius:8px;padding:9px 11px;margin-top:7px"><b style="color:#8a5a00">Dimensionnement inférieur au besoin réel</b><div class="mut">Écart de '+fmt(ecBfr)+' '+u.suf+' : la différence est absorbée par la trésorerie du plan, ou tirée sur la ligne de crédit. Augmentez le nombre de mois, ou raccourcissez le délai de paiement clients.</div></div>':'')
+      +'</div>'):'';
     /* ---- ligne de crédit renouvelable (revolver) ---- */
     var RV=M.revolver||{}, PR=(P.revolver||{});
     var rvBloc='<div class="card" style="margin-top:12px"><div class="sec-titre" style="margin-top:0">Ligne de crédit renouvelable <span class="mut" style="font-weight:400">· revolver / découvert autorisé</span></div>'
@@ -1071,6 +1085,7 @@ function vueModele(){
           +'<div class="hyp-l" style="margin-top:auto;border-top:2px solid #224289;padding-top:6px"><span><b>Total ressources</b></span><b>'+fmt(Pf.sources)+' '+u.suf+'</b></div>'
           +'</div>'
       +'</div>'
+      +bfrNote
       +structBloc
       +((!auto&&Math.abs(Pf.sources-Pf.emplois)>0.5)?'<div class="hyp-l" style="margin-top:8px;color:'+(Pf.sources<Pf.emplois?'#c0392b':'#8a5a00')+'"><span><b>'+(Pf.sources<Pf.emplois?'Besoin non couvert (part en découvert à défaut)':'Excédent de financement (trésorerie initiale)')+'</b></span><b>'+fmt(Math.abs(Pf.sources-Pf.emplois))+' '+u.suf+'</b></div>':'')
       +'</div>';
