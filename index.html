@@ -301,6 +301,13 @@ border-left:4px solid var(--orange)}
   font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;padding:0;flex-shrink:0}
 .gpct:hover{border-color:var(--pri);color:var(--pri)}
 .gpct.on{background:#EEF3FC;border-color:var(--pri);color:var(--pri)}
+/* type d'inducteur : quantité (avec son unité) OU pourcentage — un seul contrôle */
+.gseg{display:inline-flex;border:1px solid #D5DCE8;border-radius:7px;overflow:hidden;flex-shrink:0}
+.gseg button{border:0;background:#fff;color:var(--muted);font:inherit;font-size:11px;padding:4px 9px;
+  cursor:pointer;font-family:inherit;line-height:1.5}
+.gseg button+button{border-left:1px solid #D5DCE8}
+.gseg button.on{background:var(--pri);color:#fff;font-weight:600}
+.gseg button:not(.on):hover{background:#F2F5FA;color:var(--ink)}
 .gnm.wide{width:100%;min-width:130px}
 /* les formulaires d'hypothèses (Financement / BFR / Paramètres) adoptent le même registre
    que la grille : champs blancs bordés + anneau de focus, au lieu du jaune historique.
@@ -10118,10 +10125,22 @@ function mCollerSerie(ev,kind,a,b){
 function gEstPct(r){ return String((r&&r.unit)||'').indexOf('%')>=0; }
 /* Rend EXPLICITE la règle du moteur « unité contenant % = ratio (÷100) » : au lieu de
    devoir deviner qu'il faut taper « % » dans l'unité, on bascule l'inducteur d'un clic. */
-function mIndPct(li,ri){ var r=assurerModele().revenus[li].rows[ri];
-  r.unit=gEstPct(r)?'':'%'; sauverDossier();rendre(); }
-function mCoutIndPct(ci,ri){ var r=assurerModele().coutsDirects[ci].rows[ri];
-  r.unit=gEstPct(r)?'':'%'; sauverDossier();rendre(); }
+/* Un inducteur est SOIT une quantité (avec son unité libre : t/an, élèves, h…),
+   SOIT un pourcentage. C'est le même réglage : l'unité « % » EST ce qui fait le ratio.
+   D'où un contrôle unique — afficher une unité ET un bouton % était redondant. */
+/* `_u` mémorise l'unité d'origine : basculer en % puis revenir ne fait pas perdre « élèves ». */
+function gBasculeType(r,t){
+  if(t==='pct'){ if(!gEstPct(r)){ if(r.unit)r._u=r.unit; r.unit='%'; } }
+  else if(gEstPct(r)){ r.unit=r._u||''; delete r._u; }
+}
+function mIndType(li,ri,t){ gBasculeType(assurerModele().revenus[li].rows[ri],t); sauverDossier();rendre(); }
+function mCoutIndType(ci,ri,t){ gBasculeType(mCoutIndInit(assurerModele().coutsDirects[ci]).rows[ri],t); sauverDossier();rendre(); }
+function gSegType(kind,a,b,pct){
+  var f=(kind==='rev')?('mIndType('+a+','+b+',') : ('mCoutIndType('+a+','+b+',');
+  return '<span class="gseg" title="Quantité (avec son unité) ou pourcentage — un pourcentage est appliqué comme un ratio">'
+    +'<button class="'+(pct?'':'on')+'" onclick="'+f+'\'qte\')">123</button>'
+    +'<button class="'+(pct?'on':'')+'" onclick="'+f+'\'pct\')">%</button></span>';
+}
 /* recopie la valeur de l'an 1 sur toutes les années (mode « année par année ») */
 function mIndFill(li,ri){ var M=assurerModele(), r=M.revenus[li].rows[ri], N=M.nb||5;
   if(r.mode!=='yearly')return; var v=valSerie(r.vals,0); r.vals=[];
@@ -10200,8 +10219,8 @@ function mTableRevenus(M){
         : '<span class="gfx">an 1, puis <input value="'+(r.g||0)+'" onchange="mInd('+li+','+ri+',\'g\',this.value)"> %/an</span>';
       body+='<tr><td class="l gc1"><div class="gdrv"><button class="gop" title="Basculer &times; / &divide;" onclick="mIndOp('+li+','+ri+')">'+(r.op==='d'?'&divide;':'&times;')+'</button>'
         +'<input class="gnm" placeholder="Nom" value="'+esc(r.name||'')+'" onchange="mInd('+li+','+ri+',\'name\',this.value)">'
-        +'<input class="gnm u" placeholder="unité" value="'+esc(r.unit||'')+'" onchange="mInd('+li+','+ri+',\'unit\',this.value)">'
-        +'<button class="gpct'+(gEstPct(r)?' on':'')+'" title="Pourcentage : la valeur est traitée comme un ratio (90 = 90 %)" onclick="mIndPct('+li+','+ri+')">%</button>'
+        +gSegType('rev',li,ri,gEstPct(r))
+        +(gEstPct(r)?'':'<input class="gnm u" placeholder="unité" value="'+esc(r.unit||'')+'" onchange="mInd('+li+','+ri+',\'unit\',this.value)">')
         +'<button class="gx" title="Retirer cet inducteur" onclick="mDelInd('+li+','+ri+')">&#10005;</button></div></td>'
         +(G_FX?'<td class="l gc2">'+fx+'</td>':'')+cells+'</tr>';
     });
@@ -10230,7 +10249,7 @@ function mTableRevenus(M){
     +tot.map(function(c){return '<td class="num v">'+fmt(c/1000)+'</td>';}).join('')+'</tr>';
   var opts=M_GROUPS.map(function(g){return '<optgroup label="'+g[0]+'">'+g[1].map(function(k){
     return '<option value="'+k+'">'+M_PRESETS[k].lab+'</option>';}).join('')+'</optgroup>';}).join('');
-  return '<div class="gbar"><span class="gt">Lignes de revenus</span>'+mBtnUndo()
+  return '<div class="gbar"><span class="gt">Lignes de revenus</span>'
     +'<button class="gh sm btn'+(G_FX?' primary':'')+'" onclick="mFxToggle()" title="Afficher / masquer la colonne Formule">Formules</button>'
     +'<button class="btn sm" onclick="mPlierTout(true)">Tout déplier</button>'
     +'<button class="btn sm" onclick="mPlierTout(false)">Tout replier</button>'
@@ -10304,8 +10323,8 @@ function mTableCouts(M,P){
                 :'<span class="gfx">an 1, puis <input value="'+(r.g||0)+'" onchange="mCoutInd('+ci+','+ri+',\'g\',this.value)"> %/an '+refSel+'</span>');
       body+='<tr><td class="l gc1"><div class="gdrv"><button class="gop" title="Basculer &times; / &divide;" onclick="mCoutIndOp('+ci+','+ri+')">'+(r.op==='d'?'&divide;':'&times;')+'</button>'
         +'<input class="gnm" placeholder="Nom" value="'+esc(r.name||'')+'" onchange="mCoutInd('+ci+','+ri+',\'name\',this.value)">'
-        +(ref?'':'<input class="gnm u" placeholder="unité" value="'+esc(r.unit||'')+'" onchange="mCoutInd('+ci+','+ri+',\'unit\',this.value)">'
-          +'<button class="gpct'+(gEstPct(r)?' on':'')+'" title="Pourcentage : la valeur est traitée comme un ratio" onclick="mCoutIndPct('+ci+','+ri+')">%</button>')
+        +(ref?'':gSegType('cout',ci,ri,gEstPct(r))
+          +(gEstPct(r)?'':'<input class="gnm u" placeholder="unité" value="'+esc(r.unit||'')+'" onchange="mCoutInd('+ci+','+ri+',\'unit\',this.value)">'))
         +'<button class="gpct'+(r.ceil?' on':'')+'" title="Arrondi supérieur du produit courant (ex. nombre de classes)" onclick="mCoutIndCeil('+ci+','+ri+')">&#8968;</button>'
         +'<button class="gx" title="Retirer cet inducteur" onclick="mDelCoutInd('+ci+','+ri+')">&#10005;</button></div></td>'
         +(G_FX?'<td class="l gc2">'+fx+'</td>':'')+cells+'</tr>';
@@ -10329,7 +10348,7 @@ function mTableCouts(M,P){
   body+='<tr class="gtot"><td class="l gc1">Total des coûts directs</td>'
     +(G_FX?'<td class="l gc2" style="font-size:11px;color:var(--muted)">&Sigma; des lignes &middot; '+u.lib+'</td>':'')
     +tot.map(function(c){return '<td class="num v" style="color:var(--red)">'+fmt(c)+'</td>';}).join('')+'</tr>';
-  return '<div class="gbar"><span class="gt">Coûts directs</span>'+mBtnUndo()
+  return '<div class="gbar"><span class="gt">Coûts directs</span>'
     +'<button class="btn sm'+(G_FX?' primary':'')+'" onclick="mFxToggle()" title="Afficher / masquer la colonne Méthode">Méthodes</button>'
     +'<span class="push"></span><button class="btn sm primary" onclick="mAddCout()">+ Coût direct</button></div>'
     +'<div class="gwrap"><div class="gscroll"><table class="gtab"><thead>'+head+'</thead><tbody>'+body+'</tbody></table></div>'
@@ -10375,7 +10394,7 @@ function mCarteCout(cl,ci){
         +'<input class="sel" style="flex:1;min-width:130px" placeholder="Nom de l\'inducteur" value="'+esc(r.name||'')+'" onchange="mCoutInd('+ci+','+ri+',\'name\',this.value)">'
         +refSel+ceilBtn
         +(r.refLigne?'':'<input class="nin" style="width:78px" placeholder="unité" value="'+esc(r.unit||'')+'" onchange="mCoutInd('+ci+','+ri+',\'unit\',this.value)">'
-        +'<button class="gpct'+(gEstPct(r)?' on':'')+'" title="Pourcentage : la valeur est traitée comme un ratio (90 = 90 %)" onclick="mCoutIndPct('+ci+','+ri+')">%</button>'
+        +gSegType('cout',ci,ri,gEstPct(r))
         +'<span class="segvue"><button class="'+(r.mode==='yearly'?'':'on')+'" onclick="mCoutIndMode('+ci+','+ri+',\'grow\')">Croissance</button><button class="'+(r.mode==='yearly'?'on':'')+'" onclick="mCoutIndMode('+ci+','+ri+',\'yearly\')">Par année</button></span>')
         +'<button class="btn sm" title="Retirer" onclick="mDelCoutInd('+ci+','+ri+')">✕</button></div>'+vals+apresCeil+'</div>';
     }).join('');
@@ -10409,7 +10428,8 @@ function vueModele(){
   var topTabs=[["hyp","Hypothèses",enHyp],["pl","P&L prévisionnel",SOUS_MODELE==="pl"],["bs","Bilan prévisionnel",SOUS_MODELE==="bs"],["tft","Flux de trésorerie",SOUS_MODELE==="tft"],["dette","Dette",SOUS_MODELE==="dette"],["analyse","Analyse & covenants",SOUS_MODELE==="analyse"],["valo","Valorisation",SOUS_MODELE==="valo"]];
   var barre=topTabs.map(function(t){return '<button class="btn '+(t[2]?"primary":"")+'" onclick="mTab(\''+(t[0]==="hyp"?"rev":t[0])+'\')">'+t[1]+'</button>';}).join(" ");
   var vueBtn=SOUS_MODELE==="pl"?'<div class="segvue" style="margin-left:6px"><button class="'+(PL_VUE!=="detail"?"on":"")+'" onclick="PL_VUE=\'synth\';rendre()">Synthétique</button><button class="'+(PL_VUE==="detail"?"on":"")+'" onclick="PL_VUE=\'detail\';rendre()">Détaillée</button></div>':"";
-  var subTabs=enHyp?('<div class="row" style="margin:0 0 12px;flex-wrap:wrap">'+[["rev","Revenus"],["cout","Coûts directs"],["fixe","Charges fixes"],["capex","Investissements"],["fin","Financement"],["bfr","BFR"],["param","Paramètres"]].map(function(t){return '<button class="btn sm '+(SOUS_MODELE===t[0]?"primary":"")+'" onclick="mTab(\''+t[0]+'\')">'+t[1]+'</button>';}).join(" ")+'</div>'):"";
+  var subTabs=enHyp?('<div class="row" style="margin:0 0 12px;flex-wrap:wrap;align-items:center">'+[["rev","Revenus"],["cout","Coûts directs"],["fixe","Charges fixes"],["capex","Investissements"],["fin","Financement"],["bfr","BFR"],["param","Paramètres"]].map(function(t){return '<button class="btn sm '+(SOUS_MODELE===t[0]?"primary":"")+'" onclick="mTab(\''+t[0]+'\')">'+t[1]+'</button>';}).join(" ")
+    +'<span style="margin-left:auto;display:inline-flex;gap:6px">'+mBtnUndo()+'</span></div>'):"";
   var rnCum=A.reduce(function(s,a){return s+P.pl.RN[a];},0);
   var kpis='<div class="kpis">'
     +kpiCard("CA fin de plan (An "+A.length+")",fmt(P.pl.CA[aL])+" "+u.suf,"","","chart","#224289")

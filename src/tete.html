@@ -301,6 +301,13 @@ border-left:4px solid var(--orange)}
   font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;padding:0;flex-shrink:0}
 .gpct:hover{border-color:var(--pri);color:var(--pri)}
 .gpct.on{background:#EEF3FC;border-color:var(--pri);color:var(--pri)}
+/* type d'inducteur : quantité (avec son unité) OU pourcentage — un seul contrôle */
+.gseg{display:inline-flex;border:1px solid #D5DCE8;border-radius:7px;overflow:hidden;flex-shrink:0}
+.gseg button{border:0;background:#fff;color:var(--muted);font:inherit;font-size:11px;padding:4px 9px;
+  cursor:pointer;font-family:inherit;line-height:1.5}
+.gseg button+button{border-left:1px solid #D5DCE8}
+.gseg button.on{background:var(--pri);color:#fff;font-weight:600}
+.gseg button:not(.on):hover{background:#F2F5FA;color:var(--ink)}
 .gnm.wide{width:100%;min-width:130px}
 /* les formulaires d'hypothèses (Financement / BFR / Paramètres) adoptent le même registre
    que la grille : champs blancs bordés + anneau de focus, au lieu du jaune historique.
