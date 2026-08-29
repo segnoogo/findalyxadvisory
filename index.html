@@ -10684,7 +10684,20 @@ function vueModele(){
       +'<div class="mut" style="margin-top:8px">Un Δ marge positif <b>réduit</b> les coûts directs (marge améliorée) ; un Δ délais positif <b>allonge</b> les délais, donc alourdit le BFR. Le scénario central est habituellement laissé à 0.</div></div>';
   } else if(SOUS_MODELE==="pl"){ corps=vueBPPl(P);
   } else if(SOUS_MODELE==="bs"){ corps=vueBPBs(P);
-  } else if(SOUS_MODELE==="tft"){ corps=vueBPTft(P);
+  } else if(SOUS_MODELE==="tft"){
+    /* Le revolver n'apparaît PAS dans « Emprunts nouveaux » : en SYSCOHADA les concours
+       bancaires courants sont de la trésorerie-PASSIF, donc compris dans la trésorerie
+       nette sur laquelle le tableau ouvre et clôture. On l'écrit, sinon le lecteur
+       cherche en vain la contrepartie du découvert dans les flux de financement. */
+    var ctMax=0, ctFin=0;
+    A.forEach(function(a){ var x=(P.bs.LIGNE_CT&&P.bs.LIGNE_CT[a])||0; if(x>ctMax)ctMax=x; ctFin=x; });
+    corps=vueBPTft(P)+(ctMax>0.5
+      ?('<div class="card" style="background:#f6f8fc;margin-top:12px"><div class="sec-titre" style="margin-top:0">Où lire la ligne de crédit ?</div>'
+        +'<div class="mut">Les tirages du revolver ne figurent <b>pas</b> dans « Emprunts nouveaux » — cette ligne ne porte que les <b>emprunts à terme</b>. En SYSCOHADA, les <b>concours bancaires courants</b> sont de la <b>trésorerie-passif</b> : ils sont donc <b>compris dans la trésorerie nette</b> sur laquelle ce tableau ouvre et clôture. Une trésorerie de clôture négative <b>est</b> le découvert.</div>'
+        +'<div class="hyp-l" style="margin-top:8px"><span>Tirage maximal sur la durée du plan</span><b style="color:#c0392b">'+fmt(ctMax)+' '+u.suf+'</b></div>'
+        +'<div class="hyp-l"><span>Encours à la clôture du plan</span><b style="color:'+(ctFin>0.5?'#c0392b':'#16904E')+'">'+fmt(ctFin)+' '+u.suf+'</b></div>'
+        +'<div class="mut" style="margin-top:6px">Le détail figure au <b>bilan prévisionnel</b> (ligne « Concours bancaires courants ») ; les intérêts et la commission d\'engagement sont dans les <b>frais financiers</b> du compte de résultat.</div></div>')
+      :'');
   } else if(SOUS_MODELE==="dette"){ corps=vueBPDette(P);
   } else if(SOUS_MODELE==="analyse"){ corps=vueModeleAnalyse(P);
   } else if(SOUS_MODELE==="valo"){
