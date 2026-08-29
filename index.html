@@ -10043,6 +10043,27 @@ function mRedo(){
   if(!G_REDO.length){ if(typeof toast==='function')toast('Rien à rétablir'); return; }
   var s=G_REDO.pop(); G_UNDO.push(s); mRestaurer(s,'Modification rétablie');
 }
+/* Le montage est PRÉ-REMPLI (valeurs par défaut d'un projet neuf, ou dimensionnement
+   automatique au chargement d'un modèle sectoriel : 20 % du CAPEX en fonds propres,
+   45 % en emprunt). Ces deux boutons rendent ce pré-remplissage explicite et réversible :
+   sans eux, l'utilisateur voit des montants qu'il n'a jamais saisis. */
+function mFinReset(){
+  if(!confirm("Remettre le montage à zéro ?\n\nCapital, primes, apports, subvention et emprunt seront vidés — vous saisirez vos propres montants. Les investissements et le reste du plan ne changent pas."))return;
+  var f=assurerModele().financement||{};
+  f.capital=0; f.primes=0; f.apports=0; f.subvention=0;
+  if(!f.emprunt)f.emprunt={}; f.emprunt.montant=0;
+  sauverDossier(); rendre(); if(typeof toast==='function')toast("Montage remis à zéro");
+}
+function mFinRedim(){
+  var M=assurerModele(), f=M.financement||{};
+  var cx=(M.capex||[]).reduce(function(s,c){return s+(+c.montant||0);},0);
+  if(!(cx>0)){ if(typeof toast==='function')toast("Renseignez d'abord vos investissements"); return; }
+  f.capital=Math.round(cx*0.20/1e6)*1e6;
+  if(!f.emprunt)f.emprunt={};
+  f.emprunt.montant=Math.round(cx*0.45/1e6)*1e6;
+  sauverDossier(); rendre();
+  if(typeof toast==='function')toast("Re-dimensionné sur "+fmt(cx/1000)+" "+uni().suf+" d'investissements : 20 % fonds propres, 45 % emprunt");
+}
 function mBtnUndo(){
   return '<button class="btn sm" title="Annuler la dernière modification (Ctrl+Z)"'+(G_UNDO.length<2?' disabled style="opacity:.45"':'')+' onclick="mUndo()">&#8630;</button>'
     +'<button class="btn sm" title="Rétablir (Ctrl+Y)"'+(G_REDO.length?'':' disabled style="opacity:.45"')+' onclick="mRedo()">&#8631;</button>';
@@ -10508,6 +10529,17 @@ function vueModele(){
         +'<div class="mut" style="margin-top:8px">Le besoin (investissements + BFR de démarrage + IDC) est réparti fonds propres / dette selon la part choisie ; amortissement et remboursement démarrent à la mise en service. En automatique, les fonds propres sont entièrement en capital social — pour <b>répartir</b> entre capital social, primes liées au capital et comptes courants d\'associés (CCA), passez en mode <b>Manuel</b>.</div></div>';
     } else {
       var ccaMode=(f.ccaMode||"maintenu"), plug=(f.plug||"");
+      var cxT=(M.capex||[]).reduce(function(s,c){return s+(+c.montant||0);},0);
+      var notePre='<div style="border:1px solid #cfe0f5;background:#F2F7FF;border-radius:9px;padding:11px 13px;margin:2px 0 12px">'
+        +'<b style="color:#224289;font-size:12.5px">Ces montants sont un point de départ, pas une saisie</b>'
+        +'<div class="mut" style="margin-top:4px">'+(DOSSIER.secteurModele
+          ? 'Au chargement du modèle sectoriel, le montage a été dimensionné sur vos investissements'+(cxT>0?' ('+fmt(cxT/1000)+' '+uni().suf+')':'')+' : <b>20 % en fonds propres, 45 % en emprunt</b>, le solde en compte courant d\'associés.'
+          : 'Un projet neuf démarre avec un montage par défaut (capital et emprunt pré-remplis).')
+        +' Remplacez chaque montant par le vôtre, ou repartez de zéro.</div>'
+        +'<div class="row" style="gap:8px;margin-top:9px">'
+        +'<button class="btn sm" onclick="mFinReset()">Repartir de zéro</button>'
+        +'<button class="btn sm" onclick="mFinRedim()" title="Recalcule 20 % / 45 % sur le total des investissements actuels">Re-dimensionner sur les investissements</button>'
+        +'</div></div>';
       var ccaSeg='<span class="segvue">'
         +'<button class="'+(ccaMode==="maintenu"?"on":"")+'" onclick="mSet(\'financement.ccaMode\',\'maintenu\')">Maintenu</button>'
         +'<button class="'+(ccaMode==="infine"?"on":"")+'" onclick="mSet(\'financement.ccaMode\',\'infine\')">In fine</button>'
@@ -10521,7 +10553,7 @@ function vueModele(){
         +'<option value="cca"'+(plug==="cca"?" selected":"")+'>CCA (solde du montage)</option>'
         +'<option value="capital"'+(plug==="capital"?" selected":"")+'>Capital social (solde du montage)</option>'
         +'<option value="dette"'+(plug==="dette"?" selected":"")+'>Emprunt (solde du montage)</option></select></div>';
-      corps='<div class="card"><div class="sec-titre" style="margin-top:0">Financement — manuel</div>'+modeSeg+consLigne
+      corps='<div class="card"><div class="sec-titre" style="margin-top:0">Financement — manuel</div>'+modeSeg+notePre+consLigne
         +'<div class="hyp-g"><span>BFR de démarrage <span class="mut">· entre dans le besoin couvert par la source d\'équilibrage</span></span><input class="sel" value="'+(f.moisBFR!=null?f.moisBFR:3)+'" onchange="mSet(\'financement.moisBFR\',this.value,1)"><span class="suf">mois de charges</span></div>'
         +plugSel
         +'<div class="hyp-g"><span>Capital social</span>'+(champFin("capital",Pf.capital)||'<input class="sel ninm" value="'+mAmt(f.capital||0)+'" oninput="mSep(this)" onchange="mSet(\'financement.capital\',this.value,1)">')+'<span class="suf"></span></div>'
