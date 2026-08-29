@@ -853,31 +853,47 @@ function vueModele(){
       +'<div class="mut" style="margin-top:10px">Le taux d\'inflation (qui fait évoluer les coûts unitaires et les charges) se règle dans l\'onglet <b>Paramètres</b>.</div>';
   } else if(SOUS_MODELE==="fixe"){
     var pers=(M.personnel||[]), persTot1=pers.reduce(function(s,p){return s+(+p.effectif||0)*(+p.salaireMensuel||0)*12;},0);
-    corps='<div class="card" style="padding:0"><div class="bande">Frais généraux (hors personnel)</div><div class="tscroll"><table class="tb etat"><tr><th>Poste</th><th class="num">Montant / an</th><th class="num">Croissance %/an</th><th></th></tr>'
-      +M.chargesFixes.map(function(c,i){return '<tr><td><input class="sel" value="'+esc(c.name)+'" onchange="mFixe('+i+',\'name\',this.value)"></td>'
-        +'<td class="num"><input class="nin ninm" value="'+mAmt(c.montant||0)+'" oninput="mSep(this)" onchange="mFixe('+i+',\'montant\',this.value)"></td>'
-        +'<td class="num"><input class="nin" style="width:60px" value="'+(c.g||0)+'" onchange="mFixe('+i+',\'g\',this.value)"></td>'
-        +'<td><button class="btn sm" onclick="mDelFixe('+i+')">✕</button></td></tr>';}).join("")
-      +'</table></div><div style="padding:10px 14px"><button class="btn sm" onclick="mAddFixe()">+ Ajouter une charge</button></div></div>'
-      +'<div class="card" style="padding:0;margin-top:14px"><div class="bande">Charges de personnel — par poste</div>'
-      +'<div class="mut" style="padding:8px 14px 0">Effectif × salaire mensuel × 12 = charge annuelle du poste. Le total alimente la ligne « Charges du personnel » (comprise dans les frais généraux du P&L).</div>'
-      +'<div class="tscroll"><table class="tb etat"><tr><th>Poste</th><th class="num">Effectif</th><th class="num">Salaire mensuel (FCFA)</th><th class="num">Croissance %/an</th><th class="num">Charge / an</th><th></th></tr>'
-      +pers.map(function(p,i){var ann=(+p.effectif||0)*(+p.salaireMensuel||0)*12;return '<tr><td><input class="sel" value="'+esc(p.poste||"")+'" onchange="mPoste('+i+',\'poste\',this.value)"></td>'
-        +'<td class="num"><input class="nin" style="width:64px" value="'+(p.effectif||0)+'" onchange="mPoste('+i+',\'effectif\',this.value)"></td>'
-        +'<td class="num"><input class="nin ninm" value="'+mAmt(p.salaireMensuel||0)+'" oninput="mSep(this)" onchange="mPoste('+i+',\'salaireMensuel\',this.value)"></td>'
-        +'<td class="num"><input class="nin" style="width:60px" value="'+(p.g||0)+'" onchange="mPoste('+i+',\'g\',this.value)"></td>'
-        +'<td class="num"><b>'+fmt(ann/1000)+' '+uni().suf+'</b></td>'
-        +'<td><button class="btn sm" onclick="mDelPoste('+i+')">✕</button></td></tr>';}).join("")
-      +'<tr class="total"><td><b>Total charges de personnel (an 1)</b></td><td></td><td></td><td></td><td class="num"><b>'+fmt(persTot1/1000)+' '+uni().suf+'</b></td><td></td></tr>'
-      +'</table></div><div style="padding:10px 14px"><button class="btn sm" onclick="mAddPoste()">+ Ajouter un poste</button></div></div>';
+    var fgTot1=(M.chargesFixes||[]).reduce(function(s,c){return s+(+c.montant||0);},0);
+    var effTot=pers.reduce(function(s,p){return s+(+p.effectif||0);},0);
+    corps='<div class="gbar"><span class="gt">Frais généraux</span><span class="mut">hors personnel</span>'
+      +'<span class="push"></span><button class="btn sm primary" onclick="mAddFixe()">+ Charge</button></div>'
+      +'<div class="gwrap"><div class="gscroll"><table class="gtab"><thead><tr>'
+      +'<th class="l">Poste</th><th>Montant / an</th><th>Croissance %/an</th><th></th></tr></thead><tbody>'
+      +(M.chargesFixes||[]).map(function(c,i){return '<tr><td class="l"><input class="gnm wide" value="'+esc(c.name)+'" onchange="mFixe('+i+',\'name\',this.value)"></td>'
+        +'<td><input class="gcell gin num" value="'+mAmt(c.montant||0)+'" oninput="mSep(this)" onchange="mFixe('+i+',\'montant\',this.value)"></td>'
+        +'<td><input class="gcell gin num" style="min-width:62px" value="'+(c.g||0)+'" onchange="mFixe('+i+',\'g\',this.value)"></td>'
+        +'<td><button class="gx" title="Retirer" onclick="mDelFixe('+i+')">&#10005;</button></td></tr>';}).join("")
+      +'<tr class="gtot"><td class="l">Total frais généraux (an 1)</td><td class="num v">'+fmt(fgTot1/1000)+' '+uni().suf+'</td><td></td><td></td></tr>'
+      +'</tbody></table></div></div>'
+      +'<div class="gbar" style="margin-top:18px"><span class="gt">Charges de personnel</span><span class="mut">par poste</span>'
+      +'<span class="push"></span><button class="btn sm primary" onclick="mAddPoste()">+ Poste</button></div>'
+      +'<div class="gwrap"><div class="gscroll"><table class="gtab"><thead><tr><th class="l">Poste</th><th>Effectif</th>'
+      +'<th>Salaire mensuel (FCFA)</th><th>Croissance %/an</th><th>Charge / an</th><th></th></tr></thead><tbody>'
+      +pers.map(function(p,i){var ann=(+p.effectif||0)*(+p.salaireMensuel||0)*12;
+        return '<tr><td class="l"><input class="gnm wide" value="'+esc(p.poste||"")+'" onchange="mPoste('+i+',\'poste\',this.value)"></td>'
+        +'<td><input class="gcell gin num" style="min-width:62px" value="'+(p.effectif||0)+'" onchange="mPoste('+i+',\'effectif\',this.value)"></td>'
+        +'<td><input class="gcell gin num" value="'+mAmt(p.salaireMensuel||0)+'" oninput="mSep(this)" onchange="mPoste('+i+',\'salaireMensuel\',this.value)"></td>'
+        +'<td><input class="gcell gin num" style="min-width:62px" value="'+(p.g||0)+'" onchange="mPoste('+i+',\'g\',this.value)"></td>'
+        +'<td><span class="gcell gcalc num">'+fmt(ann/1000)+'</span></td>'
+        +'<td><button class="gx" title="Retirer" onclick="mDelPoste('+i+')">&#10005;</button></td></tr>';}).join("")
+      +'<tr class="gtot"><td class="l">Total (an 1)</td><td class="num">'+effTot+'</td><td></td><td></td>'
+      +'<td class="num v">'+fmt(persTot1/1000)+' '+uni().suf+'</td><td></td></tr>'
+      +'</tbody></table></div>'
+      +'<div class="gfoot"><span>Effectif × salaire mensuel × 12 = charge annuelle. Le total alimente la ligne « Charges du personnel », comprise dans les frais généraux du P&amp;L.</span></div></div>';
   } else if(SOUS_MODELE==="capex"){
-    corps='<div class="card" style="padding:0"><div class="bande">Investissements (CAPEX)</div><div class="tscroll"><table class="tb etat"><tr><th>Poste</th><th class="num">Montant</th><th class="num">Durée (ans)</th><th class="num">Année (1 = 1ʳᵉ)</th><th></th></tr>'
-      +M.capex.map(function(c,i){return '<tr><td><input class="sel" value="'+esc(c.name||'')+'" onchange="mCapex('+i+',\'name\',this.value)"></td>'
-        +'<td class="num"><input class="nin ninm" value="'+mAmt(c.montant||0)+'" oninput="mSep(this)" onchange="mCapex('+i+',\'montant\',this.value)"></td>'
-        +'<td class="num"><input class="nin" style="width:60px" value="'+(c.duree||5)+'" onchange="mCapex('+i+',\'duree\',this.value)"></td>'
-        +'<td class="num"><input class="nin" style="width:60px" value="'+(c.annee||1)+'" onchange="mCapex('+i+',\'annee\',this.value)"></td>'
-        +'<td><button class="btn sm" onclick="mDelCapex('+i+')">✕</button></td></tr>';}).join("")
-      +'</table></div><div style="padding:10px 14px"><button class="btn sm" onclick="mAddCapex()">+ Ajouter un investissement</button><div class="mut" style="margin-top:6px">Amortissement linéaire par poste, à partir de sa mise en service (fin de construction). Année 1 = 1ʳᵉ année du plan ; pendant la construction, l\'investissement est financé mais pas encore amorti.</div></div></div>';
+    var cxTot=(M.capex||[]).reduce(function(s,c){return s+(+c.montant||0);},0);
+    corps='<div class="gbar"><span class="gt">Investissements</span><span class="mut">CAPEX</span>'
+      +'<span class="push"></span><button class="btn sm primary" onclick="mAddCapex()">+ Investissement</button></div>'
+      +'<div class="gwrap"><div class="gscroll"><table class="gtab"><thead><tr><th class="l">Poste</th><th>Montant</th>'
+      +'<th>Durée (ans)</th><th>Année (1 = 1ʳᵉ)</th><th></th></tr></thead><tbody>'
+      +(M.capex||[]).map(function(c,i){return '<tr><td class="l"><input class="gnm wide" value="'+esc(c.name||'')+'" onchange="mCapex('+i+',\'name\',this.value)"></td>'
+        +'<td><input class="gcell gin num" value="'+mAmt(c.montant||0)+'" oninput="mSep(this)" onchange="mCapex('+i+',\'montant\',this.value)"></td>'
+        +'<td><input class="gcell gin num" style="min-width:62px" value="'+(c.duree||5)+'" onchange="mCapex('+i+',\'duree\',this.value)"></td>'
+        +'<td><input class="gcell gin num" style="min-width:62px" value="'+(c.annee||1)+'" onchange="mCapex('+i+',\'annee\',this.value)"></td>'
+        +'<td><button class="gx" title="Retirer" onclick="mDelCapex('+i+')">&#10005;</button></td></tr>';}).join("")
+      +'<tr class="gtot"><td class="l">Total des investissements</td><td class="num v">'+fmt(cxTot/1000)+' '+uni().suf+'</td><td></td><td></td><td></td></tr>'
+      +'</tbody></table></div>'
+      +'<div class="gfoot"><span>Amortissement linéaire par poste, à partir de sa mise en service (fin de construction). Année 1 = 1ʳᵉ année du plan ; pendant la construction, l\'investissement est financé mais pas encore amorti.</span></div></div>';
   } else if(SOUS_MODELE==="fin"){
     var f=M.financement||{}, e=f.emprunt||{}, Pf=P.financement, auto=(f.mode==="auto");
     var modeSeg='<div class="hyp-l"><span>Mode de financement</span><span class="segvue">'
@@ -1022,7 +1038,7 @@ function vueModele(){
     +(enHyp?mBandeControles(M,P):'')
     +'<div class="row" style="margin:14px 0 12px;align-items:center;flex-wrap:wrap">'+barre+vueBtn+'</div>'
     +subTabs
-    +corps;
+    +(enHyp?'<div class="mhyp">'+corps+'</div>':corps);
 }
 /* Analyse & covenants du modèle : seuil de rentabilité + covenants (mutualisés avec le BP historique)
    + comparaison des 3 scénarios (recalculés via projeterModele sans changer le scénario actif). */

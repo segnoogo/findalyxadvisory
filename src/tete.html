@@ -301,6 +301,17 @@ border-left:4px solid var(--orange)}
   font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;padding:0;flex-shrink:0}
 .gpct:hover{border-color:var(--pri);color:var(--pri)}
 .gpct.on{background:#EEF3FC;border-color:var(--pri);color:var(--pri)}
+.gnm.wide{width:100%;min-width:130px}
+/* les formulaires d'hypothèses (Financement / BFR / Paramètres) adoptent le même registre
+   que la grille : champs blancs bordés + anneau de focus, au lieu du jaune historique.
+   Portée limitée à .mhyp pour ne pas toucher le reste de l'app. */
+.mhyp .card{border:1px solid #E3E7EF;border-radius:12px;box-shadow:0 1px 2px rgba(20,28,46,.04)}
+.mhyp .sec-titre{font-size:13px;font-weight:650;color:var(--navy);letter-spacing:-.01em}
+.mhyp .hyp-g input.sel,.mhyp .hyp-l input.sel,.mhyp .hyp-g input.nin,.mhyp .hyp-l input.nin{
+  background:#fff;border:1px solid #B9C2D2;border-radius:7px}
+.mhyp .hyp-g input.sel:focus,.mhyp .hyp-l input.sel:focus,
+.mhyp .hyp-g input.nin:focus,.mhyp .hyp-l input.nin:focus{
+  outline:none;border-color:var(--pri);box-shadow:0 0 0 3px rgba(43,74,139,.13)}
 .gsel{border:1px solid #D5DCE8;border-radius:6px;background:#fff;font:inherit;font-size:11.5px;
   padding:3px 5px;color:var(--ink);max-width:170px;font-family:inherit}
 .gsel:focus{outline:none;border-color:var(--pri)}
