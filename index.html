@@ -10015,6 +10015,63 @@ function mPlier(id){G_CLOSED[id]=!G_CLOSED[id];rendre();}
 function mPlierTout(ouvrir){var M=assurerModele();(M.revenus||[]).forEach(function(L,li){G_CLOSED[L.id||('L'+li)]=!ouvrir;});rendre();}
 /* valeur BRUTE d'un inducteur à l'année i (90 pour « 90 % », pas 0,9) */
 function gIndVal(r,i){ if(r&&r.mode==='yearly')return valSerie(r.vals,i); return (+((r&&r.val))||0)*Math.pow(1+(+((r&&r.g))||0)/100,i); }
+/* =====================================================================
+   ANNULER / RÉTABLIR — l'absence d'annulation est LE reproche récurrent des
+   utilisateurs des outils concurrents. Plutôt que d'instrumenter les ~25
+   gestionnaires de saisie, on photographie le modèle À CHAQUE RENDU : deux
+   états successifs suffisent à remonter le temps.
+   ===================================================================== */
+var G_UNDO=[], G_REDO=[], G_KEYS=false;
+function mSnapshot(M){
+  try{ var s=JSON.stringify(M);
+    if(!G_UNDO.length||G_UNDO[G_UNDO.length-1]!==s){
+      G_UNDO.push(s); G_REDO=[];              /* une saisie neuve invalide le « rétablir » */
+      if(G_UNDO.length>40)G_UNDO.shift();
+    }
+  }catch(e){}
+}
+function mRestaurer(s,msg){
+  try{ DOSSIER.modele=JSON.parse(s); }catch(e){ return; }
+  sauverDossier(); rendre(); if(typeof toast==='function')toast(msg);
+}
+function mUndo(){
+  if(G_UNDO.length<2){ if(typeof toast==='function')toast('Rien à annuler'); return; }
+  G_REDO.push(G_UNDO.pop());
+  mRestaurer(G_UNDO[G_UNDO.length-1],'Modification annulée');
+}
+function mRedo(){
+  if(!G_REDO.length){ if(typeof toast==='function')toast('Rien à rétablir'); return; }
+  var s=G_REDO.pop(); G_UNDO.push(s); mRestaurer(s,'Modification rétablie');
+}
+function mBtnUndo(){
+  return '<button class="btn sm" title="Annuler la dernière modification (Ctrl+Z)"'+(G_UNDO.length<2?' disabled style="opacity:.45"':'')+' onclick="mUndo()">&#8630;</button>'
+    +'<button class="btn sm" title="Rétablir (Ctrl+Y)"'+(G_REDO.length?'':' disabled style="opacity:.45"')+' onclick="mRedo()">&#8631;</button>';
+}
+function mBindClavier(){
+  if(G_KEYS||typeof document==='undefined')return; G_KEYS=true;
+  document.addEventListener('keydown',function(e){
+    if(!(e.ctrlKey||e.metaKey)||!modeleMode())return;
+    var k=String(e.key||'').toLowerCase();
+    if(k==='z'&&!e.shiftKey){ e.preventDefault(); mUndo(); }
+    else if(k==='y'||(k==='z'&&e.shiftKey)){ e.preventDefault(); mRedo(); }
+  });
+}
+/* Collage depuis un tableur : une ligne de valeurs séparées par des tabulations
+   (ou des retours à la ligne) remplit les années d'un coup. Son absence est la
+   critique la plus concrète adressée aux outils du marché. */
+function mCollerSerie(ev,kind,a,b){
+  var t=''; try{ t=((ev.clipboardData||window.clipboardData).getData('text')||''); }catch(e){}
+  if(!t||!/[\t\r\n;]/.test(t))return;         /* une seule valeur → collage normal */
+  ev.preventDefault();
+  var vals=t.split(/[\t\r\n;]+/).map(function(x){return numFR(x);}).filter(function(x){return x!==null;});
+  if(!vals.length)return;
+  var M=assurerModele(), N=M.nb||5, r;
+  try{ r=(kind==='rev')?M.revenus[a].rows[b]:mCoutIndInit(M.coutsDirects[a]).rows[b]; }catch(e){ return; }
+  r.mode='yearly'; r.vals=[];
+  for(var k=0;k<N;k++) r.vals.push(k<vals.length?vals[k]:vals[vals.length-1]);
+  sauverDossier(); rendre();
+  if(typeof toast==='function')toast(vals.length+' valeur(s) collée(s) — saisie année par année');
+}
 function gEstPct(r){ return String((r&&r.unit)||'').indexOf('%')>=0; }
 /* Rend EXPLICITE la règle du moteur « unité contenant % = ratio (÷100) » : au lieu de
    devoir deviner qu'il faut taper « % » dans l'unité, on bascule l'inducteur d'un clic. */
@@ -10088,7 +10145,7 @@ function mTableRevenus(M){
       for(var k=0;k<N;k++){
         var val=gIndVal(r,k);
         if(yearly||k===0)
-          cells+='<td><input class="gcell gin num" value="'+mAmt(val)+'" oninput="mSep(this)" onchange="'
+          cells+='<td><input class="gcell gin num" value="'+mAmt(val)+'" oninput="mSep(this)" onpaste="mCollerSerie(event,\'rev\','+li+','+ri+')" onchange="'
             +(yearly?('mIndYv('+li+','+ri+','+k+',this.value)'):('mInd('+li+','+ri+',\'val\',this.value)'))+'"></td>';
         else
           cells+='<td><span class="gcell gcalc num" title="Calculé depuis l&#39;an 1 — cliquer pour saisir année par année" onclick="mIndMode('+li+','+ri+',\'yearly\')">'+gN(val)+'</span></td>';
@@ -10129,7 +10186,7 @@ function mTableRevenus(M){
     +tot.map(function(c){return '<td class="num v">'+fmt(c/1000)+'</td>';}).join('')+'</tr>';
   var opts=M_GROUPS.map(function(g){return '<optgroup label="'+g[0]+'">'+g[1].map(function(k){
     return '<option value="'+k+'">'+M_PRESETS[k].lab+'</option>';}).join('')+'</optgroup>';}).join('');
-  return '<div class="gbar"><span class="gt">Lignes de revenus</span>'
+  return '<div class="gbar"><span class="gt">Lignes de revenus</span>'+mBtnUndo()
     +'<button class="gh sm btn'+(G_FX?' primary':'')+'" onclick="mFxToggle()" title="Afficher / masquer la colonne Formule">Formules</button>'
     +'<button class="btn sm" onclick="mPlierTout(true)">Tout déplier</button>'
     +'<button class="btn sm" onclick="mPlierTout(false)">Tout replier</button>'
@@ -10192,7 +10249,7 @@ function mTableCouts(M,P){
         if(ref||(!yearly&&k2>0))
           cells+='<td><span class="gcell gcalc num"'+(ref?'':' title="Calculé depuis l&#39;an 1 — cliquer pour saisir année par année" onclick="mCoutIndMode('+ci+','+ri+',\'yearly\')"')+'>'+gN(val)+'</span></td>';
         else
-          cells+='<td><input class="gcell gin num" value="'+mAmt(val)+'" oninput="mSep(this)" onchange="'
+          cells+='<td><input class="gcell gin num" value="'+mAmt(val)+'" oninput="mSep(this)" onpaste="mCollerSerie(event,\'cout\','+ci+','+ri+')" onchange="'
             +(yearly?('mCoutIndYv('+ci+','+ri+','+k2+',this.value)'):('mCoutInd('+ci+','+ri+',\'val\',this.value)'))+'"></td>';
       }
       var refSel='<select class="gsel" onchange="mCoutIndRef('+ci+','+ri+',this.value)"><option value="">valeur saisie</option>'
@@ -10228,7 +10285,7 @@ function mTableCouts(M,P){
   body+='<tr class="gtot"><td class="l gc1">Total des coûts directs</td>'
     +(G_FX?'<td class="l gc2" style="font-size:11px;color:var(--muted)">&Sigma; des lignes &middot; '+u.lib+'</td>':'')
     +tot.map(function(c){return '<td class="num v" style="color:var(--red)">'+fmt(c)+'</td>';}).join('')+'</tr>';
-  return '<div class="gbar"><span class="gt">Coûts directs</span>'
+  return '<div class="gbar"><span class="gt">Coûts directs</span>'+mBtnUndo()
     +'<button class="btn sm'+(G_FX?' primary':'')+'" onclick="mFxToggle()" title="Afficher / masquer la colonne Méthode">Méthodes</button>'
     +'<span class="push"></span><button class="btn sm primary" onclick="mAddCout()">+ Coût direct</button></div>'
     +'<div class="gwrap"><div class="gscroll"><table class="gtab"><thead>'+head+'</thead><tbody>'+body+'</tbody></table></div>'
@@ -10297,6 +10354,7 @@ function mCarteCout(cl,ci){
 }
 function vueModele(){
   var M=assurerModele();
+  mSnapshot(M); mBindClavier();   /* historique d'annulation + raccourcis Ctrl+Z / Ctrl+Y */
   var P=projeterModele(M), A=P.annees, a0=A[0], aL=A[A.length-1], u=uni();
   ETATS=etatsFromModele(P);   /* aligne l'ETATS synthétique sur la projection affichée (les vues BP réutilisées lisent ETATS) */
   /* Même présentation qu'un dossier avec historique : Hypothèses (constructeur) + P&L / Bilan /
