@@ -224,7 +224,7 @@ function construireEtatsFormules(wb){
       F(rt.FN,`(${B_(rB.PRI,i)}+${B_(rB.RAN,i)})-(${Bp_(rB.PRI,i)}+${Bp_(rB.RAN,i)})-${Pp_(rP.RN,i)}`);
       F(rt.EMPRUNT,`MAX(0,-${dR(rB.DET,i)})`);
       F(rt.REMBOURS,`MIN(0,-${dR(rB.DET,i)})`);
-      F(rt.ZFIN,`SUM(${Lc}${rt.FK}:${Lc}${rt.REMBOURS})`);
+      F(rt.ZFIN,`SUM(${Lc}${rt.FK}:${Lc}${rt.CCA_REMB})`);
       F(rt.ZF,`${Lc}${rt.ZB}+${Lc}${rt.ZC}+${Lc}${rt.ZFIN}`);
       F(rt.ZG,`${Lc}${rt.ZA}+${Lc}${rt.ZF}`);
       F(rtE,`${Lc}${rt.ZG}-${B_(rB.TN,i)}`);

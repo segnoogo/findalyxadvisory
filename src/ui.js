@@ -1173,6 +1173,10 @@ const TFT_DEF=[
   ["FN","Dividendes versés"],
   ["EMPRUNT","Emprunts nouveaux"],
   ["REMBOURS","Remboursement d'emprunts"],
+  /* Les comptes courants d'associés étaient DÉJÀ comptés dans ZFIN (bp.js) mais sans
+     ligne visible : le total ne se réconciliait pas avec les lignes affichées. */
+  ["CCA_TIR","Apports en comptes courants d'associés"],
+  ["CCA_REMB","Remboursement des comptes courants d'associés"],
   ["ZFIN","Flux de trésorerie des activités de financement","total"],
   ["ZF","VARIATION DE LA TRÉSORERIE NETTE DE LA PÉRIODE","total"],
   ["ZG","Trésorerie nette à la clôture","total"]];

@@ -1628,7 +1628,7 @@ function calculerEtats(tbagr,lignesPerso){
             ZG:v.TRESORERIE_NETTE[p]+ZF,
             /* agrégats pour la présentation simplifiée du TFT (mêmes totaux) */
             VAR_CREANCES:FD+FB, ACQUIS_IMMO:FF+FG+FH, CESSION_IMMO:FI,
-            EMPRUNT:FO>0?FO:0, REMBOURS:FO<0?FO:0, ZFIN:ZD+ZE,
+            EMPRUNT:FO>0?FO:0, REMBOURS:FO<0?FO:0, CCA_TIR:0, CCA_REMB:0, ZFIN:ZD+ZE,
             /* clés héritées (rapports, commentaires, databook) */
             RN:rn,AMORT:-d("AMORT_DEPREC"),PROV:-d("PROVISIONS_RC"),DBFR:-d("BFR"),
             OP:ZB,CAPEX:ZC,FIN:ZD+ZE,FCF:ZF,
@@ -2600,7 +2600,7 @@ function projeterBP(etats,H,scenario){
       FO:nouveau-rembExist-rembNouv,ZE:nouveau-rembExist-rembNouv,
       ZF:0,ZG:0,
       RN:rn,AMORT:dot,PROV:0,DBFR:-dBfr,OP:rn+dot-dBfr,CAPEX:-capex,
-      FIN:-div+nouveau-rembExist-rembNouv,FCF:0,OUVERTURE:tresoP,CLOTURE:treso};
+      FIN:-div+nouveau-rembExist-rembNouv,FCF:0,CCA_TIR:0,CCA_REMB:0,OUVERTURE:tresoP,CLOTURE:treso};
     const t=P.tft[a];
     t.FD=-((clients+autresCr)-((P.bs.CLIENTS[AP[i-1]]!==undefined)
         ?(P.bs.CLIENTS[AP[i-1]]+P.bs.AUTRES_CREANCES[AP[i-1]])
@@ -8038,6 +8038,10 @@ const TFT_DEF=[
   ["FN","Dividendes versés"],
   ["EMPRUNT","Emprunts nouveaux"],
   ["REMBOURS","Remboursement d'emprunts"],
+  /* Les comptes courants d'associés étaient DÉJÀ comptés dans ZFIN (bp.js) mais sans
+     ligne visible : le total ne se réconciliait pas avec les lignes affichées. */
+  ["CCA_TIR","Apports en comptes courants d'associés"],
+  ["CCA_REMB","Remboursement des comptes courants d'associés"],
   ["ZFIN","Flux de trésorerie des activités de financement","total"],
   ["ZF","VARIATION DE LA TRÉSORERIE NETTE DE LA PÉRIODE","total"],
   ["ZG","Trésorerie nette à la clôture","total"]];
@@ -12138,7 +12142,7 @@ function construireFeuillesBP(wb){
     F(rt.ZC,`SUM(${Lc}${rt.ACQUIS_IMMO}:${Lc}${rt.CESSION_IMMO})`);
     F(rt.FK,`0`);F(rt.FL,`0`);F(rt.FN,`-${B(rb.DIV,i)}`);
     F(rt.EMPRUNT,`${D(rd.TIR,i)}`);F(rt.REMBOURS,`-${D(rd.REMB,i)}`);
-    F(rt.ZFIN,`SUM(${Lc}${rt.FK}:${Lc}${rt.REMBOURS})`);
+    F(rt.ZFIN,`SUM(${Lc}${rt.FK}:${Lc}${rt.CCA_REMB})`);
     F(rt.ZF,`${Lc}${rt.ZB}+${Lc}${rt.ZC}+${Lc}${rt.ZFIN}`);
     F(rt.ZG,`${Lc}${rt.ZA}+${Lc}${rt.ZF}`);
     F(rtE,`${Lc}${rt.ZG}-${B(rb.TRES,i)}`);
@@ -12499,7 +12503,7 @@ function construireEtatsFormules(wb){
       F(rt.FN,`(${B_(rB.PRI,i)}+${B_(rB.RAN,i)})-(${Bp_(rB.PRI,i)}+${Bp_(rB.RAN,i)})-${Pp_(rP.RN,i)}`);
       F(rt.EMPRUNT,`MAX(0,-${dR(rB.DET,i)})`);
       F(rt.REMBOURS,`MIN(0,-${dR(rB.DET,i)})`);
-      F(rt.ZFIN,`SUM(${Lc}${rt.FK}:${Lc}${rt.REMBOURS})`);
+      F(rt.ZFIN,`SUM(${Lc}${rt.FK}:${Lc}${rt.CCA_REMB})`);
       F(rt.ZF,`${Lc}${rt.ZB}+${Lc}${rt.ZC}+${Lc}${rt.ZFIN}`);
       F(rt.ZG,`${Lc}${rt.ZA}+${Lc}${rt.ZF}`);
       F(rtE,`${Lc}${rt.ZG}-${B_(rB.TN,i)}`);

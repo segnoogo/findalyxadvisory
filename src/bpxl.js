@@ -415,7 +415,7 @@ function construireFeuillesBP(wb){
     F(rt.ZC,`SUM(${Lc}${rt.ACQUIS_IMMO}:${Lc}${rt.CESSION_IMMO})`);
     F(rt.FK,`0`);F(rt.FL,`0`);F(rt.FN,`-${B(rb.DIV,i)}`);
     F(rt.EMPRUNT,`${D(rd.TIR,i)}`);F(rt.REMBOURS,`-${D(rd.REMB,i)}`);
-    F(rt.ZFIN,`SUM(${Lc}${rt.FK}:${Lc}${rt.REMBOURS})`);
+    F(rt.ZFIN,`SUM(${Lc}${rt.FK}:${Lc}${rt.CCA_REMB})`);
     F(rt.ZF,`${Lc}${rt.ZB}+${Lc}${rt.ZC}+${Lc}${rt.ZFIN}`);
     F(rt.ZG,`${Lc}${rt.ZA}+${Lc}${rt.ZF}`);
     F(rtE,`${Lc}${rt.ZG}-${B(rb.TRES,i)}`);

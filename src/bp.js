@@ -246,7 +246,7 @@ function projeterBP(etats,H,scenario){
       FO:nouveau-rembExist-rembNouv,ZE:nouveau-rembExist-rembNouv,
       ZF:0,ZG:0,
       RN:rn,AMORT:dot,PROV:0,DBFR:-dBfr,OP:rn+dot-dBfr,CAPEX:-capex,
-      FIN:-div+nouveau-rembExist-rembNouv,FCF:0,OUVERTURE:tresoP,CLOTURE:treso};
+      FIN:-div+nouveau-rembExist-rembNouv,FCF:0,CCA_TIR:0,CCA_REMB:0,OUVERTURE:tresoP,CLOTURE:treso};
     const t=P.tft[a];
     t.FD=-((clients+autresCr)-((P.bs.CLIENTS[AP[i-1]]!==undefined)
         ?(P.bs.CLIENTS[AP[i-1]]+P.bs.AUTRES_CREANCES[AP[i-1]])
