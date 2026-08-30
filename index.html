@@ -10432,31 +10432,71 @@ function mTablePersonnel(M){
     +'<div class="gwrap"><div class="gscroll"><table class="gtab"><thead>'+gHead(N,nc,'Poste','Effectif × salaire × 12')+'</thead><tbody>'+body+'</tbody></table></div>'
     +'<div class="gfoot"><span>Le total alimente la ligne « Charges du personnel », comprise dans les frais généraux du P&amp;L.</span></div></div>';
 }
+/* Réplique EXACTEMENT la mécanique du moteur (bp.js) : mise en service = max(année
+   d'investissement, fin de construction), puis amortissement linéaire
+   `min(montant/durée, restant)` poste par poste. Sert au détail par ligne ET au
+   tableau des immobilisations. */
+function gCapexSeries(M){
+  var N=M.nb||5, anExp=(M.dureeConstruction||0)+1;
+  return (M.capex||[]).map(function(c){
+    var an=Math.max(1,Math.round(+c.annee||1)), mt=(+c.montant||0), du=Math.max(1,Math.round(+c.duree||5));
+    var mes=Math.max(an,anExp), restant=mt, acc=0, dot=[], cum=[], brut=[], vnc=[];
+    for(var k=0;k<N;k++){
+      var py=k+1, d=0;
+      if(py>=mes&&restant>0.01){ d=Math.min(mt/du,restant); restant-=d; }
+      acc+=d; dot.push(d); cum.push(acc);
+      var b=(py>=an)?mt:0; brut.push(b); vnc.push(b-acc);
+    }
+    return {name:(c.name||''),annee:an,duree:du,mes:mes,montant:mt,dot:dot,cum:cum,brut:brut,vnc:vnc};
+  });
+}
+function mTableVNC(M){
+  var N=M.nb||5, nc=(M.dureeConstruction||0), S=gCapexSeries(M), i;
+  if(!S.length)return '';
+  var brut=[],cum=[],vnc=[]; for(i=0;i<N;i++){brut.push(0);cum.push(0);vnc.push(0);}
+  var body=S.map(function(s){
+    for(var k=0;k<N;k++){ brut[k]+=s.brut[k]; cum[k]+=s.cum[k]; vnc[k]+=s.vnc[k]; }
+    return '<tr><td class="l gc1"><div class="ghead" style="padding-left:3px">'+esc(s.name||'Poste')+'</div></td>'
+      +(G_FX?'<td class="l gc2"><span class="gfx"><span class="gchip">'+gN(s.montant)+'</span> sur '+s.duree+' ans'+(s.mes>s.annee?'<span class="mut"> · en service an '+s.mes+'</span>':'')+'</span></td>':'')
+      +s.vnc.map(function(v){return '<td><span class="gcell gcalc num"'+(v<=0.01?' style="color:var(--muted)"':'')+'>'+(v>0.01?gN(v):'&ndash;')+'</span></td>';}).join('')+'</tr>';
+  }).join('');
+  body+='<tr class="gres"><td class="l gc1"><div class="gdrv"><span class="gop">+</span> Valeur brute</div></td>'
+    +(G_FX?'<td class="gc2"></td>':'')+brut.map(function(v){return '<td><span class="gcell gcalc num">'+gN(v)+'</span></td>';}).join('')+'</tr>'
+    +'<tr class="gres"><td class="l gc1"><div class="gdrv"><span class="gop">&minus;</span> Amortissements cumulés</div></td>'
+    +(G_FX?'<td class="gc2"></td>':'')+cum.map(function(v){return '<td><span class="gcell gcalc num" style="color:#c0392b">'+gN(v)+'</span></td>';}).join('')+'</tr>'
+    +'<tr class="gtot"><td class="l gc1">Valeur nette comptable (VNC)</td>'+(G_FX?'<td class="gc2"></td>':'')
+    +vnc.map(function(v){return '<td class="num v">'+gN(v)+'</td>';}).join('')+'</tr>';
+  return '<div class="gbar" style="margin-top:18px"><span class="gt">Immobilisations — valeur nette comptable</span><span class="mut">en FCFA</span></div>'
+    +'<div class="gwrap"><div class="gscroll"><table class="gtab"><thead>'+gHead(N,nc,'Poste','Base · durée')+'</thead><tbody>'+body+'</tbody></table></div>'
+    +'<div class="gfoot"><span>VNC = valeur brute &minus; amortissements cumulés. C\'est la base du <b>coût du capital</b> (VNC × WACC) et de l\'actif net. '
+    +'Les <b>intérêts de construction</b> capitalisés, s\'il y en a, s\'ajoutent aux immobilisations du bilan et ne figurent pas dans ce tableau des postes saisis.</span></div></div>';
+}
 function mTableCapex(M){
-  var N=M.nb||5, nc=(M.dureeConstruction||0), CX=(M.capex||[]), i, tot=[], amo=[];
+  var N=M.nb||5, nc=(M.dureeConstruction||0), CX=(M.capex||[]), S=gCapexSeries(M), i, tot=[], amo=[];
   for(i=0;i<N;i++){tot.push(0);amo.push(0);}
   var body=CX.length?'':'<tr><td class="l gc1" colspan="'+(N+(G_FX?2:1))+'" style="color:var(--muted)">Aucun investissement.</td></tr>';
   CX.forEach(function(c,ci){
-    var an=Math.max(1,Math.round(+c.annee||1)), mt=(+c.montant||0), du=Math.max(1,Math.round(+c.duree||5)), cells='';
+    var s=S[ci], cells='';
     for(var k=0;k<N;k++){
-      var py=k+1, v=(py===an)?mt:0; tot[k]+=v;
-      /* amortissement linéaire à partir de la mise en service (fin de construction) */
-      var mes=Math.max(an,nc+1);
-      if(py>=mes&&py<mes+du) amo[k]+=mt/du;
-      cells+=(py===an)
-        ? '<td><input class="gcell gin num" value="'+mAmt(mt)+'" oninput="mSep(this)" onchange="mCapex('+ci+',\'montant\',this.value)"></td>'
-        : '<td><span class="gcell gcalc num" title="Investissement placé en an '+an+'">'+(v?gN(v):'&ndash;')+'</span></td>';
+      var py=k+1, v=(py===s.annee)?s.montant:0; tot[k]+=v; amo[k]+=s.dot[k];
+      cells+=(py===s.annee)
+        ? '<td><input class="gcell gin num" value="'+mAmt(s.montant)+'" oninput="mSep(this)" onchange="mCapex('+ci+',\'montant\',this.value)"></td>'
+        : '<td><span class="gcell gcalc num" title="Investissement placé en an '+s.annee+'">&ndash;</span></td>';
     }
     body+='<tr><td class="l gc1"><div class="ghead"><input class="gnm big" value="'+esc(c.name||'')+'" onchange="mCapex('+ci+',\'name\',this.value)">'
       +'<button class="gx" title="Retirer" onclick="mDelCapex('+ci+')">&#10005;</button></div></td>'
-      +(G_FX?'<td class="l gc2"><span class="gfx">an <input style="width:38px" value="'+an+'" onchange="mCapex('+ci+',\'annee\',this.value)"> <span class="mut">· amorti sur</span> <input style="width:38px" value="'+du+'" onchange="mCapex('+ci+',\'duree\',this.value)"> ans</span></td>':'')
-      +cells+'</tr>';
+      +(G_FX?'<td class="l gc2"><span class="gfx">an <input style="width:38px" value="'+s.annee+'" onchange="mCapex('+ci+',\'annee\',this.value)"> <span class="mut">· amorti sur</span> <input style="width:38px" value="'+s.duree+'" onchange="mCapex('+ci+',\'duree\',this.value)"> ans</span></td>':'')
+      +cells+'</tr>'
+      /* amortissement PROPRE à ce poste, sous sa ligne */
+      +'<tr><td class="l gc1"><div class="gdrv" style="padding-left:14px"><span class="gop eq">=</span> <span class="mut">dotation</span></div></td>'
+      +(G_FX?'<td class="l gc2"><span class="gfx" style="color:var(--muted)">'+gN(s.montant)+' &divide; '+s.duree+' ans'+(s.mes>s.annee?' · dès l\'an '+s.mes:'')+'</span></td>':'')
+      +s.dot.map(function(v){return '<td><span class="gcell gcalc num"'+(v<=0.01?' style="color:var(--muted)"':'')+'>'+(v>0.01?gN(v):'&ndash;')+'</span></td>';}).join('')+'</tr>';
   });
-  body+='<tr class="gtot"><td class="l gc1">Total investi</td>'+(G_FX?'<td class="gc2"></td>':'')
-    +tot.map(function(v){return '<td class="num v">'+(v?gN(v):'&ndash;')+'</td>';}).join('')+'</tr>'
-    +'<tr class="gres"><td class="l gc1"><div class="gdrv"><span class="gop eq">=</span> Dotation aux amortissements</div></td>'
-    +(G_FX?'<td class="l gc2"><span class="gfx"><span class="gchip">linéaire</span> dès la mise en service</span></td>':'')
-    +amo.map(function(v){return '<td><span class="gcell gcalc num">'+(v?gN(v):'&ndash;')+'</span></td>';}).join('')+'</tr>';
+  body+='<tr class="gres"><td class="l gc1">Total investi</td>'+(G_FX?'<td class="gc2"></td>':'')
+    +tot.map(function(v){return '<td><span class="gcell gcalc num">'+(v?gN(v):'&ndash;')+'</span></td>';}).join('')+'</tr>'
+    +'<tr class="gtot"><td class="l gc1">Dotation totale aux amortissements</td>'
+    +(G_FX?'<td class="l gc2" style="font-size:11px;color:var(--muted)">somme des dotations ci-dessus</td>':'')
+    +amo.map(function(v){return '<td class="num v">'+(v?gN(v):'&ndash;')+'</td>';}).join('')+'</tr>';
   return '<div class="gbar"><span class="gt">Investissements</span><span class="mut">CAPEX · en FCFA</span>'
     +'<span class="push"></span><button class="btn sm primary" onclick="mAddCapex()">+ Investissement</button></div>'
     +'<div class="gwrap"><div class="gscroll"><table class="gtab"><thead>'+gHead(N,nc,'Poste','Année · durée')+'</thead><tbody>'+body+'</tbody></table></div>'
@@ -10583,7 +10623,7 @@ function vueModele(){
   } else if(SOUS_MODELE==="fixe"){
     corps=mTableFixes(M)+mTablePersonnel(M);
   } else if(SOUS_MODELE==="capex"){
-    corps=mTableCapex(M);
+    corps=mTableCapex(M)+mTableVNC(M);
   } else if(SOUS_MODELE==="fin"){
     var f=M.financement||{}, e=f.emprunt||{}, Pf=P.financement, auto=(f.mode==="auto");
     var modeSeg='<div class="hyp-l"><span>Mode de financement</span><span class="segvue">'
