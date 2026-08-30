@@ -10450,35 +10450,15 @@ function gCapexSeries(M){
     return {name:(c.name||''),annee:an,duree:du,mes:mes,montant:mt,dot:dot,cum:cum,brut:brut,vnc:vnc};
   });
 }
-function mTableVNC(M){
-  var N=M.nb||5, nc=(M.dureeConstruction||0), S=gCapexSeries(M), i;
-  if(!S.length)return '';
-  var brut=[],cum=[],vnc=[]; for(i=0;i<N;i++){brut.push(0);cum.push(0);vnc.push(0);}
-  var body=S.map(function(s){
-    for(var k=0;k<N;k++){ brut[k]+=s.brut[k]; cum[k]+=s.cum[k]; vnc[k]+=s.vnc[k]; }
-    return '<tr><td class="l gc1"><div class="ghead" style="padding-left:3px">'+esc(s.name||'Poste')+'</div></td>'
-      +(G_FX?'<td class="l gc2"><span class="gfx"><span class="gchip">'+gN(s.montant)+'</span> sur '+s.duree+' ans'+(s.mes>s.annee?'<span class="mut"> · en service an '+s.mes+'</span>':'')+'</span></td>':'')
-      +s.vnc.map(function(v){return '<td><span class="gcell gcalc num"'+(v<=0.01?' style="color:var(--muted)"':'')+'>'+(v>0.01?gN(v):'&ndash;')+'</span></td>';}).join('')+'</tr>';
-  }).join('');
-  body+='<tr class="gres"><td class="l gc1"><div class="gdrv"><span class="gop">+</span> Valeur brute</div></td>'
-    +(G_FX?'<td class="gc2"></td>':'')+brut.map(function(v){return '<td><span class="gcell gcalc num">'+gN(v)+'</span></td>';}).join('')+'</tr>'
-    +'<tr class="gres"><td class="l gc1"><div class="gdrv"><span class="gop">&minus;</span> Amortissements cumulés</div></td>'
-    +(G_FX?'<td class="gc2"></td>':'')+cum.map(function(v){return '<td><span class="gcell gcalc num" style="color:#c0392b">'+gN(v)+'</span></td>';}).join('')+'</tr>'
-    +'<tr class="gtot"><td class="l gc1">Valeur nette comptable (VNC)</td>'+(G_FX?'<td class="gc2"></td>':'')
-    +vnc.map(function(v){return '<td class="num v">'+gN(v)+'</td>';}).join('')+'</tr>';
-  return '<div class="gbar" style="margin-top:18px"><span class="gt">Immobilisations — valeur nette comptable</span><span class="mut">en FCFA</span></div>'
-    +'<div class="gwrap"><div class="gscroll"><table class="gtab"><thead>'+gHead(N,nc,'Poste','Base · durée')+'</thead><tbody>'+body+'</tbody></table></div>'
-    +'<div class="gfoot"><span>VNC = valeur brute &minus; amortissements cumulés. C\'est la base du <b>coût du capital</b> (VNC × WACC) et de l\'actif net. '
-    +'Les <b>intérêts de construction</b> capitalisés, s\'il y en a, s\'ajoutent aux immobilisations du bilan et ne figurent pas dans ce tableau des postes saisis.</span></div></div>';
-}
+/* ---- 1) LES INVESTISSEMENTS : la liste, puis le total ---- */
 function mTableCapex(M){
-  var N=M.nb||5, nc=(M.dureeConstruction||0), CX=(M.capex||[]), S=gCapexSeries(M), i, tot=[], amo=[];
-  for(i=0;i<N;i++){tot.push(0);amo.push(0);}
+  var N=M.nb||5, nc=(M.dureeConstruction||0), CX=(M.capex||[]), S=gCapexSeries(M), i, tot=[];
+  for(i=0;i<N;i++)tot.push(0);
   var body=CX.length?'':'<tr><td class="l gc1" colspan="'+(N+(G_FX?2:1))+'" style="color:var(--muted)">Aucun investissement.</td></tr>';
   CX.forEach(function(c,ci){
     var s=S[ci], cells='';
     for(var k=0;k<N;k++){
-      var py=k+1, v=(py===s.annee)?s.montant:0; tot[k]+=v; amo[k]+=s.dot[k];
+      var py=k+1; if(py===s.annee)tot[k]+=s.montant;
       cells+=(py===s.annee)
         ? '<td><input class="gcell gin num" value="'+mAmt(s.montant)+'" oninput="mSep(this)" onchange="mCapex('+ci+',\'montant\',this.value)"></td>'
         : '<td><span class="gcell gcalc num" title="Investissement placé en an '+s.annee+'">&ndash;</span></td>';
@@ -10486,45 +10466,57 @@ function mTableCapex(M){
     body+='<tr><td class="l gc1"><div class="ghead"><input class="gnm big" value="'+esc(c.name||'')+'" onchange="mCapex('+ci+',\'name\',this.value)">'
       +'<button class="gx" title="Retirer" onclick="mDelCapex('+ci+')">&#10005;</button></div></td>'
       +(G_FX?'<td class="l gc2"><span class="gfx">an <input style="width:38px" value="'+s.annee+'" onchange="mCapex('+ci+',\'annee\',this.value)"> <span class="mut">· amorti sur</span> <input style="width:38px" value="'+s.duree+'" onchange="mCapex('+ci+',\'duree\',this.value)"> ans</span></td>':'')
-      +cells+'</tr>'
-      /* amortissement PROPRE à ce poste, sous sa ligne */
-      +'<tr><td class="l gc1"><div class="gdrv" style="padding-left:14px"><span class="gop eq">=</span> <span class="mut">dotation</span></div></td>'
-      +(G_FX?'<td class="l gc2"><span class="gfx" style="color:var(--muted)">'+gN(s.montant)+' &divide; '+s.duree+' ans'+(s.mes>s.annee?' · dès l\'an '+s.mes:'')+'</span></td>':'')
-      +s.dot.map(function(v){return '<td><span class="gcell gcalc num"'+(v<=0.01?' style="color:var(--muted)"':'')+'>'+(v>0.01?gN(v):'&ndash;')+'</span></td>';}).join('')+'</tr>';
+      +cells+'</tr>';
   });
-  body+='<tr class="gres"><td class="l gc1">Total investi</td>'+(G_FX?'<td class="gc2"></td>':'')
-    +tot.map(function(v){return '<td><span class="gcell gcalc num">'+(v?gN(v):'&ndash;')+'</span></td>';}).join('')+'</tr>'
-    +'<tr class="gtot"><td class="l gc1">Dotation totale aux amortissements</td>'
-    +(G_FX?'<td class="l gc2" style="font-size:11px;color:var(--muted)">somme des dotations ci-dessus</td>':'')
-    +amo.map(function(v){return '<td class="num v">'+(v?gN(v):'&ndash;')+'</td>';}).join('')+'</tr>';
-  return '<div class="gbar"><span class="gt">Investissements</span><span class="mut">CAPEX · en FCFA</span>'
+  body+='<tr class="gtot"><td class="l gc1">Total des investissements</td>'+(G_FX?'<td class="gc2"></td>':'')
+    +tot.map(function(v){return '<td class="num v">'+(v?gN(v):'&ndash;')+'</td>';}).join('')+'</tr>';
+  return '<div class="gbar"><span class="gt">1 · Investissements</span><span class="mut">CAPEX · en FCFA</span>'
     +'<span class="push"></span><button class="btn sm primary" onclick="mAddCapex()">+ Investissement</button></div>'
     +'<div class="gwrap"><div class="gscroll"><table class="gtab"><thead>'+gHead(N,nc,'Poste','Année · durée')+'</thead><tbody>'+body+'</tbody></table></div>'
-    +'<div class="gfoot"><span>Chaque investissement tombe dans son année ; l\'amortissement démarre à la mise en service (après la construction).</span></div></div>';
+    +'<div class="gfoot"><span>Chaque investissement tombe dans son année. Saisir le montant directement dans la colonne de l\'année.</span></div></div>';
 }
-function mTableBfr(M,P){
-  var N=M.nb||5, nc=(M.dureeConstruction||0), A=P.annees, b=M.bfr||{}, u=uni();
-  function serie(cle,signe){ return A.map(function(a){ var v=((P.bs[cle]&&P.bs[cle][a])||0)*(signe||1);
-    return '<td><span class="gcell gcalc num">'+fmt(v)+'</span></td>'; }).join(''); }
-  var body=''
-    +'<tr><td class="l gc1"><div class="gdrv"><span class="gop">+</span> Créances clients</div></td>'
-      +(G_FX?'<td class="l gc2"><span class="gfx"><input value="'+(b.dso||0)+'" onchange="mSet(\'bfr.dso\',this.value,1)"> jours de CA <span class="mut">(DSO)</span></span></td>':'')
-      +serie('CLIENTS')+'</tr>'
-    +'<tr><td class="l gc1"><div class="gdrv"><span class="gop">+</span> Stocks</div></td>'
-      +(G_FX?'<td class="l gc2"><span class="gfx"><input value="'+(b.dio||0)+'" onchange="mSet(\'bfr.dio\',this.value,1)"> jours d\'achats <span class="mut">(DIO)</span></span></td>':'')
-      +serie('STOCKS')+'</tr>'
-    +'<tr><td class="l gc1"><div class="gdrv"><span class="gop">&minus;</span> Dettes fournisseurs</div></td>'
-      +(G_FX?'<td class="l gc2"><span class="gfx"><input value="'+(b.dpo||0)+'" onchange="mSet(\'bfr.dpo\',this.value,1)"> jours d\'achats <span class="mut">(DPO)</span></span></td>':'')
-      +serie('FOURNISSEURS')+'</tr>'
-    +'<tr class="gtot"><td class="l gc1">Besoin en fonds de roulement</td>'+(G_FX?'<td class="l gc2" style="font-size:11px;color:var(--muted)">'+u.lib+'</td>':'')
-      +A.map(function(a){return '<td class="num v">'+fmt((P.bs.BFR&&P.bs.BFR[a])||0)+'</td>';}).join('')+'</tr>'
-    +'<tr class="gres"><td class="l gc1"><div class="gdrv"><span class="gop eq">&Delta;</span> Variation <span class="mut" style="margin-left:5px">· ce qui pèse sur la trésorerie</span></div></td>'
-      +(G_FX?'<td class="gc2"></td>':'')
-      +A.map(function(a,i){ var v=((P.bs.BFR&&P.bs.BFR[a])||0)-(i?((P.bs.BFR&&P.bs.BFR[A[i-1]])||0):0);
-        return '<td><span class="gcell gcalc num" style="color:'+(v>0?'#c0392b':'#16904E')+'">'+fmt(-v)+'</span></td>'; }).join('')+'</tr>';
-  return '<div class="gbar"><span class="gt">Besoin en fonds de roulement</span><span class="mut">délais en jours · montants en '+u.lib+'</span></div>'
-    +'<div class="gwrap"><div class="gscroll"><table class="gtab"><thead>'+gHead(N,nc,'Poste','Délai')+'</thead><tbody>'+body+'</tbody></table></div>'
-    +'<div class="gfoot"><span>Le BFR n\'est pas une ligne du tableau de flux : sa <b>variation</b> se lit dans les activités opérationnelles. Une variation positive du BFR consomme de la trésorerie.</span></div></div>';
+/* ---- 2) LES AMORTISSEMENTS : la dotation de chaque poste, puis le total ---- */
+function mTableAmort(M){
+  var N=M.nb||5, nc=(M.dureeConstruction||0), S=gCapexSeries(M), i, tot=[];
+  for(i=0;i<N;i++)tot.push(0);
+  if(!S.length)return '';
+  var body=S.map(function(s){
+    for(var k=0;k<N;k++)tot[k]+=s.dot[k];
+    return '<tr><td class="l gc1"><div class="ghead" style="padding-left:3px">'+esc(s.name||'Poste')+'</div></td>'
+      +(G_FX?'<td class="l gc2"><span class="gfx"><span class="gchip">'+gN(s.montant)+'</span> &divide; '+s.duree+' ans'+(s.mes>s.annee?'<span class="mut"> · dès l\'an '+s.mes+'</span>':'')+'</span></td>':'')
+      +s.dot.map(function(v){return '<td><span class="gcell gcalc num"'+(v<=0.01?' style="color:var(--muted)"':'')+'>'+(v>0.01?gN(v):'&ndash;')+'</span></td>';}).join('')+'</tr>';
+  }).join('');
+  body+='<tr class="gtot"><td class="l gc1">Total des dotations</td>'+(G_FX?'<td class="gc2"></td>':'')
+    +tot.map(function(v){return '<td class="num v">'+(v?gN(v):'&ndash;')+'</td>';}).join('')+'</tr>';
+  return '<div class="gbar" style="margin-top:18px"><span class="gt">2 · Amortissements</span><span class="mut">dotation de l\'exercice · en FCFA</span></div>'
+    +'<div class="gwrap"><div class="gscroll"><table class="gtab"><thead>'+gHead(N,nc,'Poste','Base &divide; durée')+'</thead><tbody>'+body+'</tbody></table></div>'
+    +'<div class="gfoot"><span>Amortissement linéaire, à partir de la mise en service (fin de la période de construction). Le total alimente la ligne « Dotations » du compte de résultat.</span></div></div>';
+}
+/* ---- 3) LA VNC : tableau de variation — la clôture d'une année ouvre la suivante ---- */
+function mTableVNC(M){
+  var N=M.nb||5, nc=(M.dureeConstruction||0), S=gCapexSeries(M), i;
+  if(!S.length)return '';
+  var inv=[],dot=[],ouv=[],clo=[];
+  for(i=0;i<N;i++){inv.push(0);dot.push(0);}
+  S.forEach(function(s){ for(var k=0;k<N;k++){ if(k+1===s.annee)inv[k]+=s.montant; dot[k]+=s.dot[k]; } });
+  var solde=0;
+  for(i=0;i<N;i++){ ouv.push(solde); solde=solde+inv[i]-dot[i]; clo.push(solde); }
+  function ligne(cls,op,lib,serie,coul,titre){
+    return '<tr'+(cls?' class="'+cls+'"':'')+'><td class="l gc1">'
+      +(op?'<div class="gdrv"><span class="gop'+(op==='='?' eq':'')+'">'+op+'</span> '+lib+'</div>':lib)+'</td>'
+      +(G_FX?'<td class="l gc2"'+(titre?' style="font-size:11px;color:var(--muted)"':'')+'>'+(titre||'')+'</td>':'')
+      +serie.map(function(v){return cls==='gtot'
+        ? '<td class="num v">'+gN(v)+'</td>'
+        : '<td><span class="gcell gcalc num"'+(coul?' style="color:'+coul+'"':'')+'>'+(Math.abs(v)>0.01?gN(v):'&ndash;')+'</span></td>';}).join('')+'</tr>';
+  }
+  var body=ligne('','','<b>Solde d\'ouverture</b>',ouv,'','VNC à la clôture de l\'exercice précédent')
+    +ligne('','+','Investissements de l\'exercice',inv,'#16904E','')
+    +ligne('','&minus;','Dotations aux amortissements',dot,'#c0392b','')
+    +ligne('gtot','','Valeur nette comptable à la clôture',clo,'','devient le solde d\'ouverture suivant');
+  return '<div class="gbar" style="margin-top:18px"><span class="gt">3 · Valeur nette comptable</span><span class="mut">tableau de variation · en FCFA</span></div>'
+    +'<div class="gwrap"><div class="gscroll"><table class="gtab"><thead>'+gHead(N,nc,'','')+'</thead><tbody>'+body+'</tbody></table></div>'
+    +'<div class="gfoot"><span><b>Solde d\'ouverture + investissements &minus; dotations = VNC de clôture</b>, qui devient le solde d\'ouverture de l\'exercice suivant. '
+    +'La VNC est la base du <b>coût du capital</b> (VNC × WACC) et de l\'actif net. Les <b>intérêts de construction</b> capitalisés, s\'il y en a, s\'ajoutent aux immobilisations du bilan sans figurer ici.</span></div></div>';
 }
 function mAddLigneTpl(tpl){ if(!tpl)return; var M=assurerModele();
   M.revenus.push({name:M_PRESETS[tpl].lab,tpl:tpl,rows:JSON.parse(JSON.stringify(M_PRESETS[tpl].rows)),prix:{val:1000,unit:"FCFA",g:2}});
@@ -10623,7 +10615,7 @@ function vueModele(){
   } else if(SOUS_MODELE==="fixe"){
     corps=mTableFixes(M)+mTablePersonnel(M);
   } else if(SOUS_MODELE==="capex"){
-    corps=mTableCapex(M)+mTableVNC(M);
+    corps=mTableCapex(M)+mTableAmort(M)+mTableVNC(M);
   } else if(SOUS_MODELE==="fin"){
     var f=M.financement||{}, e=f.emprunt||{}, Pf=P.financement, auto=(f.mode==="auto");
     var modeSeg='<div class="hyp-l"><span>Mode de financement</span><span class="segvue">'
