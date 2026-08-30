@@ -289,6 +289,11 @@ border-left:4px solid var(--orange)}
    Un input ne peut pas porter de pseudo-élément — le trait « calculé » passe donc par
    une bordure gauche épaissie. Sans cela l'utilisateur ne voit aucun endroit où taper
    et croit, à juste titre, que la colonne n'est pas saisissable. */
+/* Un <input> sans largeur explicite prend sa taille par defaut (~190 px) et impose donc
+   une colonne beaucoup plus large qu'une cellule de texte : deux tableaux empiles ne
+   s'alignaient plus des que l'un contenait des champs. Largeur fixe = colonnes identiques
+   d'un tableau a l'autre, et assez large pour un montant en FCFA. */
+.gtab input.gcell{width:104px}
 .gcell.gder{border-color:#E6EAF2;border-left:3px solid #C7D2E4;background:#FBFCFE;color:var(--ink);cursor:text}
 .gcell.gder:hover{border-color:#B9C2D2;border-left-color:var(--pri);background:#fff}
 .gcell.gder:focus{outline:none;border-color:var(--pri);border-left-color:var(--pri);background:#fff;

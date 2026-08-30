@@ -165,7 +165,8 @@ function projeterBP(etats,H,scenario){
     pl:{}, bs:{}, tft:{}, dette:{}};
   const pl=c=>P.pl[c]={}, bs=c=>P.bs[c]={};
   ["CA","COUTS_DIRECTS","MARGE_BRUTE","AUTRES_PROD","OPEX_TOTAL","CHARGES_PERSONNEL",
-   "EBITDA","DA","EBIT","PRODUITS_FIN","FRAIS_FIN","RESULTAT_FIN","EBT","IS","RN"].forEach(pl);
+   "EBITDA","DA","EBIT","PRODUITS_FIN","FRAIS_FIN","RESULTAT_FIN","EBT","IS","RN",
+   "REPORT_DEF"].forEach(pl);   /* stock de déficits reportables restant à la clôture */
   P.pl.OPEX_DETAIL={};
   /* CA_DETAIL a une forme IMPOSÉE, partagée avec le moteur « modèle » et lue par le P&L
      détaillé et deux slides : {code:{lib, vals:{année:montant}}}. Le détail par année du
@@ -266,6 +267,7 @@ function projeterBP(etats,H,scenario){
     deficits.forEach(d=>d.resteAns--);
     deficits=deficits.filter(d=>d.resteAns>0);
     if(ebt<0)deficits.push({montant:-ebt,resteAns:horizonDef});
+    P.pl.REPORT_DEF[a]=deficits.reduce((t,d)=>t+d.montant,0);
     /* --- BFR --- */
     const ttc=1+((H.tva!=null&&isFinite(+H.tva))?+H.tva:0.18);        /* TVA paramétrable (défaut 18 %) */
     /* CA exonéré : facturé HT (créances sans TVA) ; les achats restent TTC, la TVA d'amont

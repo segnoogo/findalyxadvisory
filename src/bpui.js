@@ -1,5 +1,6 @@
 /* ============ Business plan & Valorisation — vues ============ */
 let SOUS_BP="hyp";
+let SOUS_BPH="ca";   /* sous-onglet des hypotheses (dossier avec historique) */
 function assurerBP(){
   const base=hypothesesBP(ETATS,DOSSIER.lignesPerso||[]);
   if(!DOSSIER.bp){DOSSIER.bp=base;}
@@ -1597,7 +1598,7 @@ function vueBP(){
     ${kpiCard("Trésorerie fin de plan",fmt(P.bs.TRESO[aF])+" "+uni().suf,"",P.bs.TRESO[aF]<0?'<span class="d down">négative</span>':'<span class="d up">positive</span>',"wallet","#16904E")}
   </div>`;
   let corps="";
-  if(SOUS_BP==="hyp") corps=vueBPHyp(H);
+  if(SOUS_BP==="hyp") corps=vueBPHyp(H,P);
   else if(SOUS_BP==="pl") corps=vueBPPl(P);
   else if(SOUS_BP==="bs") corps=vueBPBs(P);
   else if(SOUS_BP==="tft") corps=vueBPTft(P);
@@ -1784,88 +1785,275 @@ function tableRevenusBP(H){
     +`Volume et prix se projettent séparément : c'est le point du mode, un plan qui gagne 10 % de volume ne dit pas la même chose qu'un plan qui augmente ses prix de 10 %. `
     +`Les colonnes affichent le scénario <b>central</b> ; la dérive de scénario s'applique par-dessus.</span></div></div>`;
 }
-function vueBPHyp(H){
-  const AP=Array.from({length:H.nb},(_,i)=>i);
-  const a1s=ETATS.annees[ETATS.annees.length-1];
-  const anneesIn=(k,vals,argent)=>{
-    const titres={caCroiss:"Croissance du CA par année",capex:"Investissements (CAPEX) par année",
-      nouveauxEmprunts:"Nouveaux emprunts par année"};
-    return `<div class="hyp-l" style="align-items:flex-start"><span>${titres[k]}</span>
-    <span class="serie">${AP.map(i=>`<span class="an"><em>${libFY(a1s+1+i,true)}</em>${argent
-      ?`<input type="text" inputmode="decimal" class="nin large" value="${Math.round(vals[i]*uni().f*100)/100}" step="any" onchange="hBPa('${k}',${i},this.value,${uni().f})">`
-      :`<input type="text" inputmode="decimal" class="nin" value="${+(vals[i]*100).toFixed(1)}" step="0.5" onchange="hBPa('${k}',${i},this.value,100)">`}</span>`).join("")}
-    <span class="an"><em>&nbsp;</em><span class="mut" style="line-height:30px">${argent?uni().lib:"%"}</span></span></span></div>`;
-  };
-  const opexRows=H.opex.filter(o=>o.base>0||o.pct>0).map(o=>`<tr>
-    <td>${esc(o.lib)}</td>
-    <td><select class="sel" onchange="hOpex('${o.code}','mode',this.value)">
-      <option value="inflation" ${o.mode==="inflation"?"selected":""}>inflation</option>
-      <option value="pctCA" ${o.mode==="pctCA"?"selected":""}>% du CA</option>
-      <option value="croissance" ${o.mode==="croissance"?"selected":""}>croissance propre</option></select></td>
-    <td class="num">${o.mode==="pctCA"
-      ?`<input type="text" inputmode="decimal" class="nin" value="${+(o.pct*100).toFixed(2)}" step="0.1" onchange="hOpex('${o.code}','pct',this.value,100)"> %`
-      :o.mode==="croissance"
-      ?`<input type="text" inputmode="decimal" class="nin" value="${+(o.croiss*100).toFixed(1)}" step="0.5" onchange="hOpex('${o.code}','croiss',this.value,100)"> %`
-      :`<span class="mut">${+((H.inflation||0.03)*100).toFixed(1)} % (inflation)</span>`}</td>
-    <td class="num mut">${fmt(-o.base)}</td></tr>`).join("");
-  /* Le chiffre d'affaires quitte la carte « Activité et marges » : il porte desormais
-     un CHOIX DE METHODE (taux de croissance ou volumes x prix) et, en volumes x prix,
-     une grille pleine largeur. C'est l'hypothese la plus challengee d'un business plan ;
-     elle merite le haut de l'ecran, pas une ligne parmi douze. */
-  const volPrix=(H.caMode==="volumePrix");
-  const carteCA=`<div class="card"><div class="sec-titre" style="margin-top:0">Chiffre d'affaires
-      <span class="mut" style="font-weight:400">· la façon dont vous le projetez</span></div>
-    <div class="hyp-l"><span>Méthode de projection</span><span class="segvue">
-      <button class="${volPrix?"":"on"}" onclick="hCaMode('croissance')">Taux de croissance</button>
-      <button class="${volPrix?"on":""}" onclick="hCaMode('volumePrix')">Volumes &times; prix</button></span></div>
-    <div class="mut" style="margin:8px 0 ${volPrix?"12px":"2px"}">${volPrix
-      ? `Le chiffre d'affaires est reconstruit ligne par ligne à partir des <b>quantités vendues</b> et du <b>prix moyen</b> du dernier exercice réel, chacun projeté séparément. Les coûts directs restent un pourcentage du chiffre d'affaires ainsi obtenu.`
-      : `Le chiffre d'affaires du dernier exercice réel est reconduit avec un taux par année. Simple et rapide, mais il mélange effet volume et effet prix : passez en <b>volumes &times; prix</b> si votre activité se pilote en quantités (tonnes, élèves, chambres, abonnés…) ou si un prêteur va challenger vos hypothèses de tarif.`}</div>
-    ${volPrix?tableRevenusBP(H):anneesIn("caCroiss",H.caCroiss)}
-  </div>`;
-  return `${carteCA}<div class="deux">
-  <div class="card"><div class="sec-titre" style="margin-top:0">Activité et marges</div>
-    ${hypLigne("Coûts directs (% du CA)",inPct("hBP.bind(null,'coutsDirects_pct')",H.coutsDirects_pct))}
-    ${hypLigne("Autres produits et subventions (an 1)",inK("hBP.bind(null,'autresProd_montant')",H.autresProd_montant))}
-    ${hypLigne("… croissance annuelle",inPct("hBP.bind(null,'autresProd_croiss')",H.autresProd_croiss))}
-    ${hypLigne("Taux d'inflation (défaut des frais généraux)",inPct("hBP.bind(null,'inflation')",H.inflation||0.03))}
-    ${hypLigne("Croissance des charges de personnel",inPct("hBP.bind(null,'personnel_croiss')",H.personnel_croiss))}
-    ${hypLigne("Taux d'IS effectif",inPct("hBP.bind(null,'is_taux')",H.is_taux))}
-    ${hypLigne("Impôt minimum forfaitaire (% du CA)",inPct("hBP.bind(null,'imf_taux')",H.imf_taux!==undefined?H.imf_taux:0.005))}
-    ${hypLigne("Déficits reportables — stock initial",inK("hBP.bind(null,'reportDeficitaire')",H.reportDeficitaire||0))}
-    ${hypLigne("Déficits reportables — durée (années)",`<input type="text" inputmode="numeric" class="nin" value="${H.reportDef_horizon||3}" onchange="hBP('reportDef_horizon',this.value,1)"> ans`)}
-  </div>
-  <div class="card"><div class="sec-titre" style="margin-top:0">Besoin en fonds de roulement</div>
-    ${hypLigne("Délai clients — DSO",inJ("hBP.bind(null,'dso')",H.dso))}
-    ${hypLigne("Rotation des stocks — DIO",inJ("hBP.bind(null,'dio')",H.dio))}
-    ${hypLigne("Délai fournisseurs — DPO",inJ("hBP.bind(null,'dpo')",H.dpo))}
-    ${hypLigne("Dettes fiscales & sociales (% du CA)",inPct("hBP.bind(null,'dettesFiscSoc_pct')",H.dettesFiscSoc_pct))}
-    ${hypLigne("Autres créances — hors exploitation (figées)",inK("hBP.bind(null,'autresCreances_fixe')",H.autresCreances_fixe))}
-    ${hypLigne("Autres dettes — hors exploitation (figées)",inK("hBP.bind(null,'autresDettes_fixe')",H.autresDettes_fixe))}
-    <div class="sec-titre">Investissements</div>
-    ${anneesIn("capex",H.capex,true)}
-    ${hypLigne("Taux d'amortissement (sur brut)",inPct("hBP.bind(null,'amort_taux')",H.amort_taux))}
-  </div>
-  </div>
-  <div class="card"><div class="sec-titre" style="margin-top:0">Frais généraux — ligne par ligne</div>
-    <div class="mut" style="margin-bottom:8px">Par défaut chaque ligne suit le taux d'inflation sur sa base ; vous pouvez la passer en % du chiffre d'affaires ou lui donner une croissance propre. Base ${libFY(ETATS.annees[ETATS.annees.length-1])} (dernière colonne).</div>
-    <table class="tb"><tr><th>Ligne</th><th>Mode</th><th class="num">Valeur</th><th class="num">Base réelle</th></tr>${opexRows}</table>
-  </div>
-  <div class="card"><div class="sec-titre" style="margin-top:0">Financement et distribution</div>
-   <div class="deux" style="margin-bottom:0">
-    <div>
-    ${hypLigne("Taux d'intérêt de la dette existante",inPct("hBP.bind(null,'dette_taux')",H.dette_taux,0.25))}
-    ${hypLigne("Durée résiduelle de la dette existante",inN("hBP.bind(null,'dette_dureeResiduelle')",H.dette_dureeResiduelle,"ans"))}
-    ${hypLigne("Produits financiers annuels",inK("hBP.bind(null,'produitsFin_montant')",H.produitsFin_montant))}
-    ${hypLigne("Seuil de trésorerie minimum",inK("hBP.bind(null,'seuilCash')",H.seuilCash||0))}
-    ${hypLigne("Taux du découvert / ligne court terme",inPct("hBP.bind(null,'decouvert_taux')",H.decouvert_taux||0.12,0.25))}
-    </div><div>
-    ${hypLigne("Taux des nouveaux emprunts",inPct("hBP.bind(null,'emprunt_taux')",H.emprunt_taux,0.25))}
-    ${hypLigne("Durée des nouveaux emprunts",inN("hBP.bind(null,'emprunt_duree')",H.emprunt_duree,"ans"))}
-    ${hypLigne("Dividendes (% du résultat N-1)",inPct("hBP.bind(null,'dividendes_payout')",H.dividendes_payout,5))}
-    </div></div>
-   ${anneesIn("nouveauxEmprunts",H.nouveauxEmprunts,true)}
-  </div>`;
+/* =====================================================================
+   HYPOTHÈSES DU BUSINESS PLAN (dossier AVEC historique)
+   L'écran empilait trois cartes dont le rangement ne suivait aucune
+   logique : la fiscalité était rangée dans « Activité et marges », les
+   INVESTISSEMENTS étaient collés à la fin de la carte « Besoin en fonds
+   de roulement », et quatre langages visuels cohabitaient. Surtout,
+   aucune projection n'était visible : on saisissait un taux sans jamais
+   voir ce qu'il produisait.
+   Il reprend donc la structure de l'onglet Modèle : des sous-onglets,
+   une grille par sujet, une COLONNE PAR EXERCICE, et la colonne du
+   dernier exercice RÉEL comme ancre à gauche des projections.
+   ===================================================================== */
+const BPH_ONGLETS=[["ca","Chiffre d'affaires"],["marge","Coûts et marges"],["fg","Frais généraux"],
+  ["capex","Investissements"],["bfr","BFR"],["fin","Financement"],["fisc","Fiscalité"]];
+function hBPH(t){SOUS_BPH=t;rendre();}
+
+/* en-tête commun : libellé, règle de projection, exercice réel, puis les exercices projetés */
+function bphHead(lib1,lib2,a1,AP){
+  return `<tr><th class="l gc1">${lib1}</th><th class="l gc2">${lib2}</th>`
+    +`<th class="reelc" style="min-width:118px">${libFY(a1)} <span style="font-weight:400">réel</span></th>`
+    +AP.map(a=>`<th style="width:124px;min-width:124px">${libFY(a,true)}</th>`).join("")+`</tr>`;
+}
+function bphWrap(titre,soustitre,head,corps,note,actions){
+  return `<div class="gbar"><span class="gt">${titre}</span><span class="mut">${soustitre}</span>`
+    +(actions?`<span class="push"></span>${actions}`:"")+`</div>`
+    +`<div class="gwrap"><div class="gscroll"><table class="gtab"><thead>${head}</thead><tbody>${corps}</tbody></table></div>`
+    +(note?`<div class="gfoot"><span>${note}</span></div>`:"")+`</div>`;
+}
+/* cellules : m = montant dans l'unité d'affichage, n = nombre brut */
+const bphM=(v,cls)=>`<span class="gcell gcalc num"${cls?` style="${cls}"`:""}>${fmt(v)}</span>`;
+const bphVide=()=>`<td class="reelc"></td>`;
+/* champ de saisie compact posé dans la colonne « Règle » */
+const bphIn=(val,fn,suf,w)=>`<input style="width:${w||46}px" value="${val}" onchange="${fn}">${suf?` ${suf}`:""}`;
+
+function vueBPHyp(H,P){
+  const A0=ETATS.annees,a1=A0[A0.length-1],v=ETATS.v;
+  const AP=P.annees,N=AP.length,u=uni();
+  const IDX=Array.from({length:N},(_,i)=>i);
+  const nCols=N+3;
+  if(BPH_ONGLETS.every(t=>t[0]!==SOUS_BPH))SOUS_BPH="ca";
+  const barre=`<div class="row" style="margin:0 0 12px;flex-wrap:wrap;align-items:center">`
+    +BPH_ONGLETS.map(([id,lab])=>`<button class="btn sm ${SOUS_BPH===id?"primary":""}" onclick="hBPH('${id}')">${lab}</button>`).join(" ")
+    +`</div>`;
+
+  /* ---------------- 1 · CHIFFRE D'AFFAIRES ---------------- */
+  function ongletCA(){
+    const volPrix=(H.caMode==="volumePrix");
+    const methode=`<div class="gbar"><span class="gt">Chiffre d'affaires</span><span class="mut">la façon dont vous le projetez</span>`
+      +`<span class="push"></span><span class="gseg">`
+      +`<button class="${volPrix?"":"on"}" onclick="hCaMode('croissance')">Taux de croissance</button>`
+      +`<button class="${volPrix?"on":""}" onclick="hCaMode('volumePrix')">Volumes &times; prix</button></span></div>`
+      +`<div class="mut" style="margin:-4px 0 12px;max-width:96ch">${volPrix
+        ? `Le chiffre d'affaires est reconstruit ligne par ligne à partir des <b>quantités vendues</b> et du <b>prix moyen</b> du dernier exercice réel, chacun projeté séparément. Les coûts directs restent un pourcentage du chiffre d'affaires ainsi obtenu.`
+        : `Le chiffre d'affaires du dernier exercice réel est reconduit avec un taux par année. Simple, mais il mélange effet volume et effet prix : passez en <b>volumes &times; prix</b> si votre activité se pilote en quantités (tonnes, élèves, chambres, abonnés…) ou si un prêteur va challenger vos hypothèses de tarif.`}</div>`;
+    if(volPrix) return methode+tableRevenusBP(H);
+    /* mode taux de croissance : une grille, taux saisi et CA qui en découle */
+    const corps=`<tr><td class="l gc1">Taux de croissance</td><td class="l gc2 mut">appliqué au chiffre d'affaires de l'année précédente</td>`
+      +`<td class="reelc"></td>`
+      +IDX.map(i=>`<td><input class="gcell gin num" value="${+((H.caCroiss[i]||0)*100).toFixed(1)}" onchange="hBPa('caCroiss',${i},this.value,100)"></td>`).join("")+`</tr>`
+      +`<tr class="gtot"><td class="l gc1">Chiffre d'affaires</td><td class="gc2"></td>`
+      +`<td class="reelc num">${fmt(v.CA[a1])}</td>`
+      +AP.map(a=>`<td class="num v">${fmt(P.pl.CA[a])}</td>`).join("")+`</tr>`;
+    return methode+bphWrap("Croissance par exercice","en % — le chiffre d'affaires projeté apparaît dessous, en "+u.suf,
+      bphHead("Hypothèse","Portée",a1,AP),corps,
+      `Le taux s'applique en cascade : chaque exercice part du précédent. La <b>dérive de scénario</b> (prudent / optimiste) s'ajoute par-dessus et n'apparaît donc pas dans la ligne saisie.`);
+  }
+
+  /* ---------------- 2 · COÛTS ET MARGES ---------------- */
+  function ongletMarge(){
+    const pc=(a,x)=>P.pl.CA[a]?`<span class="gcell gcalc num">${(x/P.pl.CA[a]*100).toFixed(1).replace(".",",")} %</span>`:`<span class="gcell gcalc num">&ndash;</span>`;
+    const pcH=x=>v.CA[a1]?`<span class="gcell gcalc num">${(x/v.CA[a1]*100).toFixed(1).replace(".",",")} %</span>`:"";
+    const corps=
+      `<tr class="grp"><td class="l gc1">Chiffre d'affaires</td><td class="gc2 mut">onglet précédent</td>`
+        +`<td class="reelc num">${fmt(v.CA[a1])}</td>`+AP.map(a=>`<td class="num">${fmt(P.pl.CA[a])}</td>`).join("")+`</tr>`
+      +`<tr><td class="l gc1">Coûts directs</td>`
+        +`<td class="l gc2"><span class="gfx">${bphIn(+(H.coutsDirects_pct*100).toFixed(2),"hBP('coutsDirects_pct',this.value,100)","% du chiffre d'affaires",52)}</span></td>`
+        +`<td class="reelc num">${fmt(v.COUTS_DIRECTS[a1])}</td>`
+        +AP.map(a=>`<td>${bphM(P.pl.COUTS_DIRECTS[a])}</td>`).join("")+`</tr>`
+      +`<tr class="gres"><td class="l gc1"><div class="gdrv"><span class="gop eq">=</span> Marge brute</div></td><td class="gc2"></td>`
+        +`<td class="reelc num">${fmt(v.MARGE_BRUTE[a1])}</td>`
+        +AP.map(a=>`<td class="num">${fmt(P.pl.MARGE_BRUTE[a])}</td>`).join("")+`</tr>`
+      +`<tr class="gres" style="font-style:italic"><td class="l gc1"><span class="mut" style="padding-left:16px">en % du chiffre d'affaires</span></td><td class="gc2"></td>`
+        +`<td class="reelc">${pcH(v.MARGE_BRUTE[a1])}</td>`+AP.map(a=>`<td>${pc(a,P.pl.MARGE_BRUTE[a])}</td>`).join("")+`</tr>`
+      +`<tr class="grp"><td class="l gc1">Charges d'exploitation</td><td class="gc2"></td><td class="reelc"></td>`+AP.map(()=>`<td></td>`).join("")+`</tr>`
+      +`<tr><td class="l gc1">Charges de personnel</td>`
+        +`<td class="l gc2"><span class="gfx">croissance ${bphIn(+(H.personnel_croiss*100).toFixed(1),"hBP('personnel_croiss',this.value,100)","%/an")}</span></td>`
+        +`<td class="reelc num">${fmt(v.CHARGES_PERSONNEL[a1])}</td>`
+        +AP.map(a=>`<td>${bphM(P.pl.CHARGES_PERSONNEL[a])}</td>`).join("")+`</tr>`
+      +`<tr><td class="l gc1">Frais généraux</td>`
+        +`<td class="l gc2"><span class="mut">ligne par ligne &middot; <a href="#" onclick="hBPH('fg');return false;" style="color:var(--pri)">onglet Frais généraux</a></span></td>`
+        +`<td class="reelc num">${fmt(v.OPEX[a1])}</td>`
+        +AP.map(a=>`<td>${bphM(P.pl.OPEX_TOTAL[a])}</td>`).join("")+`</tr>`
+      +`<tr><td class="l gc1">Autres produits et subventions</td>`
+        +`<td class="l gc2"><span class="gfx">an 1 : ${bphIn(Math.round(H.autresProd_montant*u.f*100)/100,`hBP('autresProd_montant',this.value,${u.f})`,u.lib,70)} puis ${bphIn(+(H.autresProd_croiss*100).toFixed(1),"hBP('autresProd_croiss',this.value,100)","%/an")}</span></td>`
+        +`<td class="reelc num">${fmt(v.AUTRES_PROD[a1])}</td>`
+        +AP.map(a=>`<td>${bphM(P.pl.AUTRES_PROD[a])}</td>`).join("")+`</tr>`
+      +`<tr class="gtot"><td class="l gc1">EBITDA</td><td class="gc2"></td>`
+        +`<td class="reelc num">${fmt(v.EBITDA[a1])}</td>`
+        +AP.map(a=>`<td class="num v">${fmt(P.pl.EBITDA[a])}</td>`).join("")+`</tr>`
+      +`<tr class="gres" style="font-style:italic"><td class="l gc1"><span class="mut" style="padding-left:16px">en % du chiffre d'affaires</span></td><td class="gc2"></td>`
+        +`<td class="reelc">${pcH(v.EBITDA[a1])}</td>`+AP.map(a=>`<td>${pc(a,P.pl.EBITDA[a])}</td>`).join("")+`</tr>`;
+    return bphWrap("Coûts et marges","charges d'exploitation &middot; en "+u.suf,bphHead("Poste","Règle de projection",a1,AP),corps,
+      `Les charges sont affichées <b>au signe du compte de résultat</b> (négatives), pour se recouper directement avec le P&amp;L prévisionnel. La colonne <b>${libFY(a1)} réel</b> vient des états financiers : c'est le point de départ que vos règles font évoluer.`);
+  }
+
+  /* ---------------- 3 · FRAIS GÉNÉRAUX ---------------- */
+  function ongletFG(){
+    const OD=P.pl.OPEX_DETAIL||{};
+    const lignes=H.opex.filter(o=>o.base>0||o.pct>0);
+    const sel=o=>`<select class="gsel" onchange="hOpex('${o.code}','mode',this.value)">`
+      +`<option value="inflation"${o.mode==="inflation"?" selected":""}>inflation</option>`
+      +`<option value="pctCA"${o.mode==="pctCA"?" selected":""}>% du CA</option>`
+      +`<option value="croissance"${o.mode==="croissance"?" selected":""}>croissance propre</option></select>`;
+    const regle=o=>`<span class="gfx">${sel(o)}`
+      +(o.mode==="pctCA"?` ${bphIn(+(o.pct*100).toFixed(2),`hOpex('${o.code}','pct',this.value,100)`,"% du CA",52)}`
+       :o.mode==="croissance"?` ${bphIn(+(o.croiss*100).toFixed(1),`hOpex('${o.code}','croiss',this.value,100)`,"%/an")}`
+       :` <span class="mut">${+((H.inflation||0.03)*100).toFixed(1)} %/an</span>`)+`</span>`;
+    const corps=(lignes.length?lignes.map(o=>
+      `<tr><td class="l gc1">${esc(o.lib)}</td><td class="l gc2">${regle(o)}</td>`
+      +`<td class="reelc num">${fmt(-o.base)}</td>`
+      +AP.map(a=>`<td>${bphM(OD[o.code]?OD[o.code].vals[a]:0)}</td>`).join("")+`</tr>`).join("")
+      :`<tr><td class="l gc1" colspan="${nCols}" style="color:var(--muted)">Aucun poste de frais généraux dans l'historique.</td></tr>`)
+      +`<tr class="gtot"><td class="l gc1">Total des frais généraux</td><td class="gc2"></td>`
+      +`<td class="reelc num">${fmt(v.OPEX[a1])}</td>`
+      +AP.map(a=>`<td class="num v">${fmt(P.pl.OPEX_TOTAL[a])}</td>`).join("")+`</tr>`;
+    const actions=`<span class="gfx">inflation par défaut ${bphIn(+((H.inflation||0.03)*100).toFixed(1),"hBP('inflation',this.value,100)","%/an")}</span>`;
+    return bphWrap("Frais généraux","poste par poste &middot; en "+u.suf,bphHead("Poste","Règle de projection",a1,AP),corps,
+      `Chaque poste suit par défaut le <b>taux d'inflation</b> appliqué à sa base réelle. Passez-le en <b>% du chiffre d'affaires</b> s'il varie avec l'activité (commissions, transport sur ventes), ou donnez-lui une <b>croissance propre</b> si vous connaissez son évolution (un bail indexé, un contrat renégocié).`,actions);
+  }
+
+  /* ---------------- 4 · INVESTISSEMENTS ---------------- */
+  function ongletCapex(){
+    const brutH=Math.max(v.ACTIFS_IMMOBILISES[a1]-v.AMORT_DEPREC[a1],0), amcH=-v.AMORT_DEPREC[a1];
+    const t1=`<tr><td class="l gc1">Investissements de l'exercice</td><td class="l gc2 mut">saisis exercice par exercice</td>`
+      +`<td class="reelc"></td>`
+      +IDX.map(i=>`<td><input class="gcell gin num" value="${mAmt(Math.round((H.capex[i]||0)*u.f*100)/100)}" oninput="mSep(this)" onchange="hBPa('capex',${i},this.value,${u.f})"></td>`).join("")+`</tr>`
+      +`<tr><td class="l gc1">Dotation aux amortissements</td>`
+      +`<td class="l gc2"><span class="gfx">${bphIn(+(H.amort_taux*100).toFixed(2),"hBP('amort_taux',this.value,100)","% des immobilisations brutes",52)}</span></td>`
+      +`<td class="reelc num">${fmt(v.DA[a1])}</td>`
+      +AP.map(a=>`<td>${bphM(P.pl.DA[a])}</td>`).join("")+`</tr>`;
+    /* variation de la valeur nette comptable : la clôture d'un exercice ouvre le suivant */
+    const ouv=a=>{const i=AP.indexOf(a);return i===0?(brutH-amcH):P.bs.IMMO_NET[AP[i-1]];};
+    const t2=`<tr><td class="l gc1"><b>Solde d'ouverture</b></td><td class="l gc2 mut">valeur nette à la clôture précédente</td>`
+      +`<td class="reelc"></td>`
+      +AP.map(a=>`<td>${bphM(ouv(a))}</td>`).join("")+`</tr>`
+      +`<tr><td class="l gc1"><div class="gdrv"><span class="gop">+</span> Investissements de l'exercice</div></td><td class="gc2"></td><td class="reelc"></td>`
+      +IDX.map(i=>`<td>${bphM(H.capex[i]||0,"color:#16904E")}</td>`).join("")+`</tr>`
+      +`<tr><td class="l gc1"><div class="gdrv"><span class="gop">&minus;</span> Dotations aux amortissements</div></td><td class="gc2"></td><td class="reelc"></td>`
+      +AP.map(a=>`<td>${bphM(-P.pl.DA[a],"color:#c0392b")}</td>`).join("")+`</tr>`
+      +`<tr class="gtot"><td class="l gc1">Valeur nette comptable à la clôture</td><td class="gc2 mut">ouvre l'exercice suivant</td>`
+      +`<td class="reelc num">${fmt(brutH-amcH)}</td>`
+      +AP.map(a=>`<td class="num v">${fmt(P.bs.IMMO_NET[a])}</td>`).join("")+`</tr>`;
+    return bphWrap("1 &middot; Investissements et amortissements","CAPEX et dotation &middot; en "+u.suf,
+        bphHead("Poste","Règle de projection",a1,AP),t1,
+        `Le taux d'amortissement s'applique aux <b>immobilisations brutes</b> (valeur nette + amortissements cumulés), et la dotation est plafonnée par la valeur restant à amortir. C'est un taux <b>moyen de parc</b> : il ne distingue pas les durées d'usage par catégorie.`)
+      +`<div style="height:18px"></div>`
+      +bphWrap("2 &middot; Valeur nette comptable","tableau de variation &middot; en "+u.suf,
+        bphHead("","",a1,AP),t2,
+        `<b>Solde d'ouverture + investissements &minus; dotations = valeur nette de clôture</b>, qui devient le solde d'ouverture de l'exercice suivant. La colonne <b>${libFY(a1)} réel</b> reprend la valeur nette du bilan historique.`);
+  }
+
+  /* ---------------- 5 · BFR ---------------- */
+  function ongletBfr(){
+    const bfrH=v.CLIENTS[a1]+v.STOCKS[a1]+v.AUTRES_CREANCES[a1]+v.AVANCES_FRS[a1]
+      +v.FOURNISSEURS[a1]+v.DETTES_SOCIALES[a1]+v.DETTES_FISCALES[a1]
+      +v.AUTRES_DETTES[a1]+v.CLIENTS_AVANCES[a1]+v.HAO_ACTIF[a1]+v.HAO_PASSIF[a1];
+    const jrs=(a)=>P.pl.CA[a]?`<span class="gcell gcalc num">${Math.round(P.bs.BFR[a]/P.pl.CA[a]*360)} j</span>`:"";
+    const corps=
+      `<tr class="grp"><td class="l gc1">Actif circulant</td><td class="gc2"></td><td class="reelc"></td>`+AP.map(()=>`<td></td>`).join("")+`</tr>`
+      +`<tr><td class="l gc1">Créances clients</td>`
+        +`<td class="l gc2"><span class="gfx">DSO ${bphIn(Math.round(H.dso),"hBP('dso',this.value,1)","jours de CA TTC")}</span></td>`
+        +`<td class="reelc num">${fmt(v.CLIENTS[a1])}</td>`+AP.map(a=>`<td>${bphM(P.bs.CLIENTS[a])}</td>`).join("")+`</tr>`
+      +`<tr><td class="l gc1">Stocks</td>`
+        +`<td class="l gc2"><span class="gfx">DIO ${bphIn(Math.round(H.dio),"hBP('dio',this.value,1)","jours de coûts HT")}</span></td>`
+        +`<td class="reelc num">${fmt(v.STOCKS[a1])}</td>`+AP.map(a=>`<td>${bphM(P.bs.STOCKS[a])}</td>`).join("")+`</tr>`
+      +`<tr><td class="l gc1">Autres créances <span class="mut">&middot; hors exploitation</span></td>`
+        +`<td class="l gc2"><span class="gfx">figées à ${bphIn(Math.round(H.autresCreances_fixe*u.f*100)/100,`hBP('autresCreances_fixe',this.value,${u.f})`,u.lib,70)}</span></td>`
+        +`<td class="reelc num">${fmt(v.AUTRES_CREANCES[a1]+v.AVANCES_FRS[a1]+v.HAO_ACTIF[a1])}</td>`
+        +AP.map(a=>`<td>${bphM(P.bs.AUTRES_CREANCES[a])}</td>`).join("")+`</tr>`
+      +`<tr class="grp"><td class="l gc1">Passif circulant</td><td class="gc2"></td><td class="reelc"></td>`+AP.map(()=>`<td></td>`).join("")+`</tr>`
+      +`<tr><td class="l gc1">Dettes fournisseurs</td>`
+        +`<td class="l gc2"><span class="gfx">DPO ${bphIn(Math.round(H.dpo),"hBP('dpo',this.value,1)","jours d'achats TTC")}</span></td>`
+        +`<td class="reelc num">${fmt(v.FOURNISSEURS[a1])}</td>`+AP.map(a=>`<td>${bphM(P.bs.FOURNISSEURS[a])}</td>`).join("")+`</tr>`
+      +`<tr><td class="l gc1">Dettes fiscales et sociales</td>`
+        +`<td class="l gc2"><span class="gfx">${bphIn(+(H.dettesFiscSoc_pct*100).toFixed(2),"hBP('dettesFiscSoc_pct',this.value,100)","% du chiffre d'affaires",52)}</span></td>`
+        +`<td class="reelc num">${fmt(v.DETTES_SOCIALES[a1]+v.DETTES_FISCALES[a1])}</td>`
+        +AP.map(a=>`<td>${bphM(P.bs.DETTES_FISC_SOC[a])}</td>`).join("")+`</tr>`
+      +`<tr><td class="l gc1">Autres dettes <span class="mut">&middot; hors exploitation</span></td>`
+        +`<td class="l gc2"><span class="gfx">figées à ${bphIn(Math.round(H.autresDettes_fixe*u.f*100)/100,`hBP('autresDettes_fixe',this.value,${u.f})`,u.lib,70)}</span></td>`
+        +`<td class="reelc num">${fmt(v.AUTRES_DETTES[a1]+v.CLIENTS_AVANCES[a1]+v.HAO_PASSIF[a1])}</td>`
+        +AP.map(a=>`<td>${bphM(P.bs.AUTRES_DETTES[a])}</td>`).join("")+`</tr>`
+      +`<tr class="gtot"><td class="l gc1">Besoin en fonds de roulement</td><td class="gc2"></td>`
+        +`<td class="reelc num">${fmt(bfrH)}</td>`+AP.map(a=>`<td class="num v">${fmt(P.bs.BFR[a])}</td>`).join("")+`</tr>`
+      +`<tr class="gres" style="font-style:italic"><td class="l gc1"><span class="mut" style="padding-left:16px">en jours de chiffre d'affaires</span></td><td class="gc2"></td>`
+        +`<td class="reelc">${v.CA[a1]?`<span class="gcell gcalc num">${Math.round(bfrH/v.CA[a1]*360)} j</span>`:""}</td>`
+        +AP.map(a=>`<td>${jrs(a)}</td>`).join("")+`</tr>`;
+    return bphWrap("Besoin en fonds de roulement","délais d'exploitation &middot; en "+u.suf,bphHead("Poste du bilan","Règle de projection",a1,AP),corps,
+      `<b>DSO</b> (jours de crédit client) et <b>DPO</b> (jours de crédit fournisseur) s'expriment en jours de flux <b>TTC</b>, comme les ratios de l'analyse ; le <b>DIO</b> (rotation des stocks) est en jours de coûts HT, les stocks étant valorisés au coût. Les postes <b>hors exploitation</b> sont figés : un business plan projette le cycle d'exploitation, pas le résiduel que l'activité ne pilote pas.`);
+  }
+
+  /* ---------------- 6 · FINANCEMENT ---------------- */
+  function ongletFin(){
+    const detteH=-v.DETTES_FINANCIERES[a1];
+    const corps=
+      `<tr class="grp"><td class="l gc1">Dette existante</td><td class="gc2 mut">celle du bilan de clôture</td>`
+        +`<td class="reelc num">${fmt(detteH)}</td>`+AP.map(()=>`<td></td>`).join("")+`</tr>`
+      +`<tr><td class="l gc1">Remboursements</td>`
+        +`<td class="l gc2"><span class="gfx">amortie sur ${bphIn(H.dette_dureeResiduelle,"hBP('dette_dureeResiduelle',this.value,1)","ans")} &middot; taux ${bphIn(+(H.dette_taux*100).toFixed(2),"hBP('dette_taux',this.value,100)","%",44)}</span></td>`
+        +`<td class="reelc"></td>`+AP.map(a=>`<td>${bphM(-P.dette[a].remboursement,"color:#c0392b")}</td>`).join("")+`</tr>`
+      +`<tr class="grp"><td class="l gc1">Nouveaux emprunts</td><td class="gc2"></td><td class="reelc"></td>`+AP.map(()=>`<td></td>`).join("")+`</tr>`
+      +`<tr><td class="l gc1">Montant tiré dans l'exercice</td>`
+        +`<td class="l gc2"><span class="gfx">taux ${bphIn(+(H.emprunt_taux*100).toFixed(2),"hBP('emprunt_taux',this.value,100)","%",44)} &middot; sur ${bphIn(H.emprunt_duree,"hBP('emprunt_duree',this.value,1)","ans")}</span></td>`
+        +`<td class="reelc"></td>`
+        +IDX.map(i=>`<td><input class="gcell gin num" value="${mAmt(Math.round((H.nouveauxEmprunts[i]||0)*u.f*100)/100)}" oninput="mSep(this)" onchange="hBPa('nouveauxEmprunts',${i},this.value,${u.f})"></td>`).join("")+`</tr>`
+      +`<tr class="gres"><td class="l gc1"><div class="gdrv"><span class="gop eq">=</span> Encours de dette à la clôture</div></td><td class="gc2"></td>`
+        +`<td class="reelc num">${fmt(detteH)}</td>`+AP.map(a=>`<td class="num">${fmt(P.bs.DETTE[a])}</td>`).join("")+`</tr>`
+      +`<tr><td class="l gc1">Charges d'intérêts</td><td class="gc2 mut">dette et découvert</td>`
+        +`<td class="reelc num">${fmt(v.RESULTAT_FIN[a1]<0?v.RESULTAT_FIN[a1]:0)}</td>`
+        +AP.map(a=>`<td>${bphM(P.pl.FRAIS_FIN[a])}</td>`).join("")+`</tr>`
+      +`<tr class="grp"><td class="l gc1">Trésorerie et découvert</td><td class="gc2"></td><td class="reelc"></td>`+AP.map(()=>`<td></td>`).join("")+`</tr>`
+      +`<tr><td class="l gc1">Découvert / ligne court terme tirée</td>`
+        +`<td class="l gc2"><span class="gfx">plancher ${bphIn(Math.round((H.seuilCash||0)*u.f*100)/100,`hBP('seuilCash',this.value,${u.f})`,u.lib,70)} &middot; taux ${bphIn(+((H.decouvert_taux||0.12)*100).toFixed(2),"hBP('decouvert_taux',this.value,100)","%",44)}</span></td>`
+        +`<td class="reelc"></td>`+AP.map(a=>`<td>${bphM(P.bs.LIGNE_CT[a],P.bs.LIGNE_CT[a]>0.5?"color:#c0392b":"")}</td>`).join("")+`</tr>`
+      +`<tr><td class="l gc1">Produits financiers</td>`
+        +`<td class="l gc2"><span class="gfx">${bphIn(Math.round(H.produitsFin_montant*u.f*100)/100,`hBP('produitsFin_montant',this.value,${u.f})`,u.lib+"/an",70)}</span></td>`
+        +`<td class="reelc num">${fmt(v.RESULTAT_FIN[a1]>0?v.RESULTAT_FIN[a1]:0)}</td>`
+        +AP.map(a=>`<td>${bphM(P.pl.PRODUITS_FIN[a])}</td>`).join("")+`</tr>`
+      +`<tr class="gtot"><td class="l gc1">Trésorerie nette à la clôture</td><td class="gc2"></td>`
+        +`<td class="reelc num">${fmt(v.TRESORERIE_NETTE[a1])}</td>`
+        +AP.map(a=>`<td class="num" style="color:${P.bs.TRESO[a]<0?"#c0392b":"var(--green)"};font-weight:750">${fmt(P.bs.TRESO[a])}</td>`).join("")+`</tr>`
+      +`<tr class="grp"><td class="l gc1">Distribution aux associés</td><td class="gc2"></td><td class="reelc"></td>`+AP.map(()=>`<td></td>`).join("")+`</tr>`
+      +`<tr><td class="l gc1">Dividendes versés</td>`
+        +`<td class="l gc2"><span class="gfx">${bphIn(+(H.dividendes_payout*100).toFixed(1),"hBP('dividendes_payout',this.value,100)","% du résultat net N&minus;1",44)}</span></td>`
+        +`<td class="reelc"></td>`+AP.map(a=>`<td>${bphM(P.tft[a].FN)}</td>`).join("")+`</tr>`;
+    return bphWrap("Financement","dette, trésorerie et distribution &middot; en "+u.suf,bphHead("Poste","Règle de projection",a1,AP),corps,
+      `Le <b>découvert</b> se tire tout seul dès que la trésorerie passe sous le plancher, et se rembourse dès qu'elle repasse au-dessus : il n'y a rien à saisir, c'est la variable de bouclage. Une ligne rouge signale les exercices où le plan ne tient que par ce découvert — c'est le premier point qu'un prêteur regardera.`);
+  }
+
+  /* ---------------- 7 · FISCALITÉ ---------------- */
+  function ongletFisc(){
+    const tef=a=>P.pl.EBT[a]>0?`<span class="gcell gcalc num">${(-P.pl.IS[a]/P.pl.EBT[a]*100).toFixed(1).replace(".",",")} %</span>`:`<span class="gcell gcalc num">&ndash;</span>`;
+    const corps=
+      `<tr><td class="l gc1">Résultat avant impôt</td><td class="gc2 mut">après charges financières</td>`
+        +`<td class="reelc num">${fmt(v.EBIT[a1]+v.RESULTAT_FIN[a1])}</td>`
+        +AP.map(a=>`<td>${bphM(P.pl.EBT[a])}</td>`).join("")+`</tr>`
+      +`<tr><td class="l gc1">Déficits reportables imputables</td>`
+        +`<td class="l gc2"><span class="gfx">stock ${bphIn(Math.round((H.reportDeficitaire||0)*u.f*100)/100,`hBP('reportDeficitaire',this.value,${u.f})`,u.lib,70)} &middot; report ${bphIn(H.reportDef_horizon||3,"hBP('reportDef_horizon',this.value,1)","ans")}</span></td>`
+        +`<td class="reelc"></td>`
+        +AP.map(a=>`<td>${bphM(P.pl.REPORT_DEF?(P.pl.REPORT_DEF[a]||0):0)}</td>`).join("")+`</tr>`
+      +`<tr><td class="l gc1">Impôt sur les sociétés</td>`
+        +`<td class="l gc2"><span class="gfx">${bphIn(+(H.is_taux*100).toFixed(2),"hBP('is_taux',this.value,100)","% du bénéfice imposable",52)}</span></td>`
+        +`<td class="reelc num">${fmt(v.IMPOTS[a1])}</td>`
+        +AP.map(a=>`<td>${bphM(P.pl.IS[a])}</td>`).join("")+`</tr>`
+      +`<tr><td class="l gc1">Impôt minimum forfaitaire <span class="mut">&middot; plancher</span></td>`
+        +`<td class="l gc2"><span class="gfx">${bphIn(+((H.imf_taux!==undefined?H.imf_taux:0.005)*100).toFixed(3),"hBP('imf_taux',this.value,100)","% du chiffre d'affaires",52)}</span></td>`
+        +`<td class="reelc"></td>`
+        +AP.map(a=>`<td>${bphM(-(H.imf_taux||0)*P.pl.CA[a])}</td>`).join("")+`</tr>`
+      +`<tr class="gres" style="font-style:italic"><td class="l gc1"><span class="mut" style="padding-left:16px">taux effectif d'imposition</span></td><td class="gc2"></td>`
+        +`<td class="reelc"></td>`+AP.map(a=>`<td>${tef(a)}</td>`).join("")+`</tr>`
+      +`<tr class="gtot"><td class="l gc1">Résultat net</td><td class="gc2"></td>`
+        +`<td class="reelc num">${fmt(v.RESULTAT_NET[a1])}</td>`
+        +AP.map(a=>`<td class="num v">${fmt(P.pl.RN[a])}</td>`).join("")+`</tr>`;
+    return bphWrap("Fiscalité","impôt et déficits reportables &middot; en "+u.suf,bphHead("Poste","Règle de projection",a1,AP),corps,
+      `L'impôt retenu est le <b>plus élevé</b> des deux : l'IS sur le bénéfice imposable, ou l'<b>impôt minimum forfaitaire</b> assis sur le chiffre d'affaires — ce dernier est dû même en exercice déficitaire. Les <b>déficits reportables</b> s'imputent sur les bénéfices futurs et <b>périment</b> après le nombre d'exercices indiqué (3 ans dans l'espace UEMOA / OHADA).`);
+  }
+
+  const corps={ca:ongletCA,marge:ongletMarge,fg:ongletFG,capex:ongletCapex,
+               bfr:ongletBfr,fin:ongletFin,fisc:ongletFisc}[SOUS_BPH]();
+  return barre+corps;
 }
 /* postes de frais généraux (mêmes codes que bp.js OPEX_STD / moteur SERVICES_EXT) */
 const BP_OPEX_STD=["AUTRES_ACHATS","SOUS_TRAITANCE","LOCATIONS","ENTRETIEN","ASSURANCES","PUBLICITE","TELECOM","FRAIS_BANCAIRES","HONORAIRES","PERSONNEL_EXT","TRANSPORTS","AUTRES_SERV_EXT","IMPOTS_TAXES","AUTRES_CHARGES"];
