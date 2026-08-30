@@ -1256,17 +1256,25 @@ function vueModele(){
             {k:"primes", lib:"Primes liées au capital",v:Pf.primes,cm:"prime d\'émission / d\'apport"},
             {k:"cca",    lib:"Comptes courants d\'associés",v:Pf.cca,cm:"quasi-fonds propres &middot; juridiquement une dette"},
             {k:"dette",  lib:"Emprunt à terme",v:Pf.dette,cm:"dette bancaire moyen / long terme"}];
+    /* LES DEUX COLONNES SE SAISISSENT, TOUJOURS. La version precedente n'affichait un champ
+       que sur la colonne « pilote » et attendait un CLIC sur l'autre pour la rendre saisissable :
+       affordance invisible — sur un montage saisi en montants, AUCUNE cellule de pourcentage ne
+       ressemblait a un champ. Desormais on tape ou on veut ; le style dit seulement laquelle des
+       deux decoule de l'autre aujourd'hui. */
     var celPct=function(L){
       var sol=(plugF===L.k), pil=(!sol&&PCTF[L.k]!=null&&PCTF[L.k]!=="");
-      if(sol)return '<span class="gcell gcalc num" title="Calculé : cette ligne absorbe le solde du montage">'+pcTx(L.v)+'</span>';
-      if(pil)return '<input class="gcell gin num" value="'+pcTx(L.v)+'" onchange="mFinPct(\''+L.k+'\',this.value)" title="Saisi : le montant en découle, et suivra vos investissements">';
-      return '<span class="gcell gcalc num" title="Calculé. Cliquer pour piloter cette ligne au pourcentage." onclick="mFinPct(\''+L.k+'\',\''+pcTx(L.v)+'\')">'+pcTx(L.v)+'</span>';
+      var ti=pil?"Saisi : le montant en decoule et suivra vos investissements"
+            :(sol?"Calcule — cette ligne absorbe le solde. Saisir un pourcentage ici la libere."
+                 :"Calcule a partir du montant. Saisir un pourcentage ici pilote la ligne en %.");
+      return '<input class="gcell '+(pil?'gin':'gder')+' num" value="'+pcTx(L.v)+'" onchange="mFinPct(\''+L.k+'\',this.value)" title="'+ti+'">';
     };
     var celMt=function(L){
       var sol=(plugF===L.k), pil=(!sol&&PCTF[L.k]!=null&&PCTF[L.k]!=="");
-      if(sol)return '<span class="gcell gcalc num" title="Calculé : cette ligne absorbe le solde du montage">'+gN(mtF(L.v))+'</span>';
-      if(pil)return '<span class="gcell gcalc num" title="Calculé à partir du pourcentage. Cliquer pour saisir un montant." onclick="mFinMt(\''+L.k+'\',\''+mtF(L.v)+'\')">'+gN(mtF(L.v))+'</span>';
-      return '<input class="gcell gin num" value="'+mAmt(mtF(L.v))+'" oninput="mSep(this)" onchange="mFinMt(\''+L.k+'\',this.value)" title="Saisi : le pourcentage en découle">';
+      var src=(!sol&&!pil);
+      var ti=src?"Saisi : le pourcentage en decoule"
+            :(sol?"Calcule — cette ligne absorbe le solde. Saisir un montant ici la libere."
+                 :"Calcule a partir du pourcentage. Saisir un montant ici fige la ligne.");
+      return '<input class="gcell '+(src?'gin':'gder')+' num" value="'+mAmt(mtF(L.v))+'" oninput="mSep(this)" onchange="mFinMt(\''+L.k+'\',this.value)" title="'+ti+'">';
     };
     var celSol=function(k){ return '<span class="gseg"><button class="'+(plugF===k?"on":"")+'" title="Cette ligne absorbe exactement le reste du besoin — le montage boucle" onclick="mFinSolde(\''+k+'\')">= solde</button></span>'; };
     var lgRow=function(L){
@@ -1296,9 +1304,10 @@ function vueModele(){
           :(ecart<0?'<b>Besoin non couvert</b> — le manque sera tiré sur la ligne de crédit, ou creusera le découvert'
                    :'<b>Excédent de financement</b> — il vient grossir la trésorerie d\'ouverture du plan'))+'</td></tr>'
       +'</tbody></table></div>'
-      +'<div class="gfoot"><span><b>Un cadre plein = vous saisissez ; une barre pointillée = l\'application calcule.</b> '
-      +'Saisir un pourcentage fixe la part et laisse le montant suivre les investissements ; saisir un montant fige le montant et laisse le pourcentage se recalculer. '
-      +'Cliquez une valeur calculée pour reprendre la main dessus. La ligne marquée <b>« = solde »</b> absorbe le reste et boucle le montage au franc près.</span></div></div>';
+      +'<div class="gfoot"><span><b>Tapez dans la colonne que vous voulez : les deux se saisissent.</b> '
+      +'Saisir un <b>pourcentage</b> fixe la part et laisse le montant suivre vos investissements ; saisir un <b>montant</b> fige le montant et laisse le pourcentage se recalculer. '
+      +'Le <b>liseré bleu</b> à gauche d&#39;une cellule signale la valeur qui découle de l&#39;autre aujourd&#39;hui &mdash; y taper suffit à reprendre la main. '
+      +'La ligne marquée <b>« = solde »</b> absorbe le reste et boucle le montage au franc près.</span></div></div>';
 
     /* préréglage rapide = l'ancien mode automatique, ramené à un seul champ */
     var cible=Math.round((f.partFP!=null?f.partFP:0.30)*100);
