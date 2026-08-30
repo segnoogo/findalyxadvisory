@@ -293,6 +293,10 @@ border-left:4px solid var(--orange)}
    une colonne beaucoup plus large qu'une cellule de texte : deux tableaux empiles ne
    s'alignaient plus des que l'un contenait des champs. Largeur fixe = colonnes identiques
    d'un tableau a l'autre, et assez large pour un montant en FCFA. */
+/* champ + unite : sans le suffixe, « 12,3 » ne se lit pas comme un taux */
+.gpair{display:inline-flex;align-items:center;gap:5px;justify-content:flex-end}
+.gpair input.gcell{width:74px}
+.gsuf{color:var(--muted);font-size:11.5px;font-weight:600}
 .gtab input.gcell{width:104px}
 .gcell.gder{border-color:#E6EAF2;border-left:3px solid #C7D2E4;background:#FBFCFE;color:var(--ink);cursor:text}
 .gcell.gder:hover{border-color:#B9C2D2;border-left-color:var(--pri);background:#fff}
@@ -11417,8 +11421,16 @@ function bphWrap(titre,soustitre,head,corps,note,actions){
 /* cellules : m = montant dans l'unité d'affichage, n = nombre brut */
 const bphM=(v,cls)=>`<span class="gcell gcalc num"${cls?` style="${cls}"`:""}>${fmt(v)}</span>`;
 const bphVide=()=>`<td class="reelc"></td>`;
+/* Nombre affiche dans un champ de saisie : separateur decimal FRANCAIS. « 12.3 » dans une
+   application en francais se lit mal — et se lit surtout comme autre chose qu'un taux.
+   numFR() accepte les deux a la ressaisie, l'aller-retour est donc sur. */
+function nFR(x,d){
+  var n=+x||0, s=(d==null)?String(n):n.toFixed(d);
+  if(s.indexOf('.')>=0) s=s.replace(/\.?0+$/,'');
+  return s.replace('.',',');
+}
 /* champ de saisie compact posé dans la colonne « Règle » */
-const bphIn=(val,fn,suf,w)=>`<input style="width:${w||46}px" value="${val}" onchange="${fn}">${suf?` ${suf}`:""}`;
+const bphIn=(val,fn,suf,w,amt)=>`<input style="width:${w||46}px" value="${amt?mAmt(val):((typeof val==="number")?nFR(val):val)}"${amt?' oninput="mSep(this)"':""} onchange="${fn}">${suf?` ${suf}`:""}`;
 
 function vueBPHyp(H,P){
   const A0=ETATS.annees,a1=A0[A0.length-1],v=ETATS.v;
@@ -11442,9 +11454,9 @@ function vueBPHyp(H,P){
         : `Le chiffre d'affaires du dernier exercice réel est reconduit avec un taux par année. Simple, mais il mélange effet volume et effet prix : passez en <b>volumes &times; prix</b> si votre activité se pilote en quantités (tonnes, élèves, chambres, abonnés…) ou si un prêteur va challenger vos hypothèses de tarif.`}</div>`;
     if(volPrix) return methode+tableRevenusBP(H);
     /* mode taux de croissance : une grille, taux saisi et CA qui en découle */
-    const corps=`<tr><td class="l gc1">Taux de croissance</td><td class="l gc2 mut">appliqué au chiffre d'affaires de l'année précédente</td>`
+    const corps=`<tr><td class="l gc1">Taux de croissance <span class="mut">&middot; % par an</span></td><td class="l gc2 mut">appliqué au chiffre d'affaires de l'année précédente</td>`
       +`<td class="reelc"></td>`
-      +IDX.map(i=>`<td><input class="gcell gin num" value="${+((H.caCroiss[i]||0)*100).toFixed(1)}" onchange="hBPa('caCroiss',${i},this.value,100)"></td>`).join("")+`</tr>`
+      +IDX.map(i=>`<td><span class="gpair"><input class="gcell gin num" value="${nFR((H.caCroiss[i]||0)*100,1)}" onchange="hBPa('caCroiss',${i},this.value,100)"><span class="gsuf">%</span></span></td>`).join("")+`</tr>`
       +`<tr class="gtot"><td class="l gc1">Chiffre d'affaires</td><td class="gc2"></td>`
       +`<td class="reelc num">${fmt(v.CA[a1])}</td>`
       +AP.map(a=>`<td class="num v">${fmt(P.pl.CA[a])}</td>`).join("")+`</tr>`;
@@ -11479,7 +11491,7 @@ function vueBPHyp(H,P){
         +`<td class="reelc num">${fmt(v.OPEX[a1])}</td>`
         +AP.map(a=>`<td>${bphM(P.pl.OPEX_TOTAL[a])}</td>`).join("")+`</tr>`
       +`<tr><td class="l gc1">Autres produits et subventions</td>`
-        +`<td class="l gc2"><span class="gfx">an 1 : ${bphIn(Math.round(H.autresProd_montant*u.f*100)/100,`hBP('autresProd_montant',this.value,${u.f})`,u.lib,70)} puis ${bphIn(+(H.autresProd_croiss*100).toFixed(1),"hBP('autresProd_croiss',this.value,100)","%/an")}</span></td>`
+        +`<td class="l gc2"><span class="gfx">an 1 : ${bphIn(Math.round(H.autresProd_montant*u.f*100)/100,`hBP('autresProd_montant',this.value,${u.f})`,u.lib,70,true)} puis ${bphIn(+(H.autresProd_croiss*100).toFixed(1),"hBP('autresProd_croiss',this.value,100)","%/an")}</span></td>`
         +`<td class="reelc num">${fmt(v.AUTRES_PROD[a1])}</td>`
         +AP.map(a=>`<td>${bphM(P.pl.AUTRES_PROD[a])}</td>`).join("")+`</tr>`
       +`<tr class="gtot"><td class="l gc1">EBITDA</td><td class="gc2"></td>`
@@ -11562,7 +11574,7 @@ function vueBPHyp(H,P){
         +`<td class="l gc2"><span class="gfx">DIO ${bphIn(Math.round(H.dio),"hBP('dio',this.value,1)","jours de coûts HT")}</span></td>`
         +`<td class="reelc num">${fmt(v.STOCKS[a1])}</td>`+AP.map(a=>`<td>${bphM(P.bs.STOCKS[a])}</td>`).join("")+`</tr>`
       +`<tr><td class="l gc1">Autres créances <span class="mut">&middot; hors exploitation</span></td>`
-        +`<td class="l gc2"><span class="gfx">figées à ${bphIn(Math.round(H.autresCreances_fixe*u.f*100)/100,`hBP('autresCreances_fixe',this.value,${u.f})`,u.lib,70)}</span></td>`
+        +`<td class="l gc2"><span class="gfx">figées à ${bphIn(Math.round(H.autresCreances_fixe*u.f*100)/100,`hBP('autresCreances_fixe',this.value,${u.f})`,u.lib,70,true)}</span></td>`
         +`<td class="reelc num">${fmt(v.AUTRES_CREANCES[a1]+v.AVANCES_FRS[a1]+v.HAO_ACTIF[a1])}</td>`
         +AP.map(a=>`<td>${bphM(P.bs.AUTRES_CREANCES[a])}</td>`).join("")+`</tr>`
       +`<tr class="grp"><td class="l gc1">Passif circulant</td><td class="gc2"></td><td class="reelc"></td>`+AP.map(()=>`<td></td>`).join("")+`</tr>`
@@ -11574,7 +11586,7 @@ function vueBPHyp(H,P){
         +`<td class="reelc num">${fmt(v.DETTES_SOCIALES[a1]+v.DETTES_FISCALES[a1])}</td>`
         +AP.map(a=>`<td>${bphM(P.bs.DETTES_FISC_SOC[a])}</td>`).join("")+`</tr>`
       +`<tr><td class="l gc1">Autres dettes <span class="mut">&middot; hors exploitation</span></td>`
-        +`<td class="l gc2"><span class="gfx">figées à ${bphIn(Math.round(H.autresDettes_fixe*u.f*100)/100,`hBP('autresDettes_fixe',this.value,${u.f})`,u.lib,70)}</span></td>`
+        +`<td class="l gc2"><span class="gfx">figées à ${bphIn(Math.round(H.autresDettes_fixe*u.f*100)/100,`hBP('autresDettes_fixe',this.value,${u.f})`,u.lib,70,true)}</span></td>`
         +`<td class="reelc num">${fmt(v.AUTRES_DETTES[a1]+v.CLIENTS_AVANCES[a1]+v.HAO_PASSIF[a1])}</td>`
         +AP.map(a=>`<td>${bphM(P.bs.AUTRES_DETTES[a])}</td>`).join("")+`</tr>`
       +`<tr class="gtot"><td class="l gc1">Besoin en fonds de roulement</td><td class="gc2"></td>`
@@ -11607,10 +11619,10 @@ function vueBPHyp(H,P){
         +AP.map(a=>`<td>${bphM(P.pl.FRAIS_FIN[a])}</td>`).join("")+`</tr>`
       +`<tr class="grp"><td class="l gc1">Trésorerie et découvert</td><td class="gc2"></td><td class="reelc"></td>`+AP.map(()=>`<td></td>`).join("")+`</tr>`
       +`<tr><td class="l gc1">Découvert / ligne court terme tirée</td>`
-        +`<td class="l gc2"><span class="gfx">plancher ${bphIn(Math.round((H.seuilCash||0)*u.f*100)/100,`hBP('seuilCash',this.value,${u.f})`,u.lib,70)} &middot; taux ${bphIn(+((H.decouvert_taux||0.12)*100).toFixed(2),"hBP('decouvert_taux',this.value,100)","%",44)}</span></td>`
+        +`<td class="l gc2"><span class="gfx">plancher ${bphIn(Math.round((H.seuilCash||0)*u.f*100)/100,`hBP('seuilCash',this.value,${u.f})`,u.lib,70,true)} &middot; taux ${bphIn(+((H.decouvert_taux||0.12)*100).toFixed(2),"hBP('decouvert_taux',this.value,100)","%",44)}</span></td>`
         +`<td class="reelc"></td>`+AP.map(a=>`<td>${bphM(P.bs.LIGNE_CT[a],P.bs.LIGNE_CT[a]>0.5?"color:#c0392b":"")}</td>`).join("")+`</tr>`
       +`<tr><td class="l gc1">Produits financiers</td>`
-        +`<td class="l gc2"><span class="gfx">${bphIn(Math.round(H.produitsFin_montant*u.f*100)/100,`hBP('produitsFin_montant',this.value,${u.f})`,u.lib+"/an",70)}</span></td>`
+        +`<td class="l gc2"><span class="gfx">${bphIn(Math.round(H.produitsFin_montant*u.f*100)/100,`hBP('produitsFin_montant',this.value,${u.f})`,u.lib+"/an",70,true)}</span></td>`
         +`<td class="reelc num">${fmt(v.RESULTAT_FIN[a1]>0?v.RESULTAT_FIN[a1]:0)}</td>`
         +AP.map(a=>`<td>${bphM(P.pl.PRODUITS_FIN[a])}</td>`).join("")+`</tr>`
       +`<tr class="gtot"><td class="l gc1">Trésorerie nette à la clôture</td><td class="gc2"></td>`
@@ -11632,7 +11644,7 @@ function vueBPHyp(H,P){
         +`<td class="reelc num">${fmt(v.EBIT[a1]+v.RESULTAT_FIN[a1])}</td>`
         +AP.map(a=>`<td>${bphM(P.pl.EBT[a])}</td>`).join("")+`</tr>`
       +`<tr><td class="l gc1">Déficits reportables imputables</td>`
-        +`<td class="l gc2"><span class="gfx">stock ${bphIn(Math.round((H.reportDeficitaire||0)*u.f*100)/100,`hBP('reportDeficitaire',this.value,${u.f})`,u.lib,70)} &middot; report ${bphIn(H.reportDef_horizon||3,"hBP('reportDef_horizon',this.value,1)","ans")}</span></td>`
+        +`<td class="l gc2"><span class="gfx">stock ${bphIn(Math.round((H.reportDeficitaire||0)*u.f*100)/100,`hBP('reportDeficitaire',this.value,${u.f})`,u.lib,70,true)} &middot; report ${bphIn(H.reportDef_horizon||3,"hBP('reportDef_horizon',this.value,1)","ans")}</span></td>`
         +`<td class="reelc"></td>`
         +AP.map(a=>`<td>${bphM(P.pl.REPORT_DEF?(P.pl.REPORT_DEF[a]||0):0)}</td>`).join("")+`</tr>`
       +`<tr><td class="l gc1">Impôt sur les sociétés</td>`
