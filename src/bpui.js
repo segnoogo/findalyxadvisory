@@ -464,6 +464,20 @@ function mCoutVal(ci,val){var x=numFR(val);if(x!==null)mCoutsArr()[ci].val=x;sau
 function mAddFixe(){assurerModele().chargesFixes.push({name:"Charge fixe",montant:0,g:0});sauverDossier();rendre();}
 function mDelFixe(i){assurerModele().chargesFixes.splice(i,1);sauverDossier();rendre();}
 function mFixe(i,champ,val){var c=assurerModele().chargesFixes[i];if(champ==='name')c.name=val;else if(champ==='personnel')c.personnel=val;else{var x=numFR(val);if(x!==null)c[champ]=x;}sauverDossier();rendre();}
+/* Une charge fixe accepte, comme un inducteur, soit « an 1 + croissance », soit une
+   valeur par année (le moteur lit déjà c.mode / c.vals via valAnnee). */
+function mFixeMode(i,mode){var M=assurerModele(),c=M.chargesFixes[i],N=M.nb||5;
+  if(mode==='yearly'&&c.mode!=='yearly'){c.mode='yearly';c.vals=[];
+    for(var k=0;k<N;k++)c.vals.push(Math.round((+c.montant||0)*Math.pow(1+(+c.g||0)/100,k)));}
+  else if(mode!=='yearly'){c.mode='grow';if(c.vals&&c.vals.length)c.montant=c.vals[0];}
+  sauverDossier();rendre();}
+function mFixeYv(i,k,val){var c=assurerModele().chargesFixes[i];if(!c.vals)c.vals=[];
+  var x=numFR(val);if(x!==null)c.vals[k]=x;sauverDossier();rendre();}
+function mFixeFill(i){var M=assurerModele(),c=M.chargesFixes[i],N=M.nb||5;
+  if(c.mode!=='yearly')return;var v=valSerie(c.vals,0);c.vals=[];
+  for(var k=0;k<N;k++)c.vals.push(v);sauverDossier();rendre();}
+function gFixeVal(c,i){ if(c&&c.mode==='yearly')return valSerie(c.vals,i);
+  return (+((c&&c.montant))||0)*Math.pow(1+(+((c&&c.g))||0)/100,i); }
 /* personnel granulaire : postes {poste, effectif, salaireMensuel, g} → total charges de personnel */
 function mPersArr(){var M=assurerModele();if(!M.personnel)M.personnel=[];return M.personnel;}
 function mAddPoste(){mPersArr().push({poste:"Nouveau poste",effectif:1,salaireMensuel:200000,g:3});sauverDossier();rendre();}
@@ -852,6 +866,120 @@ function mTableCouts(M,P){
     +'<div class="gwrap"><div class="gscroll"><table class="gtab"><thead>'+head+'</thead><tbody>'+body+'</tbody></table></div>'
     +'<div class="gfoot"><span><b>% du CA</b> : part du chiffre d\'affaires &middot; <b>coût unitaire</b> : montant &times; volume vendu &middot; <b>inducteurs</b> : chaîne indépendante du CA.</span></div></div>';
 }
+/* =====================================================================
+   CHARGES FIXES / PERSONNEL / INVESTISSEMENTS / BFR — mêmes grilles que les
+   revenus : une ligne par poste, une COLONNE PAR ANNÉE, pour voir la
+   projection pendant qu'on saisit. Montants en FCFA (comme la saisie) ;
+   seule la projection du BFR est en unité d'affichage (elle vient du bilan).
+   ===================================================================== */
+function gHead(N,nc,lib1,lib2){
+  var h='<tr><th class="l gc1">'+lib1+'</th>'+(G_FX?'<th class="l gc2">'+lib2+'</th>':'');
+  for(var i=0;i<N;i++)h+='<th>An '+(i+1)+(i<nc?' · constr.':'')+'</th>';
+  return h+'</tr>';
+}
+function mTableFixes(M){
+  var N=M.nb||5, nc=(M.dureeConstruction||0), CF=(M.chargesFixes||[]), i, tot=[];
+  for(i=0;i<N;i++)tot.push(0);
+  var body=CF.length?'':'<tr><td class="l gc1" colspan="'+(N+(G_FX?2:1))+'" style="color:var(--muted)">Aucune charge fixe.</td></tr>';
+  CF.forEach(function(c,ci){
+    var yearly=(c.mode==='yearly'), cells='';
+    for(var k=0;k<N;k++){
+      var v=gFixeVal(c,k); tot[k]+=v;
+      cells+=(yearly||k===0)
+        ? '<td><input class="gcell gin num" value="'+mAmt(v)+'" oninput="mSep(this)" onchange="'
+          +(yearly?('mFixeYv('+ci+','+k+',this.value)'):('mFixe('+ci+',\'montant\',this.value)'))+'"></td>'
+        : '<td><span class="gcell gcalc num" title="Calculé depuis l&#39;an 1 — cliquer pour saisir année par année" onclick="mFixeMode('+ci+',\'yearly\')">'+gN(v)+'</span></td>';
+    }
+    var fx=yearly
+      ? '<span class="gfx">année par année <button class="gx" title="Recopier l&#39;an 1" onclick="mFixeFill('+ci+')">&#8594;</button><button class="gx" title="Repasser en croissance" onclick="mFixeMode('+ci+',\'grow\')">&#8634;</button></span>'
+      : '<span class="gfx">an 1, puis <input value="'+(c.g||0)+'" onchange="mFixe('+ci+',\'g\',this.value)"> %/an</span>';
+    body+='<tr><td class="l gc1"><div class="ghead"><input class="gnm big" value="'+esc(c.name||'')+'" onchange="mFixe('+ci+',\'name\',this.value)">'
+      +'<button class="gx" title="Retirer" onclick="mDelFixe('+ci+')">&#10005;</button></div></td>'
+      +(G_FX?'<td class="l gc2">'+fx+'</td>':'')+cells+'</tr>';
+  });
+  body+='<tr class="gtot"><td class="l gc1">Total frais généraux</td>'+(G_FX?'<td class="gc2"></td>':'')
+    +tot.map(function(v){return '<td class="num v">'+gN(v)+'</td>';}).join('')+'</tr>';
+  return '<div class="gbar"><span class="gt">Frais généraux</span><span class="mut">hors personnel · en FCFA</span>'
+    +'<span class="push"></span><button class="btn sm primary" onclick="mAddFixe()">+ Charge</button></div>'
+    +'<div class="gwrap"><div class="gscroll"><table class="gtab"><thead>'+gHead(N,nc,'Poste','Évolution')+'</thead><tbody>'+body+'</tbody></table></div>'
+    +'<div class="gfoot"><span>Cliquer une valeur calculée la passe en saisie année par année (utile pour un loyer qui change à une date connue).</span></div></div>';
+}
+function mTablePersonnel(M){
+  var N=M.nb||5, nc=(M.dureeConstruction||0), PE=(M.personnel||[]), i, tot=[], eff=0;
+  for(i=0;i<N;i++)tot.push(0);
+  var body=PE.length?'':'<tr><td class="l gc1" colspan="'+(N+(G_FX?2:1))+'" style="color:var(--muted)">Aucun poste.</td></tr>';
+  PE.forEach(function(p,pi){
+    var cells=''; eff+=(+p.effectif||0);
+    for(var k=0;k<N;k++){
+      var v=(+p.effectif||0)*(+p.salaireMensuel||0)*12*Math.pow(1+(+p.g||0)/100,k); tot[k]+=v;
+      cells+='<td><span class="gcell gcalc num">'+gN(v)+'</span></td>';
+    }
+    body+='<tr><td class="l gc1"><div class="ghead"><input class="gnm big" value="'+esc(p.poste||'')+'" onchange="mPoste('+pi+',\'poste\',this.value)">'
+      +'<button class="gx" title="Retirer" onclick="mDelPoste('+pi+')">&#10005;</button></div></td>'
+      +(G_FX?'<td class="l gc2"><span class="gfx"><input style="width:44px" value="'+(p.effectif||0)+'" onchange="mPoste('+pi+',\'effectif\',this.value)" title="Effectif"> pers. <span class="xx">&times;</span> <input style="width:78px" value="'+mAmt(p.salaireMensuel||0)+'" oninput="mSep(this)" onchange="mPoste('+pi+',\'salaireMensuel\',this.value)" title="Salaire mensuel"> F/mois <span class="xx">&times;</span> 12 <span class="mut">· +</span><input style="width:38px" value="'+(p.g||0)+'" onchange="mPoste('+pi+',\'g\',this.value)"> %/an</span></td>':'')
+      +cells+'</tr>';
+  });
+  body+='<tr class="gtot"><td class="l gc1">Total personnel <span class="mut" style="font-weight:400">· '+eff+' pers.</span></td>'+(G_FX?'<td class="gc2"></td>':'')
+    +tot.map(function(v){return '<td class="num v">'+gN(v)+'</td>';}).join('')+'</tr>';
+  return '<div class="gbar" style="margin-top:18px"><span class="gt">Charges de personnel</span><span class="mut">par poste · en FCFA</span>'
+    +'<span class="push"></span><button class="btn sm primary" onclick="mAddPoste()">+ Poste</button></div>'
+    +'<div class="gwrap"><div class="gscroll"><table class="gtab"><thead>'+gHead(N,nc,'Poste','Effectif × salaire × 12')+'</thead><tbody>'+body+'</tbody></table></div>'
+    +'<div class="gfoot"><span>Le total alimente la ligne « Charges du personnel », comprise dans les frais généraux du P&amp;L.</span></div></div>';
+}
+function mTableCapex(M){
+  var N=M.nb||5, nc=(M.dureeConstruction||0), CX=(M.capex||[]), i, tot=[], amo=[];
+  for(i=0;i<N;i++){tot.push(0);amo.push(0);}
+  var body=CX.length?'':'<tr><td class="l gc1" colspan="'+(N+(G_FX?2:1))+'" style="color:var(--muted)">Aucun investissement.</td></tr>';
+  CX.forEach(function(c,ci){
+    var an=Math.max(1,Math.round(+c.annee||1)), mt=(+c.montant||0), du=Math.max(1,Math.round(+c.duree||5)), cells='';
+    for(var k=0;k<N;k++){
+      var py=k+1, v=(py===an)?mt:0; tot[k]+=v;
+      /* amortissement linéaire à partir de la mise en service (fin de construction) */
+      var mes=Math.max(an,nc+1);
+      if(py>=mes&&py<mes+du) amo[k]+=mt/du;
+      cells+=(py===an)
+        ? '<td><input class="gcell gin num" value="'+mAmt(mt)+'" oninput="mSep(this)" onchange="mCapex('+ci+',\'montant\',this.value)"></td>'
+        : '<td><span class="gcell gcalc num" title="Investissement placé en an '+an+'">'+(v?gN(v):'&ndash;')+'</span></td>';
+    }
+    body+='<tr><td class="l gc1"><div class="ghead"><input class="gnm big" value="'+esc(c.name||'')+'" onchange="mCapex('+ci+',\'name\',this.value)">'
+      +'<button class="gx" title="Retirer" onclick="mDelCapex('+ci+')">&#10005;</button></div></td>'
+      +(G_FX?'<td class="l gc2"><span class="gfx">an <input style="width:38px" value="'+an+'" onchange="mCapex('+ci+',\'annee\',this.value)"> <span class="mut">· amorti sur</span> <input style="width:38px" value="'+du+'" onchange="mCapex('+ci+',\'duree\',this.value)"> ans</span></td>':'')
+      +cells+'</tr>';
+  });
+  body+='<tr class="gtot"><td class="l gc1">Total investi</td>'+(G_FX?'<td class="gc2"></td>':'')
+    +tot.map(function(v){return '<td class="num v">'+(v?gN(v):'&ndash;')+'</td>';}).join('')+'</tr>'
+    +'<tr class="gres"><td class="l gc1"><div class="gdrv"><span class="gop eq">=</span> Dotation aux amortissements</div></td>'
+    +(G_FX?'<td class="l gc2"><span class="gfx"><span class="gchip">linéaire</span> dès la mise en service</span></td>':'')
+    +amo.map(function(v){return '<td><span class="gcell gcalc num">'+(v?gN(v):'&ndash;')+'</span></td>';}).join('')+'</tr>';
+  return '<div class="gbar"><span class="gt">Investissements</span><span class="mut">CAPEX · en FCFA</span>'
+    +'<span class="push"></span><button class="btn sm primary" onclick="mAddCapex()">+ Investissement</button></div>'
+    +'<div class="gwrap"><div class="gscroll"><table class="gtab"><thead>'+gHead(N,nc,'Poste','Année · durée')+'</thead><tbody>'+body+'</tbody></table></div>'
+    +'<div class="gfoot"><span>Chaque investissement tombe dans son année ; l\'amortissement démarre à la mise en service (après la construction).</span></div></div>';
+}
+function mTableBfr(M,P){
+  var N=M.nb||5, nc=(M.dureeConstruction||0), A=P.annees, b=M.bfr||{}, u=uni();
+  function serie(cle,signe){ return A.map(function(a){ var v=((P.bs[cle]&&P.bs[cle][a])||0)*(signe||1);
+    return '<td><span class="gcell gcalc num">'+fmt(v)+'</span></td>'; }).join(''); }
+  var body=''
+    +'<tr><td class="l gc1"><div class="gdrv"><span class="gop">+</span> Créances clients</div></td>'
+      +(G_FX?'<td class="l gc2"><span class="gfx"><input value="'+(b.dso||0)+'" onchange="mSet(\'bfr.dso\',this.value,1)"> jours de CA <span class="mut">(DSO)</span></span></td>':'')
+      +serie('CLIENTS')+'</tr>'
+    +'<tr><td class="l gc1"><div class="gdrv"><span class="gop">+</span> Stocks</div></td>'
+      +(G_FX?'<td class="l gc2"><span class="gfx"><input value="'+(b.dio||0)+'" onchange="mSet(\'bfr.dio\',this.value,1)"> jours d\'achats <span class="mut">(DIO)</span></span></td>':'')
+      +serie('STOCKS')+'</tr>'
+    +'<tr><td class="l gc1"><div class="gdrv"><span class="gop">&minus;</span> Dettes fournisseurs</div></td>'
+      +(G_FX?'<td class="l gc2"><span class="gfx"><input value="'+(b.dpo||0)+'" onchange="mSet(\'bfr.dpo\',this.value,1)"> jours d\'achats <span class="mut">(DPO)</span></span></td>':'')
+      +serie('FOURNISSEURS')+'</tr>'
+    +'<tr class="gtot"><td class="l gc1">Besoin en fonds de roulement</td>'+(G_FX?'<td class="l gc2" style="font-size:11px;color:var(--muted)">'+u.lib+'</td>':'')
+      +A.map(function(a){return '<td class="num v">'+fmt((P.bs.BFR&&P.bs.BFR[a])||0)+'</td>';}).join('')+'</tr>'
+    +'<tr class="gres"><td class="l gc1"><div class="gdrv"><span class="gop eq">&Delta;</span> Variation <span class="mut" style="margin-left:5px">· ce qui pèse sur la trésorerie</span></div></td>'
+      +(G_FX?'<td class="gc2"></td>':'')
+      +A.map(function(a,i){ var v=((P.bs.BFR&&P.bs.BFR[a])||0)-(i?((P.bs.BFR&&P.bs.BFR[A[i-1]])||0):0);
+        return '<td><span class="gcell gcalc num" style="color:'+(v>0?'#c0392b':'#16904E')+'">'+fmt(-v)+'</span></td>'; }).join('')+'</tr>';
+  return '<div class="gbar"><span class="gt">Besoin en fonds de roulement</span><span class="mut">délais en jours · montants en '+u.lib+'</span></div>'
+    +'<div class="gwrap"><div class="gscroll"><table class="gtab"><thead>'+gHead(N,nc,'Poste','Délai')+'</thead><tbody>'+body+'</tbody></table></div>'
+    +'<div class="gfoot"><span>Le BFR n\'est pas une ligne du tableau de flux : sa <b>variation</b> se lit dans les activités opérationnelles. Une variation positive du BFR consomme de la trésorerie.</span></div></div>';
+}
 function mAddLigneTpl(tpl){ if(!tpl)return; var M=assurerModele();
   M.revenus.push({name:M_PRESETS[tpl].lab,tpl:tpl,rows:JSON.parse(JSON.stringify(M_PRESETS[tpl].rows)),prix:{val:1000,unit:"FCFA",g:2}});
   sauverDossier();rendre(); }
@@ -947,48 +1075,9 @@ function vueModele(){
       +'<button class="btn" onclick="mAddCout()">+ Ajouter un coût direct</button>'
       +'<div class="mut" style="margin-top:10px">Le taux d\'inflation (qui fait évoluer les coûts unitaires et les charges) se règle dans l\'onglet <b>Paramètres</b>.</div>';
   } else if(SOUS_MODELE==="fixe"){
-    var pers=(M.personnel||[]), persTot1=pers.reduce(function(s,p){return s+(+p.effectif||0)*(+p.salaireMensuel||0)*12;},0);
-    var fgTot1=(M.chargesFixes||[]).reduce(function(s,c){return s+(+c.montant||0);},0);
-    var effTot=pers.reduce(function(s,p){return s+(+p.effectif||0);},0);
-    corps='<div class="gbar"><span class="gt">Frais généraux</span><span class="mut">hors personnel</span>'
-      +'<span class="push"></span><button class="btn sm primary" onclick="mAddFixe()">+ Charge</button></div>'
-      +'<div class="gwrap"><div class="gscroll"><table class="gtab"><thead><tr>'
-      +'<th class="l">Poste</th><th>Montant / an</th><th>Croissance %/an</th><th></th></tr></thead><tbody>'
-      +(M.chargesFixes||[]).map(function(c,i){return '<tr><td class="l"><input class="gnm wide" value="'+esc(c.name)+'" onchange="mFixe('+i+',\'name\',this.value)"></td>'
-        +'<td><input class="gcell gin num" value="'+mAmt(c.montant||0)+'" oninput="mSep(this)" onchange="mFixe('+i+',\'montant\',this.value)"></td>'
-        +'<td><input class="gcell gin num" style="min-width:62px" value="'+(c.g||0)+'" onchange="mFixe('+i+',\'g\',this.value)"></td>'
-        +'<td><button class="gx" title="Retirer" onclick="mDelFixe('+i+')">&#10005;</button></td></tr>';}).join("")
-      +'<tr class="gtot"><td class="l">Total frais généraux (an 1)</td><td class="num v">'+fmt(fgTot1/1000)+' '+uni().suf+'</td><td></td><td></td></tr>'
-      +'</tbody></table></div></div>'
-      +'<div class="gbar" style="margin-top:18px"><span class="gt">Charges de personnel</span><span class="mut">par poste</span>'
-      +'<span class="push"></span><button class="btn sm primary" onclick="mAddPoste()">+ Poste</button></div>'
-      +'<div class="gwrap"><div class="gscroll"><table class="gtab"><thead><tr><th class="l">Poste</th><th>Effectif</th>'
-      +'<th>Salaire mensuel (FCFA)</th><th>Croissance %/an</th><th>Charge / an</th><th></th></tr></thead><tbody>'
-      +pers.map(function(p,i){var ann=(+p.effectif||0)*(+p.salaireMensuel||0)*12;
-        return '<tr><td class="l"><input class="gnm wide" value="'+esc(p.poste||"")+'" onchange="mPoste('+i+',\'poste\',this.value)"></td>'
-        +'<td><input class="gcell gin num" style="min-width:62px" value="'+(p.effectif||0)+'" onchange="mPoste('+i+',\'effectif\',this.value)"></td>'
-        +'<td><input class="gcell gin num" value="'+mAmt(p.salaireMensuel||0)+'" oninput="mSep(this)" onchange="mPoste('+i+',\'salaireMensuel\',this.value)"></td>'
-        +'<td><input class="gcell gin num" style="min-width:62px" value="'+(p.g||0)+'" onchange="mPoste('+i+',\'g\',this.value)"></td>'
-        +'<td><span class="gcell gcalc num">'+fmt(ann/1000)+'</span></td>'
-        +'<td><button class="gx" title="Retirer" onclick="mDelPoste('+i+')">&#10005;</button></td></tr>';}).join("")
-      +'<tr class="gtot"><td class="l">Total (an 1)</td><td class="num">'+effTot+'</td><td></td><td></td>'
-      +'<td class="num v">'+fmt(persTot1/1000)+' '+uni().suf+'</td><td></td></tr>'
-      +'</tbody></table></div>'
-      +'<div class="gfoot"><span>Effectif × salaire mensuel × 12 = charge annuelle. Le total alimente la ligne « Charges du personnel », comprise dans les frais généraux du P&amp;L.</span></div></div>';
+    corps=mTableFixes(M)+mTablePersonnel(M);
   } else if(SOUS_MODELE==="capex"){
-    var cxTot=(M.capex||[]).reduce(function(s,c){return s+(+c.montant||0);},0);
-    corps='<div class="gbar"><span class="gt">Investissements</span><span class="mut">CAPEX</span>'
-      +'<span class="push"></span><button class="btn sm primary" onclick="mAddCapex()">+ Investissement</button></div>'
-      +'<div class="gwrap"><div class="gscroll"><table class="gtab"><thead><tr><th class="l">Poste</th><th>Montant</th>'
-      +'<th>Durée (ans)</th><th>Année (1 = 1ʳᵉ)</th><th></th></tr></thead><tbody>'
-      +(M.capex||[]).map(function(c,i){return '<tr><td class="l"><input class="gnm wide" value="'+esc(c.name||'')+'" onchange="mCapex('+i+',\'name\',this.value)"></td>'
-        +'<td><input class="gcell gin num" value="'+mAmt(c.montant||0)+'" oninput="mSep(this)" onchange="mCapex('+i+',\'montant\',this.value)"></td>'
-        +'<td><input class="gcell gin num" style="min-width:62px" value="'+(c.duree||5)+'" onchange="mCapex('+i+',\'duree\',this.value)"></td>'
-        +'<td><input class="gcell gin num" style="min-width:62px" value="'+(c.annee||1)+'" onchange="mCapex('+i+',\'annee\',this.value)"></td>'
-        +'<td><button class="gx" title="Retirer" onclick="mDelCapex('+i+')">&#10005;</button></td></tr>';}).join("")
-      +'<tr class="gtot"><td class="l">Total des investissements</td><td class="num v">'+fmt(cxTot/1000)+' '+uni().suf+'</td><td></td><td></td><td></td></tr>'
-      +'</tbody></table></div>'
-      +'<div class="gfoot"><span>Amortissement linéaire par poste, à partir de sa mise en service (fin de construction). Année 1 = 1ʳᵉ année du plan ; pendant la construction, l\'investissement est financé mais pas encore amorti.</span></div></div>';
+    corps=mTableCapex(M);
   } else if(SOUS_MODELE==="fin"){
     var f=M.financement||{}, e=f.emprunt||{}, Pf=P.financement, auto=(f.mode==="auto");
     var modeSeg='<div class="hyp-l"><span>Mode de financement</span><span class="segvue">'
@@ -1137,11 +1226,7 @@ function vueModele(){
         +'<div class="mut" style="margin-top:8px">Le financement est tiré en année 1 ; en cas de construction, les intérêts courent et sont capitalisés dans la dette (IDC). Le CCA est une dette financière (quasi-fonds propres) : inclus dans la dette nette de la valorisation, reclassable dans le pont. La trésorerie d\'ouverture finance une partie du démarrage ; les <b>créances et dettes d\'ouverture ne figurent pas dans ce montage</b> — elles vivent dans le bilan et la trésorerie du plan (encaissement / règlement étalés), pas dans le besoin initial.</div></div>';
     }
   } else if(SOUS_MODELE==="bfr"){
-    var b=M.bfr;
-    corps='<div class="card"><div class="sec-titre" style="margin-top:0">Besoin en fonds de roulement (en jours)</div>'
-      +'<div class="hyp-g"><span>Délai clients (DSO)</span><input class="sel" value="'+(b.dso||0)+'" onchange="mSet(\'bfr.dso\',this.value,1)"><span class="suf">jours</span></div>'
-      +'<div class="hyp-g"><span>Rotation stocks (DIO)</span><input class="sel" value="'+(b.dio||0)+'" onchange="mSet(\'bfr.dio\',this.value,1)"><span class="suf">jours</span></div>'
-      +'<div class="hyp-g"><span>Délai fournisseurs (DPO)</span><input class="sel" value="'+(b.dpo||0)+'" onchange="mSet(\'bfr.dpo\',this.value,1)"><span class="suf">jours</span></div></div>';
+    corps=mTableBfr(M,P);
   } else if(SOUS_MODELE==="param"){
     corps='<div class="card"><div class="sec-titre" style="margin-top:0">Paramètres du modèle</div>'
       +'<div class="hyp-g"><span>Nom de la société</span><input class="sel" value="'+esc(DOSSIER.societe||"")+'" onchange="mRenommer(this.value)"><span class="suf"></span></div>'
