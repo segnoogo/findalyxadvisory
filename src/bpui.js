@@ -593,6 +593,7 @@ function mFinReset(){
   var f=assurerModele().financement||{};
   f.capital=0; f.primes=0; f.apports=0; f.subvention=0;
   if(!f.emprunt)f.emprunt={}; f.emprunt.montant=0;
+  f.pct={}; f.plug=""; f.mode="manuel";      /* tout redevient saisi, plus aucun pilotage en % ni solde */
   sauverDossier(); rendre(); if(typeof toast==='function')toast("Montage remis à zéro");
 }
 function mFinRedim(){
@@ -602,8 +603,84 @@ function mFinRedim(){
   f.capital=Math.round(cx*0.20/1e6)*1e6;
   if(!f.emprunt)f.emprunt={};
   f.emprunt.montant=Math.round(cx*0.45/1e6)*1e6;
+  f.pct={}; f.plug="cca"; f.mode="manuel";   /* montants imposés, le CCA absorbe le solde */
   sauverDossier(); rendre();
   if(typeof toast==='function')toast("Re-dimensionné sur "+fmt(cx/1000)+" "+uni().suf+" d'investissements : 20 % fonds propres, 45 % emprunt");
+}
+/* =====================================================================
+   MONTAGE FINANCIER — % ET MONTANT SONT LA MEME CHOSE, VUE DES DEUX COTES
+   Chaque ressource se pilote indifféremment par son POURCENTAGE du besoin
+   ou par son MONTANT : saisir l'un recalcule l'autre. La ligne saisie est
+   la source (cadre plein), l'autre est calculée (barre pointillée).
+   Une ligne peut être désignée « solde » : elle absorbe exactement le reste.
+   ===================================================================== */
+var M_FINCLE={capital:"capital",primes:"primes",cca:"apports"};
+function mFinF(){
+  var M=assurerModele(); if(!M.financement)M.financement={};
+  var f=M.financement;
+  /* Un dossier enregistré sous l'ancien mode « automatique » n'a que partFP. Au premier
+     geste sur cet écran on le convertit en pourcentages par ligne — conversion NEUTRE :
+     le moteur calcule exactement la même chose pour {mode:auto,partFP} et pour
+     {pct:{capital:partFP,dette:1-partFP}}. Sans elle, les montants sauteraient sur les
+     valeurs pré-remplies du modèle par défaut au lieu de rester où ils sont. */
+  if(f.mode==="auto"&&!f.pct){
+    var pf=(f.partFP!=null?+f.partFP:0.30);
+    f.pct={capital:pf,primes:0,cca:0,dette:1-pf};
+    f.plug=""; f.mode="manuel";
+  }
+  return f;
+}
+function mFinPct(k,val){                 /* saisir un % → la ligne devient pilotée par le pourcentage */
+  var v=numFR(val); if(v===null)return;
+  var f=mFinF(); if(!f.pct)f.pct={};
+  f.pct[k]=v/100; f.mode="manuel";
+  if(f.plug===k)f.plug="";               /* on ne peut pas être à la fois « solde » et piloté */
+  sauverDossier(); rendre();
+}
+function mFinMt(k,val){                  /* saisir un montant → le pourcentage redevient calculé */
+  var v=numFR(val); if(v===null)return;
+  var f=mFinF();
+  if(f.pct)delete f.pct[k];
+  f.mode="manuel";
+  if(f.plug===k)f.plug="";
+  if(k==="dette"){ if(!f.emprunt)f.emprunt={}; f.emprunt.montant=v; }
+  else f[M_FINCLE[k]]=v;
+  sauverDossier(); rendre();
+}
+function mFinSolde(k){                   /* désigne (ou libère) la ligne qui absorbe le reste */
+  var f=mFinF();
+  f.plug=(f.plug===k)?"":k; f.mode="manuel";
+  if(f.pct)delete f.pct[k];
+  sauverDossier(); rendre();
+}
+/* Bascule GLOBALE — l'ancien couple « automatique / manuel » : tout en %, ou tout en montants.
+   Ce n'est plus un mode exclusif, seulement une application en bloc du réglage par ligne. */
+function mFinToutPct(){
+  var M=assurerModele(), F=projeterModele(M).financement||{}, f=mFinF();
+  var B=F.besoinBase||0;
+  if(!(B>0)){ if(typeof toast==='function')toast("Renseignez d'abord vos investissements"); return; }
+  f.pct={capital:(F.capital||0)/B,primes:(F.primes||0)/B,cca:(F.cca||0)/B,dette:(F.dette||0)/B};
+  f.plug=""; f.mode="manuel"; sauverDossier(); rendre();
+  if(typeof toast==='function')toast("Montage piloté en pourcentage : les montants suivront désormais vos investissements");
+}
+function mFinToutMt(){
+  var M=assurerModele(), F=projeterModele(M).financement||{}, f=mFinF();
+  f.capital=Math.round((F.capital||0)*1000); f.primes=Math.round((F.primes||0)*1000);
+  f.apports=Math.round((F.cca||0)*1000);
+  if(!f.emprunt)f.emprunt={}; f.emprunt.montant=Math.round((F.dette||0)*1000);
+  f.pct={}; f.plug=""; f.mode="manuel"; sauverDossier(); rendre();
+  if(typeof toast==='function')toast("Montants figés : ils ne bougeront plus si les investissements changent");
+}
+/* Préréglage « part de fonds propres cible » : capital = x %, emprunt = le solde.
+   C'est très exactement l'ancien mode automatique, mais chaque ligne reste modifiable. */
+function mFinCible(val){
+  var v=numFR(val); if(v===null)return;
+  v=Math.max(0,Math.min(100,v))/100;
+  var f=mFinF();
+  f.partFP=v; f.mode="manuel"; f.plug="dette";
+  f.pct={capital:v,primes:0,cca:0};
+  sauverDossier(); rendre();
+  if(typeof toast==='function')toast("Cible appliquée : "+Math.round(v*100)+" % de fonds propres, le reste en emprunt");
 }
 function mBtnUndo(){
   return '<button class="btn sm" title="Annuler la dernière modification (Ctrl+Z)"'+(G_UNDO.length<2?' disabled style="opacity:.45"':'')+' onclick="mUndo()">&#8630;</button>'
@@ -1136,152 +1213,189 @@ function vueModele(){
   } else if(SOUS_MODELE==="capex"){
     corps=mTableCapex(M)+mTableAmort(M)+mTableVNC(M);
   } else if(SOUS_MODELE==="fin"){
-    var f=M.financement||{}, e=f.emprunt||{}, Pf=P.financement, auto=(f.mode==="auto");
-    var modeSeg='<div class="hyp-l"><span>Mode de financement</span><span class="segvue">'
-      +'<button class="'+(auto?"on":"")+'" onclick="mSet(\'financement.mode\',\'auto\')">Automatique</button>'
-      +'<button class="'+(auto?"":"on")+'" onclick="mSet(\'financement.mode\',\'manuel\')">Manuel</button></span></div>';
-    var consLigne='<div class="hyp-g"><span>Durée de construction <span class="mut">· 0 = dès l\'an 1</span></span><input class="sel" value="'+(M.dureeConstruction||0)+'" onchange="mSet(\'dureeConstruction\',this.value,1)"><span class="suf">ans</span></div>';
-    var empBloc='<div class="hyp-g"><span>Emprunt — taux d\'intérêt</span><input class="sel" value="'+((e.taux||0)*100)+'" onchange="mSet(\'financement.emprunt.taux\',(numFR(this.value)||0)/100)"><span class="suf">%</span></div>'
-      +'<div class="hyp-g"><span>Emprunt — durée de remboursement</span><input class="sel" value="'+(e.duree||5)+'" onchange="mSet(\'financement.emprunt.duree\',this.value,1)"><span class="suf">ans</span></div>'
-      +'<div class="hyp-g"><span>Emprunt — différé de remboursement <span class="mut">· grâce : intérêts payés, capital décalé</span></span><input class="sel" value="'+(e.grace||0)+'" onchange="mSet(\'financement.emprunt.grace\',this.value,1)"><span class="suf">ans</span></div>'
-      +'<div class="hyp-g"><span>Distribution de dividendes <span class="mut">· % du résultat net N−1, si bénéficiaire</span></span><input class="sel" value="'+((M.dividendes_payout||0)*100)+'" onchange="mSet(\'dividendes_payout\',(numFR(this.value)||0)/100)"><span class="suf">%</span></div>'
-      +'<div class="hyp-g"><span>Trésorerie minimale avant distribution <span class="mut">· le dividende est toujours plafonné par la trésorerie d\'ouverture (vide = plancher 0)</span></span><input class="sel ninm" value="'+(M.dividendes_seuilCash!=null?mAmt(M.dividendes_seuilCash):'')+'" oninput="mSep(this)" onchange="mDivSeuil(this.value)"><span class="suf">FCFA</span></div>';
-    /* ---- BFR : dimensionnement (Sources & Emplois) vs besoin réellement constitué ----
-       Question de Salif : « le BFR de démarrage rentre où, c'est dans l'exploitation ? ».
-       Oui : ce n'est PAS un flux séparé du TFT. C'est un montant de DIMENSIONNEMENT
-       (n mois de charges) qui sert à calibrer le financement ; dans le tableau de flux,
-       le BFR se lit en activités OPÉRATIONNELLES (variation créances + stocks + dettes).
-       Les deux calculs sont distincts (mois de charges vs délais DSO/DIO/DPO) et peuvent
-       diverger — on le montre, avec une alerte si le dimensionnement sous-couvre. */
-    var bfrReel=(P.bs.BFR&&P.bs.BFR[A[0]])||0, bfrDim=(Pf.bfrDemarrage||0), ecBfr=bfrReel-bfrDim;
-    var bfrNote=(bfrDim>0||bfrReel>0)?('<div style="margin-top:12px;border-top:1px dashed #cfd8e6;padding-top:10px">'
-      +'<div class="hyp-l"><span>BFR réellement constitué fin an 1 <span class="mut">· selon vos délais clients / stocks / fournisseurs</span></span>'
-      +'<b style="color:'+(ecBfr>0.5?'#8a5a00':'#16904E')+'">'+fmt(bfrReel)+' '+u.suf+'</b></div>'
-      +'<div class="mut" style="margin-top:5px">Le <b>BFR de démarrage</b> ci-dessus ('+Pf.moisBFR+' mois de charges) sert à <b>calibrer le financement</b> — ce n\'est pas un flux du tableau de trésorerie. Dans le TFT, le besoin en fonds de roulement se lit en <b>activités opérationnelles</b> (variation des créances, des stocks et des dettes d\'exploitation).</div>'
-      +(ecBfr>0.5?'<div style="border:1px solid #f0c98a;background:#FFF9F0;border-radius:8px;padding:9px 11px;margin-top:7px"><b style="color:#8a5a00">Dimensionnement inférieur au besoin réel</b><div class="mut">Écart de '+fmt(ecBfr)+' '+u.suf+' : la différence est absorbée par la trésorerie du plan, ou tirée sur la ligne de crédit. Augmentez le nombre de mois, ou raccourcissez le délai de paiement clients.</div></div>':'')
-      +'</div>'):'';
-    /* ---- ligne de crédit renouvelable (revolver) ---- */
-    var RV=M.revolver||{}, PR=(P.revolver||{});
-    var rvBloc='<div class="card" style="margin-top:12px"><div class="sec-titre" style="margin-top:0">Ligne de crédit renouvelable <span class="mut" style="font-weight:400">· revolver / découvert autorisé</span></div>'
-      +'<div class="mut" style="margin:-4px 0 10px">Tirée automatiquement quand la trésorerie passe sous le seuil, remboursée dès qu\'elle repasse au-dessus. Laisser le plafond à 0 = ligne <b>illimitée</b> (la trésorerie ne peut jamais manquer, hypothèse optimiste).</div>'
-      +'<div class="hyp-g"><span>Plafond autorisé <span class="mut">· 0 = illimité</span></span><input class="sel ninm" value="'+mAmt(RV.plafond||0)+'" oninput="mSep(this)" onchange="mSet(\'revolver.plafond\',this.value,1)"><span class="suf">FCFA</span></div>'
-      +'<div class="hyp-g"><span>Taux d\'intérêt sur le tiré</span><input class="sel" value="'+((RV.taux!=null?RV.taux:0.12)*100)+'" onchange="mSet(\'revolver.taux\',(numFR(this.value)||0)/100)"><span class="suf">%</span></div>'
-      +'<div class="hyp-g"><span>Commission d\'engagement <span class="mut">· sur la part non tirée</span></span><input class="sel" value="'+((RV.commission||0)*100)+'" onchange="mSet(\'revolver.commission\',(numFR(this.value)||0)/100)"><span class="suf">%</span></div>'
-      +'<div class="hyp-g"><span>Trésorerie plancher à maintenir</span><input class="sel ninm" value="'+mAmt(RV.seuil||0)+'" oninput="mSep(this)" onchange="mSet(\'revolver.seuil\',this.value,1)"><span class="suf">FCFA</span></div>'
-      +'<div class="hyp-l" style="border-top:1px solid #dbe3ee;margin-top:6px;padding-top:7px"><span>Tirage maximal sur le plan</span><b style="color:'+(PR.sature?'#c0392b':'#224289')+'">'+fmt(PR.tirageMax||0)+' '+u.suf+'</b></div>'
-      +(PR.sature
-        ?'<div style="border:1px solid #f0b4a8;background:#FDF2F0;border-radius:8px;padding:10px;margin-top:8px"><b style="color:#c0392b">Plafond insuffisant</b><div class="mut">Le besoin de trésorerie dépasse le plafond autorisé : la trésorerie reste négative et le plan n\'est pas finançable en l\'état. Relevez le plafond, renforcez les fonds propres, ou étalez les investissements.</div></div>'
-        :(PR.illimite?'<div class="mut" style="margin-top:6px">Ligne illimitée : pensez à saisir un plafond réaliste pour tester la solidité du montage devant un banquier.</div>':''))
-      +'</div>';
-    /* ---- situation d'ouverture : entreprise déjà en activité (symétrique actif / passif) ---- */
-    var O=M.ouverture||{}, PO=(Pf.ouverture||{}), aOuv=(PO.actif||PO.passif);
-    var ouvBloc='<div class="card" style="margin-top:12px"><div class="sec-titre" style="margin-top:0">Situation d\'ouverture <span class="mut" style="font-weight:400">· entreprise déjà en activité — laisser vide pour un projet neuf</span></div>'
-      +'<div class="mut" style="margin:-4px 0 10px">Le plan démarre sinon à zéro. Renseignez ce que la société apporte au premier jour : ces éléments alimentent le bilan et la trésorerie <b>sans passer par le compte de résultat</b> (le produit a déjà été constaté sur les exercices antérieurs).</div>'
-      +'<div class="mut" style="font-weight:700;text-transform:uppercase;font-size:11px;letter-spacing:.5px;margin:10px 0 2px">Actif</div>'
-      +'<div class="hyp-g"><span>Trésorerie disponible (banque + caisse)</span><input class="sel ninm" value="'+mAmt(O.treso||0)+'" oninput="mSep(this)" onchange="mSet(\'ouverture.treso\',this.value,1)"><span class="suf"></span></div>'
-      +'<div class="hyp-g"><span>Créances à recouvrer (facturé non encaissé)</span><input class="sel ninm" value="'+mAmt(O.creances||0)+'" oninput="mSep(this)" onchange="mSet(\'ouverture.creances\',this.value,1)"><span class="suf"></span></div>'
-      +'<div class="hyp-g"><span>… part jugée recouvrable <span class="mut">· le reste n\'est pas porté à l\'actif</span></span><input class="sel" value="'+((O.tauxRecouv!=null?O.tauxRecouv:1)*100)+'" onchange="mSet(\'ouverture.tauxRecouv\',(numFR(this.value)||0)/100)"><span class="suf">%</span></div>'
-      +'<div class="hyp-g"><span>… étalement de l\'encaissement</span><input class="sel" value="'+(O.dureeRecouv||1)+'" onchange="mSet(\'ouverture.dureeRecouv\',this.value,1)"><span class="suf">ans</span></div>'
-      +'<div class="mut" style="font-weight:700;text-transform:uppercase;font-size:11px;letter-spacing:.5px;margin:14px 0 2px">Passif</div>'
-      +'<div class="hyp-g"><span>Dettes fournisseurs et autres dettes d\'exploitation</span><input class="sel ninm" value="'+mAmt(O.dettesFrn||0)+'" oninput="mSep(this)" onchange="mSet(\'ouverture.dettesFrn\',this.value,1)"><span class="suf"></span></div>'
-      +'<div class="hyp-g"><span>Dettes fiscales et sociales</span><input class="sel ninm" value="'+mAmt(O.dettesFiscSoc||0)+'" oninput="mSep(this)" onchange="mSet(\'ouverture.dettesFiscSoc\',this.value,1)"><span class="suf"></span></div>'
-      +'<div class="hyp-g"><span>… étalement du règlement</span><input class="sel" value="'+(O.dureeDettes||1)+'" onchange="mSet(\'ouverture.dureeDettes\',this.value,1)"><span class="suf">ans</span></div>'
-      +(aOuv?('<div class="hyp-l" style="border-top:2px solid #224289;padding-top:6px;margin-top:8px"><span><b>Situation nette apportée</b> <span class="mut">· report à nouveau d\'ouverture</span></span><b style="color:'+(PO.net<0?"#c0392b":"#16904E")+'">'+fmt(PO.net)+' '+u.suf+'</b></div>'
-        +(PO.creancesBrut>PO.creances?'<div class="hyp-l"><span class="mut">dont créances retenues '+fmt(PO.creances)+' '+u.suf+' sur '+fmt(PO.creancesBrut)+' '+u.suf+' facturés (décote de recouvrement)</span></div>':'')
-        +(PO.actif&&!PO.passif?'<div style="border:1px solid #f0c98a;background:#FFF9F0;border-radius:8px;padding:10px;margin-top:8px"><b style="color:#8a5a00">⚠ Actif renseigné sans aucun passif</b><div class="mut">Un acquéreur lira une situation d\'ouverture asymétrique — donc suspecte. Renseignez les dettes connues (fournisseurs, impôts, charges sociales, arriérés de salaires), même approximatives, ou justifiez leur absence dans le rapport.</div></div>':'')
-        +'<div class="mut" style="margin-top:8px;font-style:italic">À reprendre dans les livrables : éléments <b>déclarés par la direction, non audités et non exhaustifs</b> ; l\'écart éventuel relève d\'une garantie d\'actif et de passif (cession de titres) ou d\'un ajustement de prix au closing.</div>'):'')
-      +'</div>';
-    /* ---- structure du capital : parts en %, dans les DEUX modes (auto et manuel) ----
-       Le % n'était affiché qu'en mode automatique (part cible saisie) ; en manuel,
-       l'analyste saisit des montants et ne voyait pas le gearing qui en résulte. */
-    var tR=(Pf.sources||0);
-    var pcR=function(x){ return tR>0?(' <span class="mut">· '+(Math.round((x||0)/tR*1000)/10).toString().replace('.',',')+' %</span>'):''; };
-    var fpTot=(Pf.capital||0)+(Pf.primes||0)+(Pf.subvention||0), ccaTot=(Pf.cca||0), detTot=(Pf.detteAvecIDC||0);
+    /* =================================================================
+       FINANCEMENT — UN SEUL ÉCRAN
+       L'ancien onglet se dédoublait en « automatique » et « manuel » et
+       empilait treize champs sans hiérarchie. Il y a en réalité trois
+       questions distinctes, et une seule mérite le devant de la scène :
+         A. COMBIEN faut-il financer, et QUI apporte quoi   → le montage
+         B. À QUELLES CONDITIONS (taux, durées, différés)   → les termes
+         C. Ce que la société apporte déjà au premier jour  → l'ouverture
+       Dans le montage, % et montant sont deux vues d'une même valeur :
+       saisir l'un recalcule l'autre. Piloter au % fait suivre le montant
+       quand les investissements changent — c'est l'ancien « automatique »,
+       mais ligne par ligne, et toujours modifiable.
+       ================================================================= */
+    var f=M.financement||{}, e=f.emprunt||{}, Pf=P.financement;
+    var BB=(Pf.besoinBase||0), PCTF=(Pf.pct||{}), plugF=(Pf.plug||"");
+    var mtF=function(v){ return Math.round((v||0)*1000); };            /* KFCFA → FCFA */
+    var pcOf=function(v){ return BB>0?(Math.round((v||0)/BB*1000)/10):0; };
+    var pcTx=function(v){ return pcOf(v).toString().replace('.',','); };
+
+    /* ---- A. Ce qu'il faut financer ---- */
+    var emplois=(Pf.capexFinance||0)+(Pf.bfrDemarrage||0);
+    var tEmp='<div class="gbar"><span class="gt">1 &middot; Ce qu\'il faut financer</span><span class="mut">emplois du montage &middot; en FCFA</span>'
+      +'<span class="push"></span><span class="gfx">construction <input style="width:38px" value="'+(M.dureeConstruction||0)+'" onchange="mSet(\'dureeConstruction\',this.value,1)"> an(s)</span></div>'
+      +'<div class="gwrap"><div class="gscroll"><table class="gtab"><thead><tr><th class="l gc1">Emploi</th><th style="min-width:150px">Montant</th><th class="l" style="min-width:280px">Commentaire</th></tr></thead><tbody>'
+      +'<tr><td class="l gc1">Investissements jusqu\'à la mise en service</td><td><span class="gcell gcalc num">'+gN(mtF(Pf.capexFinance))+'</span></td><td class="l mut">onglet Investissements'+(Pf.dureeConstruction>0?' &middot; exploitation à partir de l\'an '+Pf.anneeExploit:'')+'</td></tr>'
+      +'<tr><td class="l gc1">BFR de démarrage</td><td><span class="gcell gcalc num">'+gN(mtF(Pf.bfrDemarrage))+'</span></td>'
+        +'<td class="l"><span class="gfx"><input style="width:38px" value="'+(f.moisBFR!=null?f.moisBFR:3)+'" onchange="mSet(\'financement.moisBFR\',this.value,1)"> mois de charges d\'exploitation</span></td></tr>'
+      +'<tr class="gres"><td class="l gc1">Total des emplois</td><td><span class="gcell gcalc num">'+gN(mtF(emplois))+'</span></td><td class="l mut"></td></tr>'
+      +'<tr class="grp"><td class="l gc1">Ressources déjà acquises</td><td></td><td class="l mut">viennent en déduction du besoin</td></tr>'
+      +'<tr><td class="l gc1">Subvention d\'investissement</td><td><input class="gcell gin num" value="'+mAmt(f.subvention||0)+'" oninput="mSep(this)" onchange="mSet(\'financement.subvention\',this.value,1)"></td><td class="l mut">non remboursable</td></tr>'
+      +'<tr><td class="l gc1">Trésorerie d\'ouverture</td><td><span class="gcell gcalc num">'+gN(mtF((Pf.ouverture&&Pf.ouverture.treso)||0))+'</span></td><td class="l mut">déjà en caisse &middot; carte « Situation d\'ouverture » plus bas</td></tr>'
+      +'<tr class="gtot"><td class="l gc1">Besoin à couvrir par le montage</td><td class="num v">'+gN(mtF(BB))+'</td><td class="l mut">base des pourcentages ci-dessous</td></tr>'
+      +'</tbody></table></div>'
+      +'<div class="gfoot"><span>'+(Pf.idc>0.01
+        ?('Les <b>intérêts de construction</b> ('+fmt(Pf.idc)+' '+u.suf+') courent pendant les '+Pf.dureeConstruction+' an(s) de construction : ils sont <b>capitalisés dans la dette et dans les immobilisations</b>, ils ne sont donc pas à financer séparément.')
+        :'Le BFR de démarrage sert à <b>calibrer</b> le montage ; dans le tableau de flux, le besoin en fonds de roulement se lit en <b>activités opérationnelles</b> (variation des créances, des stocks et des dettes d\'exploitation) — ce n\'est pas un flux distinct.')
+      +'</span></div></div>';
+
+    /* ---- B. Le montage : % et montant, deux vues d'une même valeur ---- */
+    var LG=[{k:"capital",lib:"Capital social",v:Pf.capital,cm:"apport en numéraire ou en nature"},
+            {k:"primes", lib:"Primes liées au capital",v:Pf.primes,cm:"prime d\'émission / d\'apport"},
+            {k:"cca",    lib:"Comptes courants d\'associés",v:Pf.cca,cm:"quasi-fonds propres &middot; juridiquement une dette"},
+            {k:"dette",  lib:"Emprunt à terme",v:Pf.dette,cm:"dette bancaire moyen / long terme"}];
+    var celPct=function(L){
+      var sol=(plugF===L.k), pil=(!sol&&PCTF[L.k]!=null&&PCTF[L.k]!=="");
+      if(sol)return '<span class="gcell gcalc num" title="Calculé : cette ligne absorbe le solde du montage">'+pcTx(L.v)+'</span>';
+      if(pil)return '<input class="gcell gin num" value="'+pcTx(L.v)+'" onchange="mFinPct(\''+L.k+'\',this.value)" title="Saisi : le montant en découle, et suivra vos investissements">';
+      return '<span class="gcell gcalc num" title="Calculé. Cliquer pour piloter cette ligne au pourcentage." onclick="mFinPct(\''+L.k+'\',\''+pcTx(L.v)+'\')">'+pcTx(L.v)+'</span>';
+    };
+    var celMt=function(L){
+      var sol=(plugF===L.k), pil=(!sol&&PCTF[L.k]!=null&&PCTF[L.k]!=="");
+      if(sol)return '<span class="gcell gcalc num" title="Calculé : cette ligne absorbe le solde du montage">'+gN(mtF(L.v))+'</span>';
+      if(pil)return '<span class="gcell gcalc num" title="Calculé à partir du pourcentage. Cliquer pour saisir un montant." onclick="mFinMt(\''+L.k+'\',\''+mtF(L.v)+'\')">'+gN(mtF(L.v))+'</span>';
+      return '<input class="gcell gin num" value="'+mAmt(mtF(L.v))+'" oninput="mSep(this)" onchange="mFinMt(\''+L.k+'\',this.value)" title="Saisi : le pourcentage en découle">';
+    };
+    var celSol=function(k){ return '<span class="gseg"><button class="'+(plugF===k?"on":"")+'" title="Cette ligne absorbe exactement le reste du besoin — le montage boucle" onclick="mFinSolde(\''+k+'\')">= solde</button></span>'; };
+    var lgRow=function(L){
+      return '<tr><td class="l gc1">'+L.lib+'</td><td>'+celPct(L)+'</td><td>'+celMt(L)+'</td><td class="l">'+celSol(L.k)+' <span class="mut" style="margin-left:7px">'+L.cm+'</span></td></tr>';
+    };
+    var fpT=(Pf.capital||0)+(Pf.primes||0), qfT=(Pf.cca||0), dtT=(Pf.dette||0);
+    var totMontage=fpT+qfT+dtT, ecart=totMontage-BB;
+    var grpRow=function(lib,v,coul){ return '<tr class="grp"><td class="l gc1"><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:'+coul+';margin-right:7px"></span>'+lib+'</td>'
+      +'<td class="num">'+pcTx(v)+'</td><td class="num">'+gN(mtF(v))+'</td><td></td></tr>'; };
+    var coulEc=(Math.abs(ecart)<=0.5?'#16904E':(ecart<0?'#c0392b':'#8a5a00'));
+    var tMtg='<div class="gbar" style="margin-top:18px"><span class="gt">2 &middot; Qui apporte quoi</span><span class="mut">le montage &middot; % du besoin ou montant, au choix</span>'
+      +'<span class="push"></span><span class="mut" style="margin-right:4px">Tout piloter en</span><span class="gseg">'
+        +'<button onclick="mFinToutPct()" title="Chaque ligne devient un % du besoin : les montants suivront vos investissements">pourcentage</button>'
+        +'<button onclick="mFinToutMt()" title="Fige les montants actuels : ils ne bougeront plus si les investissements changent">montant</button></span></div>'
+      +'<div class="gwrap"><div class="gscroll"><table class="gtab"><thead><tr><th class="l gc1">Ressource</th>'
+      +'<th style="min-width:112px">% du besoin</th><th style="min-width:150px">Montant</th><th class="l" style="min-width:280px">Bouclage</th></tr></thead><tbody>'
+      +grpRow("Fonds propres",fpT,"#16904E")+lgRow(LG[0])+lgRow(LG[1])
+      +grpRow("Quasi-fonds propres",qfT,"#E0913F")+lgRow(LG[2])
+      +grpRow("Dette financière",dtT,"#224289")+lgRow(LG[3])
+      +((Pf.idc>0.01)?'<tr><td class="l gc1"><span class="mut" style="padding-left:16px">dont intérêts de construction capitalisés</span></td><td></td><td><span class="gcell gcalc num">'+gN(mtF(Pf.idc))+'</span></td><td class="l mut">portent la dette à '+gN(mtF(Pf.detteAvecIDC))+'</td></tr>':'')
+      +'<tr class="gtot"><td class="l gc1">Total du montage</td><td class="num v">'+pcTx(totMontage)+'</td><td class="num v">'+gN(mtF(totMontage))+'</td><td class="l mut">'+(BB>0?'':'renseignez vos investissements pour activer les pourcentages')+'</td></tr>'
+      +'<tr class="gres"><td class="l gc1">Besoin à couvrir</td><td class="num">'+(BB>0?'100':'0')+'</td><td class="num">'+gN(mtF(BB))+'</td><td class="l mut"></td></tr>'
+      +'<tr class="gres"><td class="l gc1"><b>Écart</b></td><td class="num" style="color:'+coulEc+'">'+pcTx(ecart)+'</td>'
+        +'<td class="num" style="color:'+coulEc+'"><b>'+gN(mtF(ecart))+'</b></td>'
+        +'<td class="l" style="color:'+coulEc+'">'
+        +(Math.abs(ecart)<=0.5?'Montage équilibré'
+          :(ecart<0?'<b>Besoin non couvert</b> — le manque sera tiré sur la ligne de crédit, ou creusera le découvert'
+                   :'<b>Excédent de financement</b> — il vient grossir la trésorerie d\'ouverture du plan'))+'</td></tr>'
+      +'</tbody></table></div>'
+      +'<div class="gfoot"><span><b>Un cadre plein = vous saisissez ; une barre pointillée = l\'application calcule.</b> '
+      +'Saisir un pourcentage fixe la part et laisse le montant suivre les investissements ; saisir un montant fige le montant et laisse le pourcentage se recalculer. '
+      +'Cliquez une valeur calculée pour reprendre la main dessus. La ligne marquée <b>« = solde »</b> absorbe le reste et boucle le montage au franc près.</span></div></div>';
+
+    /* préréglage rapide = l'ancien mode automatique, ramené à un seul champ */
+    var cible=Math.round((f.partFP!=null?f.partFP:0.30)*100);
+    var tCible='<div class="gfoot" style="border:1px solid #E3E7EF;border-radius:12px;margin-top:10px;background:#F8FAFC">'
+      +'<span><b>Départ rapide</b> — répartir sur une part de fonds propres cible :</span>'
+      +'<span class="gfx"><input style="width:44px" value="'+cible+'" onchange="mFinCible(this.value)"> % de fonds propres</span>'
+      +'<span class="mut">le capital social prend cette part, l\'emprunt absorbe le reste. Chaque ligne reste modifiable ensuite.</span></div>';
+
+    /* structure du financement : la lecture du prêteur (levier, gearing) */
+    var fpTot=fpT+(Pf.subvention||0), ccaTot=qfT, detTot=(Pf.detteAvecIDC||0);
     var baseSt=fpTot+ccaTot+detTot;
     var pSt=function(x){ return baseSt>0?(Math.round((x||0)/baseSt*1000)/10).toString().replace('.',',')+' %':'—'; };
     var larg=function(x){ return baseSt>0?((x||0)/baseSt*100):0; };
-    var structBloc=baseSt<=0?'':('<div style="margin-top:14px;border-top:1px dashed #cfd8e6;padding-top:11px">'
-      +'<div class="mut" style="font-weight:700;text-transform:uppercase;font-size:11px;letter-spacing:.5px;margin-bottom:7px">Structure du financement</div>'
-      +'<div style="display:flex;height:11px;border-radius:6px;overflow:hidden;margin-bottom:10px;background:#e6ebf3">'
+    var structBloc=baseSt<=0?'':('<div class="card" style="margin-top:12px"><div class="sec-titre" style="margin-top:0">Structure du financement <span class="mut" style="font-weight:400">&middot; la lecture du prêteur</span></div>'
+      +'<div style="display:flex;height:12px;border-radius:6px;overflow:hidden;margin:2px 0 12px;background:#e6ebf3">'
         +'<div style="width:'+larg(fpTot)+'%;background:#16904E" title="Fonds propres"></div>'
         +(ccaTot?'<div style="width:'+larg(ccaTot)+'%;background:#E0913F" title="Comptes courants d\'associés"></div>':'')
         +'<div style="width:'+larg(detTot)+'%;background:#224289" title="Dette financière"></div></div>'
-      +'<div class="hyp-l"><span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#16904E;margin-right:7px"></span>Fonds propres <span class="mut">· capital, primes, subvention</span></span><b>'+fmt(fpTot)+' '+u.suf+' &nbsp;<span style="color:#16904E">'+pSt(fpTot)+'</span></b></div>'
-      +(ccaTot?'<div class="hyp-l"><span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#E0913F;margin-right:7px"></span>Comptes courants d\'associés <span class="mut">· quasi-fonds propres</span></span><b>'+fmt(ccaTot)+' '+u.suf+' &nbsp;<span style="color:#8a5a00">'+pSt(ccaTot)+'</span></b></div>':'')
-      +'<div class="hyp-l"><span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#224289;margin-right:7px"></span>Dette financière</span><b>'+fmt(detTot)+' '+u.suf+' &nbsp;<span style="color:#224289">'+pSt(detTot)+'</span></b></div>'
-      +'<div class="hyp-l" style="border-top:1px solid #dbe3ee;margin-top:4px;padding-top:6px"><span><b>Levier</b> <span class="mut">· dette / fonds propres</span></span><b>'
-        +(fpTot>0?(Math.round(detTot/fpTot*100)/100).toString().replace('.',',')+' ×':'—')+'</b></div>'
-      +((Pf.ouverture&&Pf.ouverture.treso)?'<div class="mut" style="margin-top:6px">La trésorerie d\'ouverture ('+fmt(Pf.ouverture.treso)+' '+u.suf+') est une ressource du montage mais n\'entre pas dans cette structure : elle est déjà en caisse, elle n\'est ni levée ni empruntée.</div>':'')
+      +'<div class="hyp-l"><span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#16904E;margin-right:7px"></span>Fonds propres <span class="mut">&middot; capital, primes, subvention</span></span><b>'+fmt(fpTot)+' '+u.suf+' &nbsp;<span style="color:#16904E">'+pSt(fpTot)+'</span></b></div>'
+      +(ccaTot?'<div class="hyp-l"><span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#E0913F;margin-right:7px"></span>Comptes courants d\'associés <span class="mut">&middot; quasi-fonds propres</span></span><b>'+fmt(ccaTot)+' '+u.suf+' &nbsp;<span style="color:#8a5a00">'+pSt(ccaTot)+'</span></b></div>':'')
+      +'<div class="hyp-l"><span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#224289;margin-right:7px"></span>Dette financière'+(Pf.idc>0.01?' <span class="mut">&middot; dont IDC</span>':'')+'</span><b>'+fmt(detTot)+' '+u.suf+' &nbsp;<span style="color:#224289">'+pSt(detTot)+'</span></b></div>'
+      +'<div class="hyp-l" style="border-top:1px solid #dbe3ee;margin-top:4px;padding-top:6px"><span><b>Levier</b> <span class="mut">&middot; dette financière / fonds propres</span></span><b>'
+        +(fpTot>0?(Math.round(detTot/fpTot*100)/100).toString().replace('.',',')+' &times;':'—')+'</b></div>'
+      +'<div class="hyp-l"><span><b>Gearing</b> <span class="mut">&middot; dette / (dette + fonds propres) — les CCA comptent en dette</span></span><b>'
+        +((detTot+ccaTot+fpTot)>0?(Math.round((detTot+ccaTot)/(detTot+ccaTot+fpTot)*1000)/10).toString().replace('.',',')+' %':'—')+'</b></div>'
+      +'<div class="mut" style="margin-top:8px">Les <b>comptes courants d\'associés</b> sont juridiquement une dette : ils entrent dans la dette nette de la valorisation. Un prêteur peut accepter de les traiter en quasi-fonds propres s\'ils sont <b>bloqués</b> (convention de blocage ou de subordination) — c\'est une négociation, pas une hypothèse comptable.</div>'
       +'</div>');
-    var su='<div class="card" style="background:#f6f8fc;margin-top:12px"><div class="sec-titre" style="margin-top:0">Sources & Emplois du montage</div>'
-      +'<div class="mut" style="margin:-4px 0 10px">'+(Pf.dureeConstruction>0?('Construction sur '+Pf.dureeConstruction+' an(s) ; exploitation à partir de l\'année '+Pf.anneeExploit+'. Intérêts de construction (IDC) capitalisés dans la dette.'):'Pas de période de construction : investissement et exploitation dès l\'année 1.')+'</div>'
-      +'<div class="row" style="gap:24px;flex-wrap:wrap;align-items:stretch">'
-        +'<div style="flex:1;min-width:230px;display:flex;flex-direction:column"><div class="mut" style="font-weight:700;text-transform:uppercase;font-size:11px;letter-spacing:.5px;margin-bottom:4px">Emplois</div>'
-          +'<div class="hyp-l"><span>Investissements (jusqu\'à la mise en service)</span><b>'+fmt(Pf.capexFinance)+' '+u.suf+'</b></div>'
-          +'<div class="hyp-l"><span>BFR de démarrage ('+Pf.moisBFR+' mois)</span><b>'+fmt(Pf.bfrDemarrage)+' '+u.suf+'</b></div>'
-          +(Pf.idc>0.01?'<div class="hyp-l"><span>Intérêts de construction (IDC)</span><b>'+fmt(Pf.idc)+' '+u.suf+'</b></div>':'')
-          +'<div class="hyp-l" style="margin-top:auto;border-top:2px solid #224289;padding-top:6px"><span><b>Total emplois</b></span><b>'+fmt(Pf.emplois)+' '+u.suf+'</b></div></div>'
-        +'<div style="flex:1;min-width:230px;display:flex;flex-direction:column"><div class="mut" style="font-weight:700;text-transform:uppercase;font-size:11px;letter-spacing:.5px;margin-bottom:4px">Ressources</div>'
-          +'<div class="hyp-l"><span>Capital social'+pcR(Pf.capital)+'</span><b style="color:#16904E">'+fmt(Pf.capital)+' '+u.suf+'</b></div>'
-          +(Pf.primes?'<div class="hyp-l"><span>Primes liées au capital'+pcR(Pf.primes)+'</span><b style="color:#16904E">'+fmt(Pf.primes)+' '+u.suf+'</b></div>':'')
-          +(Pf.cca?'<div class="hyp-l"><span>Comptes courants d\'associés (CCA'+(Pf.ccaTaux?', '+(Pf.ccaTaux*100).toFixed(1)+' %':', 0 %')+' · '+(Pf.ccaMode==='infine'?'in fine':Pf.ccaMode==='lineaire'?'linéaire':'maintenu')+')</span><b style="color:#8a5a00">'+fmt(Pf.cca)+' '+u.suf+'</b></div>':'')
-          +((Pf.ouverture&&Pf.ouverture.treso)?'<div class="hyp-l"><span>Trésorerie d\'ouverture <span class="mut">· déjà en caisse</span></span><b style="color:#16904E">'+fmt(Pf.ouverture.treso)+' '+u.suf+'</b></div>':'')
-          +(Pf.subvention?'<div class="hyp-l"><span>Subvention</span><b>'+fmt(Pf.subvention)+' '+u.suf+'</b></div>':'')
-          +'<div class="hyp-l"><span>Dette'+(Pf.idc>0.01?' (dont IDC)':'')+pcR(Pf.detteAvecIDC)+'</span><b style="color:#224289">'+fmt(Pf.detteAvecIDC)+' '+u.suf+'</b></div>'
-          +'<div class="hyp-l" style="margin-top:auto;border-top:2px solid #224289;padding-top:6px"><span><b>Total ressources</b></span><b>'+fmt(Pf.sources)+' '+u.suf+'</b></div>'
-          +'</div>'
-      +'</div>'
-      +bfrNote
-      +structBloc
-      +((!auto&&Math.abs(Pf.sources-Pf.emplois)>0.5)?'<div class="hyp-l" style="margin-top:8px;color:'+(Pf.sources<Pf.emplois?'#c0392b':'#8a5a00')+'"><span><b>'+(Pf.sources<Pf.emplois?'Besoin non couvert (part en découvert à défaut)':'Excédent de financement (trésorerie initiale)')+'</b></span><b>'+fmt(Math.abs(Pf.sources-Pf.emplois))+' '+u.suf+'</b></div>':'')
+
+    /* BFR : dimensionnement (n mois) contre besoin réellement constitué par les délais */
+    var bfrReel=(P.bs.BFR&&P.bs.BFR[A[0]])||0, bfrDim=(Pf.bfrDemarrage||0), ecBfr=bfrReel-bfrDim;
+    var bfrNote=((bfrDim>0||bfrReel>0)&&ecBfr>0.5)?('<div class="gchk" style="margin-top:12px"><b>Le BFR de démarrage sous-estime le besoin réel</b><ul>'
+      +'<li>Dimensionné à '+fmt(bfrDim)+' '+u.suf+' ('+Pf.moisBFR+' mois de charges), mais vos délais clients / stocks / fournisseurs en constituent '+fmt(bfrReel)+' '+u.suf+' dès la fin de l\'an 1 — soit <b>'+fmt(ecBfr)+' '+u.suf+'</b> d\'écart.</li>'
+      +'<li>La différence est absorbée par la trésorerie du plan, ou tirée sur la ligne de crédit. Augmentez le nombre de mois ci-dessus, ou raccourcissez le délai de paiement clients dans l\'onglet BFR.</li></ul></div>'):'';
+
+    /* ---- C. Les conditions : taux, durées, différés ---- */
+    var ccaMode=(f.ccaMode||"maintenu");
+    var ccaSeg='<span class="segvue" style="margin-left:0">'
+      +'<button class="'+(ccaMode==="maintenu"?"on":"")+'" onclick="mSet(\'financement.ccaMode\',\'maintenu\')">Maintenu</button>'
+      +'<button class="'+(ccaMode==="infine"?"on":"")+'" onclick="mSet(\'financement.ccaMode\',\'infine\')">In fine</button>'
+      +'<button class="'+(ccaMode==="lineaire"?"on":"")+'" onclick="mSet(\'financement.ccaMode\',\'lineaire\')">Linéaire</button></span>';
+    var RV=M.revolver||{}, PR=(P.revolver||{});
+    var stTit='font-weight:700;text-transform:uppercase;font-size:11px;letter-spacing:.5px;margin:14px 0 2px';
+    var condBloc='<div class="card" style="margin-top:12px"><div class="sec-titre" style="margin-top:0">Conditions des ressources <span class="mut" style="font-weight:400">&middot; taux, durées, différés</span></div>'
+      +'<div class="mut" style="'+stTit+';margin-top:6px">Emprunt à terme</div>'
+      +'<div class="hyp-g"><span>Taux d\'intérêt</span><input class="sel" value="'+((e.taux||0)*100)+'" onchange="mSet(\'financement.emprunt.taux\',(numFR(this.value)||0)/100)"><span class="suf">%</span></div>'
+      +'<div class="hyp-g"><span>Durée de remboursement</span><input class="sel" value="'+(e.duree||5)+'" onchange="mSet(\'financement.emprunt.duree\',this.value,1)"><span class="suf">ans</span></div>'
+      +'<div class="hyp-g"><span>Différé de remboursement <span class="mut">&middot; grâce : intérêts payés, capital décalé</span></span><input class="sel" value="'+(e.grace||0)+'" onchange="mSet(\'financement.emprunt.grace\',this.value,1)"><span class="suf">ans</span></div>'
+      +'<div class="mut" style="'+stTit+'">Comptes courants d\'associés</div>'
+      +'<div class="hyp-g"><span>Taux de rémunération <span class="mut">&middot; 0 % = non rémunéré</span></span><input class="sel" value="'+((f.ccaTaux||0)*100)+'" onchange="mSet(\'financement.ccaTaux\',(numFR(this.value)||0)/100)"><span class="suf">%</span></div>'
+      +'<div class="hyp-l"><span>Remboursement</span>'+ccaSeg+'</div>'
+      +(ccaMode!=="maintenu"?'<div class="hyp-g"><span>'+(ccaMode==="infine"?'Année de remboursement':'Durée de remboursement')+'</span><input class="sel" value="'+(f.ccaDuree||(M.nb||5))+'" onchange="mSet(\'financement.ccaDuree\',this.value,1)"><span class="suf">'+(ccaMode==="infine"?'(année du plan)':'ans')+'</span></div>':'')
+      +'<div class="mut" style="'+stTit+'">Ligne de crédit renouvelable <span style="font-weight:400;text-transform:none;letter-spacing:0">&middot; revolver / découvert autorisé</span></div>'
+      +'<div class="mut" style="margin:0 0 6px">Tirée automatiquement quand la trésorerie passe sous le seuil, remboursée dès qu\'elle repasse au-dessus. Plafond à 0 = ligne <b>illimitée</b> (hypothèse optimiste : la trésorerie ne peut jamais manquer).</div>'
+      +'<div class="hyp-g"><span>Plafond autorisé <span class="mut">&middot; 0 = illimité</span></span><input class="sel ninm" value="'+mAmt(RV.plafond||0)+'" oninput="mSep(this)" onchange="mSet(\'revolver.plafond\',this.value,1)"><span class="suf">FCFA</span></div>'
+      +'<div class="hyp-g"><span>Taux d\'intérêt sur le tiré</span><input class="sel" value="'+((RV.taux!=null?RV.taux:0.12)*100)+'" onchange="mSet(\'revolver.taux\',(numFR(this.value)||0)/100)"><span class="suf">%</span></div>'
+      +'<div class="hyp-g"><span>Commission d\'engagement <span class="mut">&middot; sur la part non tirée</span></span><input class="sel" value="'+((RV.commission||0)*100)+'" onchange="mSet(\'revolver.commission\',(numFR(this.value)||0)/100)"><span class="suf">%</span></div>'
+      +'<div class="hyp-g"><span>Trésorerie plancher à maintenir</span><input class="sel ninm" value="'+mAmt(RV.seuil||0)+'" oninput="mSep(this)" onchange="mSet(\'revolver.seuil\',this.value,1)"><span class="suf">FCFA</span></div>'
+      +'<div class="hyp-l"><span>Tirage maximal sur le plan</span><b style="color:'+(PR.sature?'#c0392b':'#224289')+'">'+fmt(PR.tirageMax||0)+' '+u.suf+'</b></div>'
+      +(PR.sature?'<div class="gchk" style="margin-top:8px"><b>Plafond insuffisant</b><ul><li>Le besoin de trésorerie dépasse le plafond autorisé : la trésorerie reste négative et le plan n\'est pas finançable en l\'état. Relevez le plafond, renforcez les fonds propres, ou étalez les investissements.</li></ul></div>':'')
+      +'<div class="mut" style="'+stTit+'">Distribution aux associés</div>'
+      +'<div class="hyp-g"><span>Dividendes <span class="mut">&middot; % du résultat net N&minus;1, si bénéficiaire</span></span><input class="sel" value="'+((M.dividendes_payout||0)*100)+'" onchange="mSet(\'dividendes_payout\',(numFR(this.value)||0)/100)"><span class="suf">%</span></div>'
+      +'<div class="hyp-g"><span>Trésorerie minimale avant distribution <span class="mut">&middot; le dividende est toujours plafonné par la trésorerie d\'ouverture (vide = plancher 0)</span></span><input class="sel ninm" value="'+(M.dividendes_seuilCash!=null?mAmt(M.dividendes_seuilCash):'')+'" oninput="mSep(this)" onchange="mDivSeuil(this.value)"><span class="suf">FCFA</span></div>'
       +'</div>';
-    if(auto){
-      corps='<div class="card"><div class="sec-titre" style="margin-top:0">Financement — automatique</div>'+modeSeg+consLigne
-        +'<div class="hyp-g"><span>Part de fonds propres (gearing cible)</span><input class="sel" value="'+(Math.round((f.partFP!=null?f.partFP:0.30)*1000)/10)+'" onchange="mSet(\'financement.partFP\',(numFR(this.value)||0)/100)"><span class="suf">%</span></div>'
-        +'<div class="hyp-g"><span>BFR de démarrage</span><input class="sel" value="'+(f.moisBFR!=null?f.moisBFR:3)+'" onchange="mSet(\'financement.moisBFR\',this.value,1)"><span class="suf">mois de charges</span></div>'
-        +'<div class="hyp-g"><span>Subvention (optionnel)</span><input class="sel ninm" value="'+mAmt(f.subvention||0)+'" oninput="mSep(this)" onchange="mSet(\'financement.subvention\',this.value,1)"><span class="suf"></span></div>'
-        +empBloc+rvBloc+ouvBloc+su
-        +'<div class="mut" style="margin-top:8px">Le besoin (investissements + BFR de démarrage + IDC) est réparti fonds propres / dette selon la part choisie ; amortissement et remboursement démarrent à la mise en service. En automatique, les fonds propres sont entièrement en capital social — pour <b>répartir</b> entre capital social, primes liées au capital et comptes courants d\'associés (CCA), passez en mode <b>Manuel</b>.</div></div>';
-    } else {
-      var ccaMode=(f.ccaMode||"maintenu"), plug=(f.plug||"");
-      var cxT=(M.capex||[]).reduce(function(s,c){return s+(+c.montant||0);},0);
-      var notePre='<div style="border:1px solid #cfe0f5;background:#F2F7FF;border-radius:9px;padding:11px 13px;margin:2px 0 12px">'
-        +'<b style="color:#224289;font-size:12.5px">Ces montants sont un point de départ, pas une saisie</b>'
-        +'<div class="mut" style="margin-top:4px">'+(DOSSIER.secteurModele
-          ? 'Au chargement du modèle sectoriel, le montage a été dimensionné sur vos investissements'+(cxT>0?' ('+fmt(cxT/1000)+' '+uni().suf+')':'')+' : <b>20 % en fonds propres, 45 % en emprunt</b>, le solde en compte courant d\'associés.'
-          : 'Un projet neuf démarre avec un montage par défaut (capital et emprunt pré-remplis).')
-        +' Remplacez chaque montant par le vôtre, ou repartez de zéro.</div>'
-        +'<div class="row" style="gap:8px;margin-top:9px">'
-        +'<button class="btn sm" onclick="mFinReset()">Repartir de zéro</button>'
-        +'<button class="btn sm" onclick="mFinRedim()" title="Recalcule 20 % / 45 % sur le total des investissements actuels">Re-dimensionner sur les investissements</button>'
-        +'</div></div>';
-      var ccaSeg='<span class="segvue">'
-        +'<button class="'+(ccaMode==="maintenu"?"on":"")+'" onclick="mSet(\'financement.ccaMode\',\'maintenu\')">Maintenu</button>'
-        +'<button class="'+(ccaMode==="infine"?"on":"")+'" onclick="mSet(\'financement.ccaMode\',\'infine\')">In fine</button>'
-        +'<button class="'+(ccaMode==="lineaire"?"on":"")+'" onclick="mSet(\'financement.ccaMode\',\'lineaire\')">Linéaire</button></span>';
-      /* champ saisi, ou calculé (grisé) si désigné comme source d'équilibrage */
-      var champFin=function(champ,pfVal){return plug===champ
-        ?'<input class="sel ninm" value="'+mAmt(Math.round((pfVal||0)*1000))+'" disabled style="background:#f2f4f8;color:#5a6472" title="Calculé : source d\'équilibrage">'
-        :null;};
-      var plugSel='<div class="hyp-l"><span>Source d\'équilibrage <span class="mut">· calculée pour couvrir exactement le besoin</span></span><select class="sel" style="width:auto" onchange="mSet(\'financement.plug\',this.value||null)">'
-        +'<option value=""'+(plug===""?" selected":"")+'>Aucune — montants saisis tels quels</option>'
-        +'<option value="cca"'+(plug==="cca"?" selected":"")+'>CCA (solde du montage)</option>'
-        +'<option value="capital"'+(plug==="capital"?" selected":"")+'>Capital social (solde du montage)</option>'
-        +'<option value="dette"'+(plug==="dette"?" selected":"")+'>Emprunt (solde du montage)</option></select></div>';
-      corps='<div class="card"><div class="sec-titre" style="margin-top:0">Financement — manuel</div>'+modeSeg+notePre+consLigne
-        +'<div class="hyp-g"><span>BFR de démarrage <span class="mut">· entre dans le besoin couvert par la source d\'équilibrage</span></span><input class="sel" value="'+(f.moisBFR!=null?f.moisBFR:3)+'" onchange="mSet(\'financement.moisBFR\',this.value,1)"><span class="suf">mois de charges</span></div>'
-        +plugSel
-        +'<div class="hyp-g"><span>Capital social</span>'+(champFin("capital",Pf.capital)||'<input class="sel ninm" value="'+mAmt(f.capital||0)+'" oninput="mSep(this)" onchange="mSet(\'financement.capital\',this.value,1)">')+'<span class="suf"></span></div>'
-        +'<div class="hyp-g"><span>Primes liées au capital <span class="mut">· émission / apport</span></span><input class="sel ninm" value="'+mAmt(f.primes||0)+'" oninput="mSep(this)" onchange="mSet(\'financement.primes\',this.value,1)"><span class="suf"></span></div>'
-        +'<div class="hyp-g"><span>Comptes courants d\'associés (CCA) <span class="mut">· dette financière</span></span>'+(champFin("cca",Pf.cca)||'<input class="sel ninm" value="'+mAmt(f.apports||0)+'" oninput="mSep(this)" onchange="mSet(\'financement.apports\',this.value,1)">')+'<span class="suf"></span></div>'
-        +'<div class="hyp-g"><span>CCA — taux de rémunération <span class="mut">· 0 % = non rémunéré</span></span><input class="sel" value="'+((f.ccaTaux||0)*100)+'" onchange="mSet(\'financement.ccaTaux\',(numFR(this.value)||0)/100)"><span class="suf">%</span></div>'
-        +'<div class="hyp-l"><span>CCA — remboursement</span>'+ccaSeg+'</div>'
-        +(ccaMode!=="maintenu"?'<div class="hyp-g"><span>CCA — '+(ccaMode==="infine"?'année de remboursement':'durée de remboursement')+'</span><input class="sel" value="'+(f.ccaDuree||(M.nb||5))+'" onchange="mSet(\'financement.ccaDuree\',this.value,1)"><span class="suf">'+(ccaMode==="infine"?'(année du plan)':'ans')+'</span></div>':'')
-        +'<div class="hyp-g"><span>Subvention</span><input class="sel ninm" value="'+mAmt(f.subvention||0)+'" oninput="mSep(this)" onchange="mSet(\'financement.subvention\',this.value,1)"><span class="suf"></span></div>'
-        +'<div class="hyp-g"><span>Emprunt — montant</span>'+(champFin("dette",Pf.dette)||'<input class="sel ninm" value="'+mAmt(e.montant||0)+'" oninput="mSep(this)" onchange="mSet(\'financement.emprunt.montant\',this.value,1)">')+'<span class="suf"></span></div>'
-        +empBloc+rvBloc+ouvBloc+su
-        +'<div class="mut" style="margin-top:8px">Le financement est tiré en année 1 ; en cas de construction, les intérêts courent et sont capitalisés dans la dette (IDC). Le CCA est une dette financière (quasi-fonds propres) : inclus dans la dette nette de la valorisation, reclassable dans le pont. La trésorerie d\'ouverture finance une partie du démarrage ; les <b>créances et dettes d\'ouverture ne figurent pas dans ce montage</b> — elles vivent dans le bilan et la trésorerie du plan (encaissement / règlement étalés), pas dans le besoin initial.</div></div>';
-    }
+
+    /* ---- D. Situation d'ouverture : entreprise déjà en activité ---- */
+    var O=M.ouverture||{}, PO=(Pf.ouverture||{}), aOuv=(PO.actif||PO.passif);
+    var ouvBloc='<div class="card" style="margin-top:12px"><div class="sec-titre" style="margin-top:0">Situation d\'ouverture <span class="mut" style="font-weight:400">&middot; entreprise déjà en activité — laisser vide pour un projet neuf</span></div>'
+      +'<div class="mut" style="margin:-4px 0 10px">Le plan démarre sinon à zéro. Renseignez ce que la société apporte au premier jour : ces éléments alimentent le bilan et la trésorerie <b>sans passer par le compte de résultat</b> (le produit a déjà été constaté sur les exercices antérieurs).</div>'
+      +'<div class="mut" style="'+stTit+';margin-top:10px">Actif</div>'
+      +'<div class="hyp-g"><span>Trésorerie disponible (banque + caisse)</span><input class="sel ninm" value="'+mAmt(O.treso||0)+'" oninput="mSep(this)" onchange="mSet(\'ouverture.treso\',this.value,1)"><span class="suf"></span></div>'
+      +'<div class="hyp-g"><span>Créances à recouvrer (facturé non encaissé)</span><input class="sel ninm" value="'+mAmt(O.creances||0)+'" oninput="mSep(this)" onchange="mSet(\'ouverture.creances\',this.value,1)"><span class="suf"></span></div>'
+      +'<div class="hyp-g"><span>… part jugée recouvrable <span class="mut">&middot; le reste n\'est pas porté à l\'actif</span></span><input class="sel" value="'+((O.tauxRecouv!=null?O.tauxRecouv:1)*100)+'" onchange="mSet(\'ouverture.tauxRecouv\',(numFR(this.value)||0)/100)"><span class="suf">%</span></div>'
+      +'<div class="hyp-g"><span>… étalement de l\'encaissement</span><input class="sel" value="'+(O.dureeRecouv||1)+'" onchange="mSet(\'ouverture.dureeRecouv\',this.value,1)"><span class="suf">ans</span></div>'
+      +'<div class="mut" style="'+stTit+'">Passif</div>'
+      +'<div class="hyp-g"><span>Dettes fournisseurs et autres dettes d\'exploitation</span><input class="sel ninm" value="'+mAmt(O.dettesFrn||0)+'" oninput="mSep(this)" onchange="mSet(\'ouverture.dettesFrn\',this.value,1)"><span class="suf"></span></div>'
+      +'<div class="hyp-g"><span>Dettes fiscales et sociales</span><input class="sel ninm" value="'+mAmt(O.dettesFiscSoc||0)+'" oninput="mSep(this)" onchange="mSet(\'ouverture.dettesFiscSoc\',this.value,1)"><span class="suf"></span></div>'
+      +'<div class="hyp-g"><span>… étalement du règlement</span><input class="sel" value="'+(O.dureeDettes||1)+'" onchange="mSet(\'ouverture.dureeDettes\',this.value,1)"><span class="suf">ans</span></div>'
+      +(aOuv?('<div class="hyp-l" style="border-top:2px solid #224289;padding-top:6px;margin-top:8px"><span><b>Situation nette apportée</b> <span class="mut">&middot; report à nouveau d\'ouverture</span></span><b style="color:'+(PO.net<0?"#c0392b":"#16904E")+'">'+fmt(PO.net)+' '+u.suf+'</b></div>'
+        +(PO.creancesBrut>PO.creances?'<div class="hyp-l"><span class="mut">dont créances retenues '+fmt(PO.creances)+' '+u.suf+' sur '+fmt(PO.creancesBrut)+' '+u.suf+' facturés (décote de recouvrement)</span></div>':'')
+        +(PO.actif&&!PO.passif?'<div class="gchk" style="margin-top:8px"><b>Actif renseigné sans aucun passif</b><ul><li>Un acquéreur lira une situation d\'ouverture asymétrique — donc suspecte. Renseignez les dettes connues (fournisseurs, impôts, charges sociales, arriérés de salaires), même approximatives, ou justifiez leur absence dans le rapport.</li></ul></div>':'')
+        +'<div class="mut" style="margin-top:8px;font-style:italic">À reprendre dans les livrables : éléments <b>déclarés par la direction, non audités et non exhaustifs</b> ; l\'écart éventuel relève d\'une garantie d\'actif et de passif (cession de titres) ou d\'un ajustement de prix au closing.</div>'):'')
+      +'</div>';
+
+    /* note de transparence : ces montants sont un point de départ, pas une saisie */
+    var cxT=(M.capex||[]).reduce(function(s,c){return s+(+c.montant||0);},0);
+    var notePre='<div style="border:1px solid #cfe0f5;background:#F2F7FF;border-radius:9px;padding:11px 13px;margin:0 0 14px">'
+      +'<b style="color:#224289;font-size:12.5px">Ces montants sont un point de départ, pas une saisie</b>'
+      +'<div class="mut" style="margin-top:4px">'+(DOSSIER.secteurModele
+        ? 'Au chargement du modèle sectoriel, le montage a été dimensionné sur vos investissements'+(cxT>0?' ('+fmt(cxT/1000)+' '+uni().suf+')':'')+' : <b>20 % en fonds propres, 45 % en emprunt</b>, le solde en compte courant d\'associés.'
+        : 'Un projet neuf démarre avec un montage par défaut (capital et emprunt pré-remplis).')
+      +' Remplacez chaque montant par le vôtre, ou repartez de zéro.</div>'
+      +'<div class="row" style="gap:8px;margin-top:9px">'
+      +'<button class="btn sm" onclick="mFinReset()">Repartir de zéro</button>'
+      +'<button class="btn sm" onclick="mFinRedim()" title="Recalcule 20 % / 45 % sur le total des investissements actuels">Re-dimensionner sur les investissements</button>'
+      +'</div></div>';
+
+    corps=notePre+tEmp+tMtg+tCible+bfrNote+structBloc+condBloc+ouvBloc;
   } else if(SOUS_MODELE==="bfr"){
     corps=mTableBfr(M,P);
   } else if(SOUS_MODELE==="param"){

@@ -422,15 +422,23 @@ function projeterModele(M,scenario){
   var ccaTaux=(+fin.ccaTaux||0), ccaMode=(fin.ccaMode||"maintenu"), ccaDuree=Math.max(1,Math.round(+fin.ccaDuree||N));
   /* la trésorerie déjà en place finance une partie du démarrage ; les créances antérieures NON
      (prudence : elles ne rentrent qu'à mesure du recouvrement, elles ne couvrent pas le besoin initial) */
-  if(fin.mode==="auto"){ var baseBesoin=Math.max(0,capexFinance+bfrDem-subv-ouvTreso); capital=baseBesoin*partFP; detteBase=baseBesoin*(1-partFP); }
-  else { capital=(+fin.capital||0)/SC; primes=(+fin.primes||0)/SC; cca0=(+fin.apports||0)/SC; detteBase=((fin.emprunt&&+fin.emprunt.montant)||0)/SC;
-    /* source d'équilibrage (« plug ») : la source désignée est calculée pour couvrir exactement
-       le besoin (investissements + BFR de démarrage − subvention − trésorerie d'ouverture) */
-    var besoinM=Math.max(0,capexFinance+bfrDem-subv-ouvTreso);
-    if(fin.plug==="cca") cca0=Math.max(0,besoinM-capital-primes-detteBase);
-    else if(fin.plug==="capital") capital=Math.max(0,besoinM-primes-cca0-detteBase);
-    else if(fin.plug==="dette") detteBase=Math.max(0,besoinM-capital-primes-cca0);
-  }
+  /* ---- MONTAGE UNIFIE : chaque ressource est pilotee AU MONTANT ou AU % DU BESOIN ----
+     fin.pct = {capital,primes,cca,dette} : une cle renseignee rend la ligne pilotee par le
+     POURCENTAGE (son montant se recalcule des que les investissements ou le BFR changent) ;
+     sinon c'est le montant saisi qui fait foi. fin.plug designe la ligne « solde » qui absorbe
+     exactement le reste. L'ancien mode « automatique » (part de fonds propres cible) n'est
+     qu'un cas particulier : pct = {capital:partFP, dette:1-partFP} — d'ou un seul chemin. */
+  var besoinM=Math.max(0,capexFinance+bfrDem-subv-ouvTreso);
+  var PCT=(fin.mode==="auto")?{capital:partFP,primes:0,cca:0,dette:1-partFP}:(fin.pct||{});
+  var plugF=(fin.mode==="auto")?"":(fin.plug||"");
+  var _res=function(k,saisi){ var p=PCT[k]; if(p==null||p==="")return saisi; p=+p; return isNaN(p)?saisi:p*besoinM; };
+  capital  =_res("capital",(+fin.capital||0)/SC);
+  primes   =_res("primes", (+fin.primes||0)/SC);
+  cca0     =_res("cca",    (+fin.apports||0)/SC);
+  detteBase=_res("dette",  ((fin.emprunt&&+fin.emprunt.montant)||0)/SC);
+  if(plugF==="cca") cca0=Math.max(0,besoinM-capital-primes-detteBase);
+  else if(plugF==="capital") capital=Math.max(0,besoinM-primes-cca0-detteBase);
+  else if(plugF==="dette") detteBase=Math.max(0,besoinM-capital-primes-cca0);
 
   /* bfrP / tresoP amorcés sur la situation d'ouverture : le TFT part de la trésorerie réelle et
      la variation du BFR capture l'encaissement des créances antérieures / le règlement des dettes */
@@ -587,7 +595,7 @@ function projeterModele(M,scenario){
   P.modeProjet=true;   /* BP sans historique : les états sont synthétiques (dernière année projetée) */
   P.revolver={plafond:rvPlaf*1000,taux:rvTaux,commission:rvComm,seuil:rvSeuil*1000,
     tirageMax:rvMax,sature:rvSature,illimite:!(rvPlaf>0)};
-  P.financement={mode:(fin.mode||"manuel"),partFP:partFP,moisBFR:moisBFR,dureeConstruction:Nc,anneeExploit:anneeExploit,
+  P.financement={mode:(fin.mode||"manuel"),partFP:partFP,moisBFR:moisBFR,pct:PCT,plug:plugF,besoinBase:besoinM,dureeConstruction:Nc,anneeExploit:anneeExploit,
     capexFinance:capexFinance,bfrDemarrage:bfrDem,idc:idcTotal,subvention:subv,
     capital:capital,primes:primes,cca:cca0,ccaTaux:ccaTaux,ccaMode:ccaMode,ccaDuree:ccaDuree,
     ouverture:{treso:ouvTreso,creancesBrut:ouvCreBrut,tauxRecouv:ouvTauxRec,creances:ouvCre,dettes:ouvDet,
