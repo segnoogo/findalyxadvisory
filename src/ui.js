@@ -2092,9 +2092,9 @@ async function exporterExcelModele(sansFormule){
       sst(nm);
       inds.forEach((ind,j)=>{ const lbl="   "+ind.name+((ind.op==='d')?" (en diviseur)":"");
         row("IND"+k+"_"+j,lbl,(i,X)=>`INDEX(${rng(ind.row)},${OI(X)})`,ind.pct?RF:QF); });
-      row("VOL"+k,"   = Volume",(i,X)=>{ let e=""; inds.forEach((ind,j)=>{const ref=`${X}${rr("IND"+k+"_"+j)}`; if(j===0)e=(ind.op==='d')?`1/${ref}`:ref; else e+=(ind.op==='d')?`/${ref}`:`*${ref}`;}); return `IFERROR(${X}${rr("FO")}*(${e||"0"})*${X}${rr("R_FCA")},0)`; },QF);
+      row("VOL"+k,"   Volume",(i,X)=>{ let e=""; inds.forEach((ind,j)=>{const ref=`${X}${rr("IND"+k+"_"+j)}`; if(j===0)e=(ind.op==='d')?`1/${ref}`:ref; else e+=(ind.op==='d')?`/${ref}`:`*${ref}`;}); return `IFERROR(${X}${rr("FO")}*(${e||"0"})*${X}${rr("R_FCA")},0)`; },QF);
       row("PRIX"+k,"   Prix unitaire (FCFA)",(i,X)=>`INDEX(${rng(pr.row)},${OI(X)})`,QF);
-      row("CAL"+k,"   = Chiffre d'affaires",(i,X)=>`${X}${rr("VOL"+k)}*${X}${rr("PRIX"+k)}/${X}${rr("R_DIV")}`,NF);
+      row("CAL"+k,"   Chiffre d'affaires",(i,X)=>`${X}${rr("VOL"+k)}*${X}${rr("PRIX"+k)}/${X}${rr("R_DIV")}`,NF);
     });
     blank();
     row("CA","Chiffre d'affaires total",(i,X)=>H.lignes.length?H.lignes.map((_,k)=>`${X}${rr("CAL"+k)}`).join("+"):"0",NF,true);
@@ -2109,13 +2109,13 @@ async function exporterExcelModele(sansFormule){
       if(info.m==="pct"){
         sst(nom+(info.scope==="all"?" : % du CA total":" : % d'une ligne de produit"));
         row("CPC"+k,"   % appliqué (rappel Hypothèses)",()=>`${rH}!${info.pct}`,PCT2);
-        if(info.scope==="all"){ row("CDI"+k,"   = Coût de l'année",(i,X)=>`-${X}${rr("FO")}*${X}${rr("CA")}*${X}${rr("CPC"+k)}*${X}${rr("R_FCOUT")}`,NF); }
-        else { const kk=(info.kLine!=null?info.kLine:0); row("CDI"+k,"   = Coût de l'année",(i,X)=>`-${X}${rr("FO")}*${X}${rr("CAL"+kk)}*${X}${rr("CPC"+k)}*${X}${rr("R_FCOUT")}`,NF); }
+        if(info.scope==="all"){ row("CDI"+k,"   Coût de l'année",(i,X)=>`-${X}${rr("FO")}*${X}${rr("CA")}*${X}${rr("CPC"+k)}*${X}${rr("R_FCOUT")}`,NF); }
+        else { const kk=(info.kLine!=null?info.kLine:0); row("CDI"+k,"   Coût de l'année",(i,X)=>`-${X}${rr("FO")}*${X}${rr("CAL"+kk)}*${X}${rr("CPC"+k)}*${X}${rr("R_FCOUT")}`,NF); }
       } else if(info.m==="unit"){
         const kk=(info.kLine!=null?info.kLine:0);
         sst(nom+" : coût unitaire par unité de volume");
         row("CUC"+k,"   Coût unitaire (rappel, FCFA)",()=>`${rH}!${info.val}`,QF);
-        row("CDI"+k,"   = Coût de l'année",(i,X)=>`-${X}${rr("VOL"+kk)}*${X}${rr("CUC"+k)}*(1+${X}${rr("R_INFL")})^(${OI(X)}-1)*${X}${rr("R_FCOUT")}/${X}${rr("R_DIV")}`,NF);
+        row("CDI"+k,"   Coût de l'année",(i,X)=>`-${X}${rr("VOL"+kk)}*${X}${rr("CUC"+k)}*(1+${X}${rr("R_INFL")})^(${OI(X)}-1)*${X}${rr("R_FCOUT")}/${X}${rr("R_DIV")}`,NF);
       } else {
         sst(nom);
         /* la chaîne se découpe en segments : chaque drapeau « arrondi sup. » matérialise
@@ -2133,7 +2133,7 @@ async function exporterExcelModele(sansFormule){
           seg.push({code:"CIN"+k+"_"+j,op:ind.op});
           if(ind.ceil){
             const gcode="GRP"+k+"_"+j, curBase=baseCode, curSeg=seg.slice();
-            row(gcode,"   = Groupes (arrondi supérieur)",(i,X)=>{
+            row(gcode,"   Groupes (arrondi supérieur)",(i,X)=>{
               let e=curBase?`${X}${rr(curBase)}`:"";
               curSeg.forEach((s,idx)=>{const ref=`${X}${rr(s.code)}`;
                 if(!e&&idx===0)e=(s.op==='d')?`1/${ref}`:ref; else e+=(s.op==='d')?`/${ref}`:`*${ref}`;});
@@ -2144,7 +2144,7 @@ async function exporterExcelModele(sansFormule){
         });
         row("CTX"+k,"   Taux unitaire (FCFA)",(i,X)=>`INDEX(${rng(info.taux.row)},${OI(X)})`,QF);
         const finBase=baseCode, finSeg=seg.slice();
-        row("CDI"+k,"   = Coût de l'année",(i,X)=>{
+        row("CDI"+k,"   Coût de l'année",(i,X)=>{
           let e=finBase?`${X}${rr(finBase)}`:"";
           finSeg.forEach((s,idx)=>{const ref=`${X}${rr(s.code)}`;
             if(!e&&idx===0)e=(s.op==='d')?`1/${ref}`:ref; else e+=(s.op==='d')?`/${ref}`:`*${ref}`;});
@@ -2479,9 +2479,9 @@ async function exporterExcelModele(sansFormule){
     vF("Taux sans risque (rf)",`${rH}!${H.rf}`,PCT2);
     vF("Prime de marché par β",`${rH}!${H.beta}*${rH}!${H.pm}`,PCT2);
     vF("Prime de risque pays + taille + illiquidité",`${rH}!${H.ppays}+${rH}!${H.ptaille}+${rH}!${H.pilliq}`,PCT2);
-    const rKe=wsV.rowCount+1; vF("= Coût des fonds propres (ke)",`${rH}!${H.rf}+${rH}!${H.beta}*${rH}!${H.pm}+${rH}!${H.ppays}+${rH}!${H.ptaille}+${rH}!${H.pilliq}`,PCT2,true);
+    const rKe=wsV.rowCount+1; vF("Coût des fonds propres (ke)",`${rH}!${H.rf}+${rH}!${H.beta}*${rH}!${H.pm}+${rH}!${H.ppays}+${rH}!${H.ptaille}+${rH}!${H.pilliq}`,PCT2,true);
     const rKd=wsV.rowCount+1; vF("Coût de la dette après IS (kd)",`${rH}!${H.kd}*(1-${rH}!${H.is})`,PCT2);
-    const rWacc=wsV.rowCount+1; vF("= WACC",`C${rKe}*(1-${rH}!${H.wd})+C${rKd}*${rH}!${H.wd}`,PCT2,true);
+    const rWacc=wsV.rowCount+1; vF("WACC",`C${rKe}*(1-${rH}!${H.wd})+C${rKd}*${rH}!${H.wd}`,PCT2,true);
     wsV.addRow([]);
     vLab("Construction des flux de trésorerie disponibles (FCFF)");
     const eFCFF=wsV.addRow([null,"",...fyp]);styliserEntete(eFCFF,1);eFCFF.getCell(2).value={formula:`${rH}!${H.unite}`};
@@ -2491,14 +2491,14 @@ async function exporterExcelModele(sansFormule){
       if(tot){r.font={bold:true,color:{argb:"FF172554"}};for(let c2=2;c2<3+N;c2++)r.getCell(c2).fill=FOND_TOTAL;}return rn;};
     const rEBI=vSerie("EBIT (Modèle)",(i,X)=>`${rC}!${X}${rr("EBIT")}`);
     const rIMP=vSerie("(-) Impôt théorique sur l'EBIT (taux d'IS des Hypothèses)",(i,X)=>`-MAX(0,${X}${rEBI})*${rH}!${H.is}`);
-    const rNOP=vSerie("= NOPAT (résultat d'exploitation après impôt)",(i,X)=>`${X}${rEBI}+${X}${rIMP}`);
+    const rNOP=vSerie("NOPAT (résultat d'exploitation après impôt)",(i,X)=>`${X}${rEBI}+${X}${rIMP}`);
     const rDOT=vSerie("(+) Dotations aux amortissements (Modèle)",(i,X)=>`${rC}!${X}${rr("DOT")}`);
     /* année 1 : le BFR de départ est celui de la situation d'ouverture (créances retenues -
        dettes), pas zéro : sinon la constitution du BFR est comptée deux fois dans le flux */
     const bfrPrec=(i,X)=>i>0?`${rC}!${CL(i-1)}${rr("BFR")}`:`(${rC}!${X}${rr("R_OUVCR")}-${rC}!${X}${rr("R_OUVDT")})`;
     const rDBF=vSerie("(-) Variation du BFR (Modèle)",(i,X)=>`-(${rC}!${X}${rr("BFR")}-${bfrPrec(i,X)})`);
     const rCPX=vSerie("(-) Investissements : CAPEX (Modèle)",(i,X)=>`-${rC}!${X}${rr("CAPEX")}`);
-    const rFCFF=vSerie("= Flux de trésorerie disponible (FCFF)",(i,X)=>`${X}${rNOP}+${X}${rDOT}+${X}${rDBF}+${X}${rCPX}`,NF,true);
+    const rFCFF=vSerie("Flux de trésorerie disponible (FCFF)",(i,X)=>`${X}${rNOP}+${X}${rDOT}+${X}${rDBF}+${X}${rCPX}`,NF,true);
     /* exposant d'actualisation : fin d'exercice (i+1) ou mi-année (i+0,5) selon l'hypothèse */
     const EXP=i=>`(${i+1}-${rH}!${H.my}*0.5)`;
     const rPV=vSerie("FCFF actualisés (au WACC)",(i,X)=>`${X}${rFCFF}/(1+$C$${rWacc})^${EXP(i)}`);
@@ -2511,7 +2511,7 @@ async function exporterExcelModele(sansFormule){
     const rVT=wsV.rowCount+1; vF("Valeur terminale actualisée (Gordon g, ou multiple de sortie)",
       `IF(${rH}!${H.tvx}>0,(${rH}!${H.tvx}*C${rEbT})/(1+C${rWacc})^${N},`+
       `IFERROR((${CL(N-1)}${rFCFF}*(1+${rH}!${H.g})/(C${rWacc}-${rH}!${H.g}))/(1+C${rWacc})^(${N}-${rH}!${H.my}*0.5),0))`,NF);
-    const rEV=wsV.rowCount+1; vF("= Valeur d'entreprise (EV)",`C${rSum}+C${rVT}`,NF,true);
+    const rEV=wsV.rowCount+1; vF("Valeur d'entreprise (EV)",`C${rSum}+C${rVT}`,NF,true);
     /* dette nette & pont : formules vivantes (Modèle + Hypothèses), plus aucune valeur figée */
     /* DETTE NETTE À LA DATE DE VALORISATION : et non en fin de plan : la valeur d'entreprise issue
        du DCF est une valeur d'aujourd'hui, et les flux actualisés PRODUISENT déjà la trésorerie de
