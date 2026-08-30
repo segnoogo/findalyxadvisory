@@ -55,7 +55,19 @@ function hypothesesBP(etats, lignesPerso){
     },
     /* activité */
     inflation:0.03,
+    /* Projection du chiffre d'affaires : soit un TAUX DE CROISSANCE global appliqué au
+       CA du dernier exercice réel (défaut), soit une décomposition VOLUME x PRIX par
+       ligne de revenus — le CA n'est presque jamais un pourcentage : c'est une quantité
+       vendue et un prix, qui n'évoluent ni au même rythme ni pour les mêmes raisons. */
+    caMode:"croissance",
     caCroiss:Array(5).fill(born(tcam,-0.3,0.5,0.05)),
+    /* Amorce réconciliée avec l'historique : une ligne unique portant tout le CA réel,
+       volume 1 et prix moyen déduit. L'utilisateur saisit son volume réel — le prix moyen
+       se recalcule pour retomber exactement sur le CA comptable — puis scinde en lignes. */
+    revenus:[{name:"Chiffre d'affaires",caHist:ca1,volBase:1,uniteVol:"unité",
+      prixMode:"deduit",prixBase:ca1*1000,
+      volProj:{mode:"croissance",croiss:born(tcam,-0.3,0.5,0.05),vals:[]},
+      prixProj:{mode:"croissance",croiss:0.03,vals:[]}}],
     coutsDirects_pct:born(ca1?-cd/ca1:0.3,0,0.95,0.3),
     autresProd_montant:v.AUTRES_PROD[a1], autresProd_croiss:0,
     personnel_croiss:born(n>1&&v.CHARGES_PERSONNEL[a0]<0?v.CHARGES_PERSONNEL[a1]/v.CHARGES_PERSONNEL[a0]-1:0.03,-0.2,0.3,0.03),
@@ -116,6 +128,33 @@ function hypothesesBP(etats, lignesPerso){
   };
 }
 
+/* ---------- CA projeté par VOLUME x PRIX (dossier avec historique) ----------
+   Alternative au taux de croissance global. Chaque ligne de revenus part de son chiffre
+   d'affaires du DERNIER EXERCICE RÉEL, décomposé en volume et prix moyen. Le prix peut
+   être DÉDUIT (= CA réel de la ligne ÷ volume réel) : c'est le cas courant, on connaît le
+   CA comptable et la quantité vendue, pas le prix moyen. Volume et prix se projettent
+   ensuite indépendamment — chacun par un taux de croissance, ou année par année.
+   Convention d'unités : caHist en base interne (KFCFA), prix unitaire en FCFA. */
+function prixBaseLigne(L){
+  var vb=+L.volBase||0;
+  if(!L||L.prixMode==="deduit") return vb>0?(((L&&+L.caHist)||0)*1000/vb):0;
+  return (+L.prixBase||0);
+}
+function serieHistBP(o,base,i){
+  if(o&&o.mode==="annuel") return valSerie(o.vals,i);
+  return base*Math.pow(1+((o&&+o.croiss)||0),i+1);
+}
+function caLignesBP(H,i){
+  var out={total:0,volume:0,lignes:[]};
+  (H.revenus||[]).forEach(function(L){
+    var vol=serieHistBP(L.volProj,+L.volBase||0,i);
+    var prix=serieHistBP(L.prixProj,prixBaseLigne(L),i);
+    var ca=vol*prix/1000;
+    out.lignes.push({name:L.name||"",vol:vol,prix:prix,ca:ca});
+    out.total+=ca; out.volume+=vol;
+  });
+  return out;
+}
 /* ---------- projection complète ---------- */
 function projeterBP(etats,H,scenario){
   const sc=H.scenarios[scenario||H.scenario]||H.scenarios.base;
@@ -128,6 +167,10 @@ function projeterBP(etats,H,scenario){
   ["CA","COUTS_DIRECTS","MARGE_BRUTE","AUTRES_PROD","OPEX_TOTAL","CHARGES_PERSONNEL",
    "EBITDA","DA","EBIT","PRODUITS_FIN","FRAIS_FIN","RESULTAT_FIN","EBT","IS","RN"].forEach(pl);
   P.pl.OPEX_DETAIL={};
+  /* CA_DETAIL a une forme IMPOSÉE, partagée avec le moteur « modèle » et lue par le P&L
+     détaillé et deux slides : {code:{lib, vals:{année:montant}}}. Le détail par année du
+     mode volumes x prix vit donc à part, sous CA_VOLPRIX. */
+  P.pl.CA_DETAIL={}; P.pl.CA_VOLPRIX={};
   H.opex.forEach(o=>P.pl.OPEX_DETAIL[o.code]={lib:o.lib,vals:{}});
   ["IMMO_BRUT","AMORT_CUM","IMMO_NET","STOCKS","CLIENTS","AUTRES_CREANCES",
    "FOURNISSEURS","DETTES_FISC_SOC","AUTRES_DETTES","BFR","CP","DETTE","PROVISIONS","TRESO",
@@ -157,7 +200,20 @@ function projeterBP(etats,H,scenario){
 
   AP.forEach((a,i)=>{
     /* --- P&L --- */
-    caP=caP*(1+(H.caCroiss[i]||0)+sc.dCA);
+    /* le scénario s'applique au CA de la même façon dans les deux modes : une dérive
+       annuelle qui se cumule (dCA=+3 % => +3 % par an de plus que le central) */
+    if(H.caMode==="volumePrix"){
+      const det=caLignesBP(H,i), drift=Math.pow(1+(sc.dCA||0),i+1);
+      caP=det.total*drift;
+      P.pl.CA_VOLPRIX[a]=det;
+      det.lignes.forEach((Lg,li)=>{
+        const code="REV"+li;
+        if(!P.pl.CA_DETAIL[code])P.pl.CA_DETAIL[code]={lib:Lg.name||("Ligne de revenus "+(li+1)),vals:{}};
+        P.pl.CA_DETAIL[code].vals[a]=Lg.ca*drift;
+      });
+    } else {
+      caP=caP*(1+(H.caCroiss[i]||0)+sc.dCA);
+    }
     const cd=-caP*Math.min(0.98,Math.max(0,H.coutsDirects_pct-sc.dMarge));
     autresProdP=i===0?H.autresProd_montant*(1+H.autresProd_croiss):autresProdP*(1+H.autresProd_croiss);
     persP=persP*(1+H.personnel_croiss);

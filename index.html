@@ -11,7 +11,7 @@
 
 
 *{box-sizing:border-box}
-:root{--navy:#172554;--blue:#224289;--orange:#FA6706;--peach:#FCEFDD;--lblue:#E9EFF7;
+:root{--navy:#172554;--blue:#224289;--pri:#224289;--orange:#FA6706;--peach:#FCEFDD;--lblue:#E9EFF7;
 --lgrey:#F5F5F5;--bg:#E9EDF4;--border:#E5E7EB;--green:#16904E;--red:#C0392B;--ink:#1f2937;--muted:#6b7280}
 html,body{margin:0;padding:0}
 body{font-family:'Inter',"Segoe UI",system-ui,sans-serif;color:var(--ink);background:var(--bg)}
@@ -285,6 +285,11 @@ border-left:4px solid var(--orange)}
 .gcalc:before{content:"";position:absolute;left:0;top:6px;bottom:6px;width:3px;border-radius:2px;
   background:repeating-linear-gradient(180deg,#B9C2D2 0 3px,transparent 3px 6px)}
 .gcalc:hover{background:#F2F5FA}
+/* colonne « dernier exercice réel » : l'ancre de la projection, séparée d'un filet
+   (un fond ne tiendrait pas : .grp/.gres/.gtot posent le leur en !important) */
+.gtab .reelc{border-right:2px solid #C9D3E3}
+.gtab td.reelc{background:#FCFCFA}
+.gtab thead th.reelc{background:#F1F4F9}
 .gfoot{display:flex;align-items:center;gap:10px;padding:11px 14px;border-top:1px solid #EFF2F7;
   font-size:11.5px;color:var(--muted);flex-wrap:wrap}
 .gdash{border:1px dashed #C2CCDD;background:#fff;color:var(--pri);border-radius:8px;padding:6px 12px;
@@ -2409,7 +2414,19 @@ function hypothesesBP(etats, lignesPerso){
     },
     /* activité */
     inflation:0.03,
+    /* Projection du chiffre d'affaires : soit un TAUX DE CROISSANCE global appliqué au
+       CA du dernier exercice réel (défaut), soit une décomposition VOLUME x PRIX par
+       ligne de revenus — le CA n'est presque jamais un pourcentage : c'est une quantité
+       vendue et un prix, qui n'évoluent ni au même rythme ni pour les mêmes raisons. */
+    caMode:"croissance",
     caCroiss:Array(5).fill(born(tcam,-0.3,0.5,0.05)),
+    /* Amorce réconciliée avec l'historique : une ligne unique portant tout le CA réel,
+       volume 1 et prix moyen déduit. L'utilisateur saisit son volume réel — le prix moyen
+       se recalcule pour retomber exactement sur le CA comptable — puis scinde en lignes. */
+    revenus:[{name:"Chiffre d'affaires",caHist:ca1,volBase:1,uniteVol:"unité",
+      prixMode:"deduit",prixBase:ca1*1000,
+      volProj:{mode:"croissance",croiss:born(tcam,-0.3,0.5,0.05),vals:[]},
+      prixProj:{mode:"croissance",croiss:0.03,vals:[]}}],
     coutsDirects_pct:born(ca1?-cd/ca1:0.3,0,0.95,0.3),
     autresProd_montant:v.AUTRES_PROD[a1], autresProd_croiss:0,
     personnel_croiss:born(n>1&&v.CHARGES_PERSONNEL[a0]<0?v.CHARGES_PERSONNEL[a1]/v.CHARGES_PERSONNEL[a0]-1:0.03,-0.2,0.3,0.03),
@@ -2470,6 +2487,33 @@ function hypothesesBP(etats, lignesPerso){
   };
 }
 
+/* ---------- CA projeté par VOLUME x PRIX (dossier avec historique) ----------
+   Alternative au taux de croissance global. Chaque ligne de revenus part de son chiffre
+   d'affaires du DERNIER EXERCICE RÉEL, décomposé en volume et prix moyen. Le prix peut
+   être DÉDUIT (= CA réel de la ligne ÷ volume réel) : c'est le cas courant, on connaît le
+   CA comptable et la quantité vendue, pas le prix moyen. Volume et prix se projettent
+   ensuite indépendamment — chacun par un taux de croissance, ou année par année.
+   Convention d'unités : caHist en base interne (KFCFA), prix unitaire en FCFA. */
+function prixBaseLigne(L){
+  var vb=+L.volBase||0;
+  if(!L||L.prixMode==="deduit") return vb>0?(((L&&+L.caHist)||0)*1000/vb):0;
+  return (+L.prixBase||0);
+}
+function serieHistBP(o,base,i){
+  if(o&&o.mode==="annuel") return valSerie(o.vals,i);
+  return base*Math.pow(1+((o&&+o.croiss)||0),i+1);
+}
+function caLignesBP(H,i){
+  var out={total:0,volume:0,lignes:[]};
+  (H.revenus||[]).forEach(function(L){
+    var vol=serieHistBP(L.volProj,+L.volBase||0,i);
+    var prix=serieHistBP(L.prixProj,prixBaseLigne(L),i);
+    var ca=vol*prix/1000;
+    out.lignes.push({name:L.name||"",vol:vol,prix:prix,ca:ca});
+    out.total+=ca; out.volume+=vol;
+  });
+  return out;
+}
 /* ---------- projection complète ---------- */
 function projeterBP(etats,H,scenario){
   const sc=H.scenarios[scenario||H.scenario]||H.scenarios.base;
@@ -2482,6 +2526,10 @@ function projeterBP(etats,H,scenario){
   ["CA","COUTS_DIRECTS","MARGE_BRUTE","AUTRES_PROD","OPEX_TOTAL","CHARGES_PERSONNEL",
    "EBITDA","DA","EBIT","PRODUITS_FIN","FRAIS_FIN","RESULTAT_FIN","EBT","IS","RN"].forEach(pl);
   P.pl.OPEX_DETAIL={};
+  /* CA_DETAIL a une forme IMPOSÉE, partagée avec le moteur « modèle » et lue par le P&L
+     détaillé et deux slides : {code:{lib, vals:{année:montant}}}. Le détail par année du
+     mode volumes x prix vit donc à part, sous CA_VOLPRIX. */
+  P.pl.CA_DETAIL={}; P.pl.CA_VOLPRIX={};
   H.opex.forEach(o=>P.pl.OPEX_DETAIL[o.code]={lib:o.lib,vals:{}});
   ["IMMO_BRUT","AMORT_CUM","IMMO_NET","STOCKS","CLIENTS","AUTRES_CREANCES",
    "FOURNISSEURS","DETTES_FISC_SOC","AUTRES_DETTES","BFR","CP","DETTE","PROVISIONS","TRESO",
@@ -2511,7 +2559,20 @@ function projeterBP(etats,H,scenario){
 
   AP.forEach((a,i)=>{
     /* --- P&L --- */
-    caP=caP*(1+(H.caCroiss[i]||0)+sc.dCA);
+    /* le scénario s'applique au CA de la même façon dans les deux modes : une dérive
+       annuelle qui se cumule (dCA=+3 % => +3 % par an de plus que le central) */
+    if(H.caMode==="volumePrix"){
+      const det=caLignesBP(H,i), drift=Math.pow(1+(sc.dCA||0),i+1);
+      caP=det.total*drift;
+      P.pl.CA_VOLPRIX[a]=det;
+      det.lignes.forEach((Lg,li)=>{
+        const code="REV"+li;
+        if(!P.pl.CA_DETAIL[code])P.pl.CA_DETAIL[code]={lib:Lg.name||("Ligne de revenus "+(li+1)),vals:{}};
+        P.pl.CA_DETAIL[code].vals[a]=Lg.ca*drift;
+      });
+    } else {
+      caP=caP*(1+(H.caCroiss[i]||0)+sc.dCA);
+    }
     const cd=-caP*Math.min(0.98,Math.max(0,H.coutsDirects_pct-sc.dMarge));
     autresProdP=i===0?H.autresProd_montant*(1+H.autresProd_croiss):autresProdP*(1+H.autresProd_croiss);
     persP=persP*(1+H.personnel_croiss);
@@ -4993,7 +5054,7 @@ function construireBP(pptx,opts){
     " et le résultat net "+rpFmt(proj.pl.RN[ap[ap.length-1]])+" "+rpLib()+".");
   rpCartes(sl,[
     ["CA "+fyp[fyp.length-1],rpFmt(proj.pl.CA[ap[ap.length-1]])+" "+rpLib(),
-     mm?("scénario "+proj.scenario):("croissance "+rpPct(hyp.caCroiss[0])+"/an"),null,"neutre","chart","224289"],
+     mm?("scénario "+proj.scenario):(hyp.caMode==="volumePrix"?"volumes × prix":("croissance "+rpPct(hyp.caCroiss[0])+"/an")),null,"neutre","chart","224289"],
     ["EBITDA "+fyp[fyp.length-1],rpFmt(proj.pl.EBITDA[ap[ap.length-1]])+" "+rpLib(),
      proj.pl.CA[ap[ap.length-1]]?Math.round(proj.pl.EBITDA[ap[ap.length-1]]/proj.pl.CA[ap[ap.length-1]]*100)+"% du CA":"",
      null,"neutre","coins","FA6706"],
@@ -5040,8 +5101,11 @@ function construireBP(pptx,opts){
   rpTitreMsg(sl,"Hypothèses opérationnelles et financières",
     mm?("Le plan est construit à partir de "+((hyp.revenus||[]).length||1)+" ligne"+(((hyp.revenus||[]).length||1)>1?"s":"")+" de revenus (volumes × prix), d'une inflation de "
         +Math.round((hyp.inflation||0.03)*100)+" % et d'un financement de "+rpMsgFmt(proj.financement.sources)+".")
-      :("Les hypothèses sont calées sur l'historique "+fy[0]+" – "+fy[fy.length-1]+" : croissance du chiffre d'affaires de "
-        +rpPct(hyp.caCroiss[0])+" la première année et coûts directs à "+Math.round(hyp.coutsDirects_pct*100)+" % du chiffre d'affaires."));
+      :("Les hypothèses sont calées sur l'historique "+fy[0]+" – "+fy[fy.length-1]+" : "
+        +(hyp.caMode==="volumePrix"
+          ?("le chiffre d'affaires est reconstruit à partir de "+((hyp.revenus||[]).length||1)+" ligne"+((((hyp.revenus||[]).length||1)>1)?"s":"")+" de revenus en volumes × prix")
+          :("croissance du chiffre d'affaires de "+rpPct(hyp.caCroiss[0])+" la première année"))
+        +" et coûts directs à "+Math.round(hyp.coutsDirects_pct*100)+" % du chiffre d'affaires."));
   const lignesH=[],stylesH=[],notesH=[];
   const pcH=x=>(x*100).toFixed(1).replace(".0","").replace(".",",")+" %";   /* décimale française */
   const gH=(t,items)=>{lignesH.push([t,""]);stylesH.push("groupe");
@@ -5098,11 +5162,16 @@ function construireBP(pptx,opts){
       ["WACC",val?pcH(val.wacc):"n.s."],
       ["Croissance à l'infini (g)",pcH((hyp.valo&&hyp.valo.g)||0.03)]]);
   } else {
-  gH("Activité et marges",[
-    ["Croissance du CA par année",hyp.caCroiss.map(pcH).join(" ; ")],
+  gH("Activité et marges",(hyp.caMode==="volumePrix"
+    ? (hyp.revenus||[]).map(function(Lg){
+        var vg=(Lg.volProj&&Lg.volProj.mode==="annuel")?"par année":pcH((Lg.volProj&&+Lg.volProj.croiss)||0)+"/an";
+        var pg=(Lg.prixProj&&Lg.prixProj.mode==="annuel")?"par année":pcH((Lg.prixProj&&+Lg.prixProj.croiss)||0)+"/an";
+        return [(Lg.name||"Ligne de revenus"),"volume "+vg+" · prix "+pg];
+      })
+    : [["Croissance du CA par année",hyp.caCroiss.map(pcH).join(" ; ")]]).concat([
     ["Coûts directs (% du CA)",pcH(hyp.coutsDirects_pct)],
     ["Croissance des charges de personnel",pcH(hyp.personnel_croiss)+"/an"],
-    ["Taux d'IS effectif",pcH(hyp.is_taux)]]);
+    ["Taux d'IS effectif",pcH(hyp.is_taux)]]));
   gH("Besoin en fonds de roulement",[
     ["Délai clients (DSO)",Math.round(hyp.dso)+" j"],
     ["Rotation des stocks (DIO)",Math.round(hyp.dio)+" j"],
@@ -6488,7 +6557,10 @@ function construirePDF(doc){
       ["Dette financière",-v.DETTES_FINANCIERES[a1],a=>P.bs.DETTE[a],""]];
     pdfTable(doc,hd2,lB.map(([lib,h,f])=>[lib,h===null?"-":fmt(h),...AP.map(a=>fmt(f(a)))]),lB.map(x=>x[3]));
     doc.setFontSize(8.5);doc.setTextColor(...PDF_GRIS);
-    doc.text("Hypothèses clés : croissance CA "+H.caCroiss.map(x=>Math.round(x*100)+"%").join(" / ")
+    const _hypCA=(H.caMode==="volumePrix")
+      ? ((H.revenus||[]).length+" ligne"+(((H.revenus||[]).length)>1?"s":"")+" en volumes x prix")
+      : ("croissance CA "+H.caCroiss.map(x=>Math.round(x*100)+"%").join(" / "));
+    doc.text("Hypothèses clés : "+_hypCA
       +" · coûts directs "+Math.round(H.coutsDirects_pct*100)+"% CA · DSO "+Math.round(H.dso)
       +" j · WACC "+(V.wacc*100).toFixed(1)+"% · g "+(V.g*100).toFixed(1)+"%",14,doc.lastAutoTable.finalY+8);
     pdfPied(doc,++page);
@@ -11118,6 +11190,177 @@ function vueBP(){
   <div class="row" style="margin:14px 0 12px;align-items:center">${tabs}${vueBtn}</div>${corps}`;
 }
 
+/* =====================================================================
+   CHIFFRE D'AFFAIRES PROJETÉ DEPUIS L'HISTORIQUE — VOLUMES × PRIX
+   Un taux de croissance global écrase deux décisions distinctes : vendre
+   plus, et vendre plus cher. Elles n'ont ni les mêmes déterminants (part
+   de marché, capacité) ni les mêmes limites (inflation, concurrence), et
+   un lecteur de business plan les challenge séparément.
+   Ce mode part du CA du DERNIER EXERCICE RÉEL, le décompose en volume et
+   prix moyen — le prix étant le plus souvent DÉDUIT (CA comptable ÷
+   quantité vendue), puisque c'est ce qu'on connaît — et projette chacun
+   par un taux de croissance ou année par année.
+   ===================================================================== */
+function hCaMode(m){
+  const H=assurerBP();
+  H.caMode=m;
+  if(m==="volumePrix"&&(!H.revenus||!H.revenus.length))
+    H.revenus=hypothesesBP(ETATS,DOSSIER.lignesPerso||[]).revenus;
+  sauverDossier();rendre();
+}
+function hRev(li,champ,val,div){
+  const L=(assurerBP().revenus||[])[li]; if(!L)return;
+  if(champ==="name"||champ==="uniteVol"){L[champ]=val;sauverDossier();rendre();return;}
+  const x=numFR(val); if(x===null){rendre();return;}
+  L[champ]=x/(div||1); sauverDossier(); rendre();
+}
+/* prix du dernier exercice réel : déduit du CA comptable, ou saisi.
+   En passant de « déduit » à « saisi » on part de la valeur déduite : rien ne saute. */
+function hRevPrixMode(li,m){
+  const L=(assurerBP().revenus||[])[li]; if(!L)return;
+  if(m==="saisi"&&L.prixMode!=="saisi")L.prixBase=prixBaseLigne(L);
+  L.prixMode=m; sauverDossier(); rendre();
+}
+/* règle de projection : un taux de croissance, ou une valeur par année.
+   En passant en « par année » on pré-remplit avec la trajectoire courante — l'utilisateur
+   corrige les années qui s'écartent au lieu de tout ressaisir. */
+function hRevProjMode(li,quoi,m){
+  const H=assurerBP(),L=(H.revenus||[])[li]; if(!L)return;
+  const o=L[quoi]||(L[quoi]={mode:"croissance",croiss:0,vals:[]});
+  if(m==="annuel"&&o.mode!=="annuel"){
+    const base=(quoi==="volProj")?(+L.volBase||0):prixBaseLigne(L);
+    o.vals=Array.from({length:H.nb||5},(_,i)=>Math.round(base*Math.pow(1+(+o.croiss||0),i+1)*100)/100);
+  }
+  o.mode=m; sauverDossier(); rendre();
+}
+function hRevCroiss(li,quoi,val){
+  const L=(assurerBP().revenus||[])[li]; if(!L||!L[quoi])return;
+  const x=numFR(val); if(x===null){rendre();return;}
+  L[quoi].croiss=x/100; sauverDossier(); rendre();
+}
+function hRevVal(li,quoi,i,val){
+  const L=(assurerBP().revenus||[])[li]; if(!L||!L[quoi])return;
+  const x=numFR(val); if(x===null){rendre();return;}
+  (L[quoi].vals=L[quoi].vals||[])[i]=x; sauverDossier(); rendre();
+}
+function hRevAdd(){
+  const H=assurerBP();
+  (H.revenus=H.revenus||[]).push({name:"Nouvelle ligne de revenus",caHist:0,volBase:0,uniteVol:"unité",
+    prixMode:"saisi",prixBase:0,
+    volProj:{mode:"croissance",croiss:0.05,vals:[]},
+    prixProj:{mode:"croissance",croiss:H.inflation||0.03,vals:[]}});
+  sauverDossier();rendre();
+}
+function hRevDel(li){
+  const H=assurerBP(); if(!H.revenus||H.revenus.length<2){
+    if(typeof toast==='function')toast("Gardez au moins une ligne de revenus");return;}
+  H.revenus.splice(li,1); sauverDossier(); rendre();
+}
+/* Répartit le CA comptable du dernier exercice au prorata du poids actuel de chaque ligne :
+   l'écart de réconciliation retombe à zéro sans écraser la structure voulue. Le levier
+   dépend du mode de la ligne — on ajuste le CA de référence quand le prix en est déduit,
+   le prix lui-même quand il est saisi. Sinon le bouton ne refermerait l'écart que sur la
+   moitié des lignes, ce qui est pire que de ne rien faire. */
+function hRevCaler(){
+  const H=assurerBP(),A0=ETATS.annees,a1=A0[A0.length-1],reel=ETATS.v.CA[a1]||0;
+  const R=H.revenus||[]; if(!R.length)return;
+  const poids=R.map(L=>(+L.volBase||0)*prixBaseLigne(L)/1000);
+  const som=poids.reduce((s,x)=>s+x,0);
+  R.forEach((L,i)=>{
+    const part=(som>0)?(poids[i]/som*reel):(reel/R.length);
+    L.caHist=part;
+    if(L.prixMode==="saisi")L.prixBase=(+L.volBase>0)?(part*1000/(+L.volBase)):0;
+  });
+  sauverDossier();rendre();
+  if(typeof toast==='function')toast("Lignes calées sur le CA comptable de "+libFY(a1));
+}
+function tableRevenusBP(H){
+  const u=uni(),A0=ETATS.annees,a1=A0[A0.length-1],reel=ETATS.v.CA[a1]||0;
+  const N=H.nb||5,R=H.revenus||[];
+  const AP=Array.from({length:N},(_,i)=>a1+1+i);
+  const det=Array.from({length:N},(_,i)=>caLignesBP(H,i));
+  const nCols=N+3;
+  const seg=(on,lab,fn,ti)=>`<button class="${on?"on":""}"${ti?` title="${ti}"`:""} onclick="${fn}">${lab}</button>`;
+  const calc=(txt,ti,fn)=>`<span class="gcell gcalc num"${ti?` title="${ti}"`:""}${fn?` onclick="${fn}"`:""}>${txt}</span>`;
+  const inp=(val,fn,ti)=>`<input class="gcell gin num" value="${val}" oninput="mSep(this)" onchange="${fn}"${ti?` title="${ti}"`:""}>`;
+
+  const corps=R.map((L,li)=>{
+    const vP=L.volProj||{mode:"croissance",croiss:0,vals:[]};
+    const pP=L.prixProj||{mode:"croissance",croiss:0,vals:[]};
+    const vAn=(vP.mode==="annuel"),pAn=(pP.mode==="annuel");
+    const pDed=(L.prixMode!=="saisi");
+    const pBase=prixBaseLigne(L);
+    const caBase=(+L.volBase||0)*pBase/1000;
+    const part=reel?Math.round(caBase/reel*1000)/10:0;
+
+    /* règle de projection, colonne « Projection » */
+    const regle=(quoi,o,an)=>`<span class="gfx">`
+      +`<span class="gseg">${seg(!an,"croissance",`hRevProjMode(${li},'${quoi}','croissance')`,"Un taux unique appliqué chaque année")}`
+      +`${seg(an,"par année",`hRevProjMode(${li},'${quoi}','annuel')`,"Une valeur saisie pour chaque exercice")}</span>`
+      +(an?`<span class="mut">valeurs ci-contre</span>`
+          :`<input style="width:46px" value="${+((+o.croiss||0)*100).toFixed(1)}" onchange="hRevCroiss(${li},'${quoi}',this.value)"> %/an`)
+      +`</span>`;
+
+    const ligneVol=`<tr><td class="l gc1"><div class="ghead"><span style="padding-left:10px">Volume</span>`
+      +`<input class="gnm u" style="width:74px" value="${esc(L.uniteVol||"unité")}" title="Unité du volume" onchange="hRev(${li},'uniteVol',this.value)"></div></td>`
+      +`<td class="l gc2">${regle("volProj",vP,vAn)}</td>`
+      +`<td class="reelc">${inp(mAmt(+L.volBase||0),`hRev(${li},'volBase',this.value,1)`,"Quantité vendue sur le dernier exercice réel")}</td>`
+      +det.map((d,k)=>`<td>${vAn
+        ?inp(mAmt(Math.round(d.lignes[li].vol*100)/100),`hRevVal(${li},'volProj',${k},this.value)`)
+        :calc(gN(d.lignes[li].vol),"Calculé : volume réel × croissance")}</td>`).join("")+`</tr>`;
+
+    const lignePrix=`<tr><td class="l gc1"><span style="padding-left:10px">Prix moyen</span> <span class="mut">· FCFA</span></td>`
+      +`<td class="l gc2">${regle("prixProj",pP,pAn)}</td>`
+      +`<td class="reelc">${pDed
+        ?calc(gN(pBase),"Déduit : chiffre d'affaires réel de la ligne ÷ volume réel. Cliquer pour saisir un prix.",`hRevPrixMode(${li},'saisi')`)
+        :inp(mAmt(Math.round(pBase*100)/100),`hRev(${li},'prixBase',this.value,1)`,"Prix moyen saisi")}</td>`
+      +det.map((d,k)=>`<td>${pAn
+        ?inp(mAmt(Math.round(d.lignes[li].prix*100)/100),`hRevVal(${li},'prixProj',${k},this.value)`)
+        :calc(gN(d.lignes[li].prix),"Calculé : prix réel × croissance")}</td>`).join("")+`</tr>`;
+
+    const ligneCA=`<tr class="gres"><td class="l gc1"><div class="gdrv"><span class="gop eq">=</span> Chiffre d'affaires <span class="mut">· ${u.suf}</span></div></td>`
+      +`<td class="l gc2"><span class="gseg">${seg(pDed,"CA réel saisi",`hRevPrixMode(${li},'deduit')`,"Le prix moyen se déduit de ce chiffre d'affaires")}`
+      +`${seg(!pDed,"volume × prix",`hRevPrixMode(${li},'saisi')`,"Le chiffre d'affaires résulte du volume et du prix saisis")}</span></td>`
+      +`<td class="reelc">${pDed
+        ?inp(mAmt(Math.round((+L.caHist||0)*u.f*100)/100),`hRev(${li},'caHist',this.value,${u.f})`,"Part du chiffre d'affaires comptable portée par cette ligne")
+        :calc(fmt(caBase),"Calculé : volume × prix moyen")}</td>`
+      +det.map(d=>`<td>${calc(fmt(d.lignes[li].ca))}</td>`).join("")+`</tr>`;
+
+    return `<tr class="grp"><td class="l gc1"><div class="ghead"><input class="gnm big" value="${esc(L.name||"")}" onchange="hRev(${li},'name',this.value)">`
+      +(R.length>1?`<button class="gx" title="Retirer cette ligne" onclick="hRevDel(${li})">&#10005;</button>`:"")+`</div></td>`
+      +`<td class="l gc2 mut">${part} % du CA réel</td><td class="reelc"></td>`
+      +det.map(()=>`<td></td>`).join("")+`</tr>`
+      +ligneVol+lignePrix+ligneCA;
+  }).join("");
+
+  const totBase=R.reduce((s,L)=>s+(+L.volBase||0)*prixBaseLigne(L)/1000,0);
+  const ecart=totBase-reel;
+  const coulEc=(Math.abs(ecart)<=0.01?"#16904E":"#c0392b");
+  const totaux=`<tr class="gtot"><td class="l gc1">Total du chiffre d'affaires</td><td class="gc2"></td>`
+    +`<td class="reelc num v">${fmt(totBase)}</td>`
+    +det.map(d=>`<td class="num v">${fmt(d.total)}</td>`).join("")+`</tr>`
+    +`<tr class="gres"><td class="l gc1">Chiffre d'affaires comptable <span class="mut">· ${libFY(a1)}</span></td><td class="gc2 mut">états financiers</td>`
+    +`<td class="reelc num">${fmt(reel)}</td>`+det.map(()=>`<td></td>`).join("")+`</tr>`
+    +`<tr class="gres"><td class="l gc1"><b>Écart de réconciliation</b></td><td class="l gc2" style="color:${coulEc}">`
+    +(Math.abs(ecart)<=0.01?"Réconcilié avec les comptes":"À corriger avant de projeter")+`</td>`
+    +`<td class="reelc num" style="color:${coulEc}"><b>${Math.abs(ecart)<=0.01?"0":fmt(ecart)}</b></td>`+det.map(()=>`<td></td>`).join("")+`</tr>`;
+
+  return `<div class="gbar"><span class="gt">Chiffre d'affaires — volumes &times; prix</span>`
+    +`<span class="mut">volumes en unités &middot; prix en FCFA &middot; chiffre d'affaires en ${u.suf}</span>`
+    +`<span class="push"></span>`
+    +(Math.abs(ecart)>0.01?`<button class="btn sm" onclick="hRevCaler()" title="Répartit le chiffre d'affaires comptable au prorata des lignes">Caler sur les comptes</button>`:"")
+    +`<button class="btn sm primary" onclick="hRevAdd()">+ Ligne de revenus</button></div>`
+    +`<div class="gwrap"><div class="gscroll"><table class="gtab"><thead><tr>`
+    +`<th class="l gc1">Ligne de revenus</th><th class="l gc2">Projection</th>`
+    +`<th class="reelc" style="min-width:120px">${libFY(a1)} <span style="font-weight:400">réel</span></th>`
+    +AP.map(a=>`<th style="min-width:112px">${libFY(a,true)}</th>`).join("")
+    +`</tr></thead><tbody>${corps}${totaux}</tbody></table></div>`
+    +`<div class="gfoot"><span><b>Le prix moyen n'est presque jamais connu : il se déduit.</b> `
+    +`Saisissez la quantité réellement vendue en ${libFY(a1)} et le chiffre d'affaires comptable de la ligne — le prix moyen tombe tout seul, `
+    +`et sert de base à la projection. Basculez sur <b>volume × prix</b> si vous connaissez votre tarif et préférez que le chiffre d'affaires en découle. `
+    +`Volume et prix se projettent séparément : c'est le point du mode, un plan qui gagne 10 % de volume ne dit pas la même chose qu'un plan qui augmente ses prix de 10 %. `
+    +`Les colonnes affichent le scénario <b>central</b> ; la dérive de scénario s'applique par-dessus.</span></div></div>`;
+}
 function vueBPHyp(H){
   const AP=Array.from({length:H.nb},(_,i)=>i);
   const a1s=ETATS.annees[ETATS.annees.length-1];
@@ -11142,9 +11385,23 @@ function vueBPHyp(H){
       ?`<input type="text" inputmode="decimal" class="nin" value="${+(o.croiss*100).toFixed(1)}" step="0.5" onchange="hOpex('${o.code}','croiss',this.value,100)"> %`
       :`<span class="mut">${+((H.inflation||0.03)*100).toFixed(1)} % (inflation)</span>`}</td>
     <td class="num mut">${fmt(-o.base)}</td></tr>`).join("");
-  return `<div class="deux">
+  /* Le chiffre d'affaires quitte la carte « Activité et marges » : il porte desormais
+     un CHOIX DE METHODE (taux de croissance ou volumes x prix) et, en volumes x prix,
+     une grille pleine largeur. C'est l'hypothese la plus challengee d'un business plan ;
+     elle merite le haut de l'ecran, pas une ligne parmi douze. */
+  const volPrix=(H.caMode==="volumePrix");
+  const carteCA=`<div class="card"><div class="sec-titre" style="margin-top:0">Chiffre d'affaires
+      <span class="mut" style="font-weight:400">· la façon dont vous le projetez</span></div>
+    <div class="hyp-l"><span>Méthode de projection</span><span class="segvue">
+      <button class="${volPrix?"":"on"}" onclick="hCaMode('croissance')">Taux de croissance</button>
+      <button class="${volPrix?"on":""}" onclick="hCaMode('volumePrix')">Volumes &times; prix</button></span></div>
+    <div class="mut" style="margin:8px 0 ${volPrix?"12px":"2px"}">${volPrix
+      ? `Le chiffre d'affaires est reconstruit ligne par ligne à partir des <b>quantités vendues</b> et du <b>prix moyen</b> du dernier exercice réel, chacun projeté séparément. Les coûts directs restent un pourcentage du chiffre d'affaires ainsi obtenu.`
+      : `Le chiffre d'affaires du dernier exercice réel est reconduit avec un taux par année. Simple et rapide, mais il mélange effet volume et effet prix : passez en <b>volumes &times; prix</b> si votre activité se pilote en quantités (tonnes, élèves, chambres, abonnés…) ou si un prêteur va challenger vos hypothèses de tarif.`}</div>
+    ${volPrix?tableRevenusBP(H):anneesIn("caCroiss",H.caCroiss)}
+  </div>`;
+  return `${carteCA}<div class="deux">
   <div class="card"><div class="sec-titre" style="margin-top:0">Activité et marges</div>
-    ${anneesIn("caCroiss",H.caCroiss)}
     ${hypLigne("Coûts directs (% du CA)",inPct("hBP.bind(null,'coutsDirects_pct')",H.coutsDirects_pct))}
     ${hypLigne("Autres produits et subventions (an 1)",inK("hBP.bind(null,'autresProd_montant')",H.autresProd_montant))}
     ${hypLigne("… croissance annuelle",inPct("hBP.bind(null,'autresProd_croiss')",H.autresProd_croiss))}
@@ -11228,10 +11485,15 @@ function vueBPPl(P){
   const mm=(typeof modeleMode==="function"&&modeleMode());
   const defs=[];
   DEF_PL.filter(d=>!d.detail).forEach(d=>{
-    if(det&&mm&&d.code==="CA"){
-      /* modèle : déplier le chiffre d'affaires par ligne de revenus (ventes par produit) */
-      const CAD=P.pl.CA_DETAIL||{};
-      Object.keys(CAD).forEach(c=>defs.push({lib:CAD[c].lib,st:"det",hist:0,proj:a=>CAD[c].vals[a]||0}));
+    if(det&&d.code==="CA"&&Object.keys(P.pl.CA_DETAIL||{}).length){
+      /* Déplier le chiffre d'affaires par ligne de revenus. Vrai pour le modèle (ventes par
+         produit) comme pour un dossier avec historique projeté en volumes x prix : dans les
+         deux cas CA_DETAIL porte la même forme. La colonne historique reçoit le chiffre
+         d'affaires réel affecté à la ligne — vide s'il n'est pas connu. */
+      const CAD=P.pl.CA_DETAIL||{}, RVH=(!mm&&typeof assurerBP==="function")?(assurerBP().revenus||[]):[];
+      Object.keys(CAD).forEach((c,ci)=>defs.push({lib:CAD[c].lib,st:"det",
+        hist:mm?0:(RVH[ci]?(+RVH[ci].caHist||0):null),
+        proj:a=>CAD[c].vals[a]||0}));
     }
     if(det&&mm&&d.code==="COUTS_DIRECTS"){
       /* modèle : tous les coûts directs (unifiés dans coutsDirects) dépliés par ligne de coût */
@@ -11533,7 +11795,15 @@ function vueBPAnalyse(P){
   /* --- Sensibilité de la trésorerie fin de plan (tornado) --- */
   function reproj(mut,s){const H2=JSON.parse(JSON.stringify(H));mut(H2,s);const P2=projeterBP(ETATS,H2);return P2.bs.TRESO[P2.annees[P2.annees.length-1]];}
   const drivers=[
-    {lib:"Croissance annuelle du CA",unit:"±3 pts",mut:(H2,s)=>H2.caCroiss=H.caCroiss.map(x=>x+s*0.03)},
+    /* En volumes x prix, caCroiss n'est plus lu par le moteur : muter cette clé donnerait
+       une sensibilité NULLE, donc un tornado qui ment. Le levier porte alors sur le volume,
+       là où se joue réellement la croissance d'activité. */
+    {lib:(H.caMode==="volumePrix"?"Croissance annuelle des volumes":"Croissance annuelle du CA"),unit:"±3 pts",
+     mut:(H2,s)=>{ if(H2.caMode==="volumePrix"){
+         (H2.revenus||[]).forEach(Lg=>{ const o=Lg.volProj||(Lg.volProj={mode:"croissance",croiss:0,vals:[]});
+           if(o.mode==="annuel") o.vals=(o.vals||[]).map((x,i)=>x*Math.pow(1+s*0.03,i+1));
+           else o.croiss=(+o.croiss||0)+s*0.03; });
+       } else H2.caCroiss=H.caCroiss.map(x=>x+s*0.03); }},
     {lib:"Coûts directs (% du CA)",unit:"±2 pts",mut:(H2,s)=>H2.coutsDirects_pct=H.coutsDirects_pct+s*0.02},
     {lib:"Délai clients (DSO)",unit:"±15 j",mut:(H2,s)=>H2.dso=H.dso+s*15},
     {lib:"Investissements (CAPEX)",unit:"±20 %",mut:(H2,s)=>H2.capex=H.capex.map(x=>x*(1+s*0.2))},
@@ -12033,6 +12303,11 @@ function construireFeuillesBP(wb){
   const A=ETATS.annees,v=ETATS.v,nH=A.length,a1=A[nH-1];
   const N=H.nb||5,AP=Array.from({length:N},(_,i)=>a1+1+i);
   const m=H.opex.length;
+  /* Le CA projeté en volumes x prix ne se réduit pas à « CA précédent x (1 + croissance) » :
+     il lui faut sa propre feuille de calcul, sinon le classeur exporté raconterait une autre
+     histoire que l'application — le pire défaut possible pour un modèle à formules vivantes. */
+  const volPrixXL=(H.caMode==="volumePrix"&&(H.revenus||[]).length>0);
+  let refCAtot=null;
   const L=i=>String.fromCharCode(64+i);           /* index colonne → lettre */
   const cH=i=>3+i, cHL=2+nH, cP=i=>3+nH+i;        /* colonnes hist / dernière hist / proj */
   const JAUNE={type:"pattern",pattern:"solid",fgColor:{argb:"FFFFF2CC"}};
@@ -12079,7 +12354,9 @@ function construireFeuillesBP(wb){
   const hRow=(rn,lib)=>{cellV(wsH,rn,2,lib);};
   const hVal=(rn,val,fmt)=>{const c=cellV(wsH,rn,3,val,fmt);c.fill=JAUNE;};
   const hSer=(rn,vals,fmt,scale)=>{vals.forEach((x,i)=>{const c=cellV(wsH,rn,cP(i),scale?mnt(x):x,fmt);c.fill=JAUNE;});};
-  hRow(hy.caCroiss,"Croissance du CA par année");hSer(hy.caCroiss,H.caCroiss.map(x=>x+sc.dCA),PCT);
+  if(volPrixXL){ hRow(hy.caCroiss,"Chiffre d'affaires — projeté en volumes × prix (onglet dédié)");
+    wsH.getRow(hy.caCroiss).font={italic:true,color:{argb:"FF808080"}}; }
+  else { hRow(hy.caCroiss,"Croissance du CA par année");hSer(hy.caCroiss,H.caCroiss.map(x=>x+sc.dCA),PCT); }
   hRow(hy.cd,"Coûts directs (% du CA)");hVal(hy.cd,Math.max(0,H.coutsDirects_pct-sc.dMarge),PCT2);
   hRow(hy.apMont,"Autres produits — an 1 (montant)");hVal(hy.apMont,mnt(H.autresProd_montant),NF);
   hRow(hy.apCroiss,"Autres produits — croissance");hVal(hy.apCroiss,H.autresProd_croiss,PCT);
@@ -12135,6 +12412,73 @@ function construireFeuillesBP(wb){
     .forEach(([k,lib,pk])=>{hRow(hy[k],lib+" (%)");hVal(hy[k],(_pds[pk]||0)/100,PCT2);});
   wsH.columns=[{width:3},{width:46},...Array(nH).fill({width:12}),...AP.map(()=>({width:12}))];
 
+  /* ================= CHIFFRE D'AFFAIRES — VOLUMES x PRIX ================= */
+  if(volPrixXL){
+    const RV=H.revenus, nomCA=nomOnglet("Chiffre d'affaires"), rCA=q(nomCA);
+    const detXL=AP.map((a,i)=>caLignesBP(H,i));
+    const wsC=wb.addWorksheet(nomCA);
+    titreLiasse(wsC,"Chiffre d'affaires — volumes × prix — cellules jaunes modifiables");
+    const rEnt=wsC.addRow([null,"Ligne / composante","FY"+String(a1).slice(-2)+" réel","Croissance",
+      ...AP.map(a=>"FY"+String(a).slice(-2)+"p")]);
+    styliserEntete(rEnt,2);
+    const cA=i=>5+i;
+    /* numéro d'en-tête relevé au vol : titreLiasse ne pose pas toujours le même nombre de
+       lignes, et une constante en dur écraserait les libellés de colonnes */
+    const rFact=rEnt.number+1, fact="$C$"+rFact;
+    /* volume x prix donne des FCFA ; les états sont en unité d'affichage — le facteur est
+       une cellule visible plutôt qu'une constante enfouie dans chaque formule */
+    cellV(wsC,rFact,2,"Facteur d'unité — volume × prix (FCFA) vers "+u.lib);
+    cellV(wsC,rFact,3,UF/1000,"0.00000000");
+    wsC.getRow(rFact).font={italic:true,color:{argb:"FF808080"}};
+    const jaune=(rn,c,val,fmt)=>{const cl=cellV(wsC,rn,c,val,fmt);cl.fill=JAUNE;return cl;};
+    const QF="#,##0.##", caRows=[];
+    let r=rFact+2;
+    RV.forEach((Lg,li)=>{
+      const rTit=r, rVol=r+1, rPrix=r+2, rCa=r+3;
+      const ded=(Lg.prixMode!=="saisi");
+      const vAn=!!(Lg.volProj&&Lg.volProj.mode==="annuel");
+      const pAn=!!(Lg.prixProj&&Lg.prixProj.mode==="annuel");
+      cellV(wsC,rTit,2,Lg.name||"Ligne de revenus").font={bold:true,color:{argb:"FF172554"}};
+      if(ded) jaune(rTit,3,(+Lg.caHist||0)*UF,NF);
+      else cellF(wsC,rTit,3,`C${rVol}*C${rPrix}*${fact}`,NF);
+      cellV(wsC,rVol,2,"   Volume · "+(Lg.uniteVol||"unité"));
+      jaune(rVol,3,+Lg.volBase||0,QF);
+      if(!vAn) jaune(rVol,4,(Lg.volProj&&+Lg.volProj.croiss)||0,PCT);
+      AP.forEach((a,i)=>{ if(vAn) jaune(rVol,cA(i),detXL[i].lignes[li].vol,QF);
+        else cellF(wsC,rVol,cA(i),`${i===0?"C":L(cA(i-1))}${rVol}*(1+$D$${rVol})`,QF); });
+      cellV(wsC,rPrix,2,"   Prix moyen · FCFA");
+      if(ded) cellF(wsC,rPrix,3,`IF(C${rVol}=0,0,C${rTit}/C${rVol}/${fact})`,QF);
+      else jaune(rPrix,3,+Lg.prixBase||0,QF);
+      if(!pAn) jaune(rPrix,4,(Lg.prixProj&&+Lg.prixProj.croiss)||0,PCT);
+      AP.forEach((a,i)=>{ if(pAn) jaune(rPrix,cA(i),detXL[i].lignes[li].prix,QF);
+        else cellF(wsC,rPrix,cA(i),`${i===0?"C":L(cA(i-1))}${rPrix}*(1+$D$${rPrix})`,QF); });
+      cellV(wsC,rCa,2,"   Chiffre d'affaires");
+      cellF(wsC,rCa,3,`C${rVol}*C${rPrix}*${fact}`,NF);
+      AP.forEach((a,i)=>cellF(wsC,rCa,cA(i),`${L(cA(i))}${rVol}*${L(cA(i))}${rPrix}*${fact}`,NF));
+      wsC.getRow(rCa).font={bold:true};
+      caRows.push(rCa); r+=5;
+    });
+    const rSom=r, rDer=r+1, rTot=r+2, rCpt=r+3, rEc=r+4;
+    const somme=c=>caRows.map(x=>`${c}${x}`).join("+");
+    cellV(wsC,rSom,2,"Total des lignes");
+    cellF(wsC,rSom,3,somme("C"),NF);
+    AP.forEach((a,i)=>cellF(wsC,rSom,cA(i),somme(L(cA(i))),NF));
+    cellV(wsC,rDer,2,"Dérive de scénario — "+sc.lab+" (cumulée)");
+    cellV(wsC,rDer,3,1,"0.000");
+    AP.forEach((a,i)=>jaune(rDer,cA(i),Math.pow(1+(sc.dCA||0),i+1),"0.000"));
+    wsC.getRow(rDer).font={italic:true,color:{argb:"FF808080"}};
+    cellV(wsC,rTot,2,"Chiffre d'affaires retenu");
+    cellF(wsC,rTot,3,`C${rSom}*C${rDer}`,NF);
+    AP.forEach((a,i)=>cellF(wsC,rTot,cA(i),`${L(cA(i))}${rSom}*${L(cA(i))}${rDer}`,NF));
+    totalRow(wsC,rTot,4+N);
+    cellV(wsC,rCpt,2,"Chiffre d'affaires comptable FY"+String(a1).slice(-2)+" (états financiers)");
+    cellV(wsC,rCpt,3,v.CA[a1]*UF,NF);
+    cellV(wsC,rEc,2,"Écart de réconciliation");
+    cellF(wsC,rEc,3,`C${rSom}-C${rCpt}`,NF);
+    wsC.columns=[{width:3},{width:46},{width:15},{width:12},...AP.map(()=>({width:13}))];
+    refCAtot=i=>`${rCA}!${L(cA(i))}${rTot}`;
+  }
+
   /* références Hypothèses */
   const h1=(rn)=>`${rH}!$C$${rn}`;
   const hp=(rn,i)=>`${rH}!${L(cP(i))}$${rn}`;
@@ -12179,7 +12523,7 @@ function construireFeuillesBP(wb){
   const priorRep=i=>i===0?h1(hy.repdef):`${L(cP(i-1))}${rp.REPDEF}`;   /* stock de déficits à l'ouverture */
   const defsP=[
    {rn:rp.CA,lib:"Chiffre d'affaires",st:1,hist:a=>v.CA[a],
-    f:i=>`${Pp(rp.CA,i)}*(1+${hp(hy.caCroiss,i)})`},
+    f:i=>refCAtot?refCAtot(i):`${Pp(rp.CA,i)}*(1+${hp(hy.caCroiss,i)})`},
    {rn:rp.CD,lib:"Coûts directs",hist:a=>v.COUTS_DIRECTS[a],
     f:i=>`-${P(rp.CA,i)}*${h1(hy.cd)}`},
    {rn:rp.MB,lib:"Marge brute",st:1,hist:a=>v.MARGE_BRUTE[a],

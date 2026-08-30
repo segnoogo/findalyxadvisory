@@ -1256,7 +1256,7 @@ function construireBP(pptx,opts){
     " et le résultat net "+rpFmt(proj.pl.RN[ap[ap.length-1]])+" "+rpLib()+".");
   rpCartes(sl,[
     ["CA "+fyp[fyp.length-1],rpFmt(proj.pl.CA[ap[ap.length-1]])+" "+rpLib(),
-     mm?("scénario "+proj.scenario):("croissance "+rpPct(hyp.caCroiss[0])+"/an"),null,"neutre","chart","224289"],
+     mm?("scénario "+proj.scenario):(hyp.caMode==="volumePrix"?"volumes × prix":("croissance "+rpPct(hyp.caCroiss[0])+"/an")),null,"neutre","chart","224289"],
     ["EBITDA "+fyp[fyp.length-1],rpFmt(proj.pl.EBITDA[ap[ap.length-1]])+" "+rpLib(),
      proj.pl.CA[ap[ap.length-1]]?Math.round(proj.pl.EBITDA[ap[ap.length-1]]/proj.pl.CA[ap[ap.length-1]]*100)+"% du CA":"",
      null,"neutre","coins","FA6706"],
@@ -1303,8 +1303,11 @@ function construireBP(pptx,opts){
   rpTitreMsg(sl,"Hypothèses opérationnelles et financières",
     mm?("Le plan est construit à partir de "+((hyp.revenus||[]).length||1)+" ligne"+(((hyp.revenus||[]).length||1)>1?"s":"")+" de revenus (volumes × prix), d'une inflation de "
         +Math.round((hyp.inflation||0.03)*100)+" % et d'un financement de "+rpMsgFmt(proj.financement.sources)+".")
-      :("Les hypothèses sont calées sur l'historique "+fy[0]+" – "+fy[fy.length-1]+" : croissance du chiffre d'affaires de "
-        +rpPct(hyp.caCroiss[0])+" la première année et coûts directs à "+Math.round(hyp.coutsDirects_pct*100)+" % du chiffre d'affaires."));
+      :("Les hypothèses sont calées sur l'historique "+fy[0]+" – "+fy[fy.length-1]+" : "
+        +(hyp.caMode==="volumePrix"
+          ?("le chiffre d'affaires est reconstruit à partir de "+((hyp.revenus||[]).length||1)+" ligne"+((((hyp.revenus||[]).length||1)>1)?"s":"")+" de revenus en volumes × prix")
+          :("croissance du chiffre d'affaires de "+rpPct(hyp.caCroiss[0])+" la première année"))
+        +" et coûts directs à "+Math.round(hyp.coutsDirects_pct*100)+" % du chiffre d'affaires."));
   const lignesH=[],stylesH=[],notesH=[];
   const pcH=x=>(x*100).toFixed(1).replace(".0","").replace(".",",")+" %";   /* décimale française */
   const gH=(t,items)=>{lignesH.push([t,""]);stylesH.push("groupe");
@@ -1361,11 +1364,16 @@ function construireBP(pptx,opts){
       ["WACC",val?pcH(val.wacc):"n.s."],
       ["Croissance à l'infini (g)",pcH((hyp.valo&&hyp.valo.g)||0.03)]]);
   } else {
-  gH("Activité et marges",[
-    ["Croissance du CA par année",hyp.caCroiss.map(pcH).join(" ; ")],
+  gH("Activité et marges",(hyp.caMode==="volumePrix"
+    ? (hyp.revenus||[]).map(function(Lg){
+        var vg=(Lg.volProj&&Lg.volProj.mode==="annuel")?"par année":pcH((Lg.volProj&&+Lg.volProj.croiss)||0)+"/an";
+        var pg=(Lg.prixProj&&Lg.prixProj.mode==="annuel")?"par année":pcH((Lg.prixProj&&+Lg.prixProj.croiss)||0)+"/an";
+        return [(Lg.name||"Ligne de revenus"),"volume "+vg+" · prix "+pg];
+      })
+    : [["Croissance du CA par année",hyp.caCroiss.map(pcH).join(" ; ")]]).concat([
     ["Coûts directs (% du CA)",pcH(hyp.coutsDirects_pct)],
     ["Croissance des charges de personnel",pcH(hyp.personnel_croiss)+"/an"],
-    ["Taux d'IS effectif",pcH(hyp.is_taux)]]);
+    ["Taux d'IS effectif",pcH(hyp.is_taux)]]));
   gH("Besoin en fonds de roulement",[
     ["Délai clients (DSO)",Math.round(hyp.dso)+" j"],
     ["Rotation des stocks (DIO)",Math.round(hyp.dio)+" j"],

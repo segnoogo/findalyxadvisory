@@ -152,7 +152,10 @@ function construirePDF(doc){
       ["Dette financière",-v.DETTES_FINANCIERES[a1],a=>P.bs.DETTE[a],""]];
     pdfTable(doc,hd2,lB.map(([lib,h,f])=>[lib,h===null?"-":fmt(h),...AP.map(a=>fmt(f(a)))]),lB.map(x=>x[3]));
     doc.setFontSize(8.5);doc.setTextColor(...PDF_GRIS);
-    doc.text("Hypothèses clés : croissance CA "+H.caCroiss.map(x=>Math.round(x*100)+"%").join(" / ")
+    const _hypCA=(H.caMode==="volumePrix")
+      ? ((H.revenus||[]).length+" ligne"+(((H.revenus||[]).length)>1?"s":"")+" en volumes x prix")
+      : ("croissance CA "+H.caCroiss.map(x=>Math.round(x*100)+"%").join(" / "));
+    doc.text("Hypothèses clés : "+_hypCA
       +" · coûts directs "+Math.round(H.coutsDirects_pct*100)+"% CA · DSO "+Math.round(H.dso)
       +" j · WACC "+(V.wacc*100).toFixed(1)+"% · g "+(V.g*100).toFixed(1)+"%",14,doc.lastAutoTable.finalY+8);
     pdfPied(doc,++page);

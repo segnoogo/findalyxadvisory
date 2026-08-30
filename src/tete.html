@@ -11,7 +11,7 @@
 
 
 *{box-sizing:border-box}
-:root{--navy:#172554;--blue:#224289;--orange:#FA6706;--peach:#FCEFDD;--lblue:#E9EFF7;
+:root{--navy:#172554;--blue:#224289;--pri:#224289;--orange:#FA6706;--peach:#FCEFDD;--lblue:#E9EFF7;
 --lgrey:#F5F5F5;--bg:#E9EDF4;--border:#E5E7EB;--green:#16904E;--red:#C0392B;--ink:#1f2937;--muted:#6b7280}
 html,body{margin:0;padding:0}
 body{font-family:'Inter',"Segoe UI",system-ui,sans-serif;color:var(--ink);background:var(--bg)}
@@ -285,6 +285,11 @@ border-left:4px solid var(--orange)}
 .gcalc:before{content:"";position:absolute;left:0;top:6px;bottom:6px;width:3px;border-radius:2px;
   background:repeating-linear-gradient(180deg,#B9C2D2 0 3px,transparent 3px 6px)}
 .gcalc:hover{background:#F2F5FA}
+/* colonne « dernier exercice réel » : l'ancre de la projection, séparée d'un filet
+   (un fond ne tiendrait pas : .grp/.gres/.gtot posent le leur en !important) */
+.gtab .reelc{border-right:2px solid #C9D3E3}
+.gtab td.reelc{background:#FCFCFA}
+.gtab thead th.reelc{background:#F1F4F9}
 .gfoot{display:flex;align-items:center;gap:10px;padding:11px 14px;border-top:1px solid #EFF2F7;
   font-size:11.5px;color:var(--muted);flex-wrap:wrap}
 .gdash{border:1px dashed #C2CCDD;background:#fff;color:var(--pri);border-radius:8px;padding:6px 12px;

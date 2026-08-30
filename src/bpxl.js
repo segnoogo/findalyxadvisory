@@ -14,6 +14,11 @@ function construireFeuillesBP(wb){
   const A=ETATS.annees,v=ETATS.v,nH=A.length,a1=A[nH-1];
   const N=H.nb||5,AP=Array.from({length:N},(_,i)=>a1+1+i);
   const m=H.opex.length;
+  /* Le CA projeté en volumes x prix ne se réduit pas à « CA précédent x (1 + croissance) » :
+     il lui faut sa propre feuille de calcul, sinon le classeur exporté raconterait une autre
+     histoire que l'application — le pire défaut possible pour un modèle à formules vivantes. */
+  const volPrixXL=(H.caMode==="volumePrix"&&(H.revenus||[]).length>0);
+  let refCAtot=null;
   const L=i=>String.fromCharCode(64+i);           /* index colonne → lettre */
   const cH=i=>3+i, cHL=2+nH, cP=i=>3+nH+i;        /* colonnes hist / dernière hist / proj */
   const JAUNE={type:"pattern",pattern:"solid",fgColor:{argb:"FFFFF2CC"}};
@@ -60,7 +65,9 @@ function construireFeuillesBP(wb){
   const hRow=(rn,lib)=>{cellV(wsH,rn,2,lib);};
   const hVal=(rn,val,fmt)=>{const c=cellV(wsH,rn,3,val,fmt);c.fill=JAUNE;};
   const hSer=(rn,vals,fmt,scale)=>{vals.forEach((x,i)=>{const c=cellV(wsH,rn,cP(i),scale?mnt(x):x,fmt);c.fill=JAUNE;});};
-  hRow(hy.caCroiss,"Croissance du CA par année");hSer(hy.caCroiss,H.caCroiss.map(x=>x+sc.dCA),PCT);
+  if(volPrixXL){ hRow(hy.caCroiss,"Chiffre d'affaires — projeté en volumes × prix (onglet dédié)");
+    wsH.getRow(hy.caCroiss).font={italic:true,color:{argb:"FF808080"}}; }
+  else { hRow(hy.caCroiss,"Croissance du CA par année");hSer(hy.caCroiss,H.caCroiss.map(x=>x+sc.dCA),PCT); }
   hRow(hy.cd,"Coûts directs (% du CA)");hVal(hy.cd,Math.max(0,H.coutsDirects_pct-sc.dMarge),PCT2);
   hRow(hy.apMont,"Autres produits — an 1 (montant)");hVal(hy.apMont,mnt(H.autresProd_montant),NF);
   hRow(hy.apCroiss,"Autres produits — croissance");hVal(hy.apCroiss,H.autresProd_croiss,PCT);
@@ -116,6 +123,73 @@ function construireFeuillesBP(wb){
     .forEach(([k,lib,pk])=>{hRow(hy[k],lib+" (%)");hVal(hy[k],(_pds[pk]||0)/100,PCT2);});
   wsH.columns=[{width:3},{width:46},...Array(nH).fill({width:12}),...AP.map(()=>({width:12}))];
 
+  /* ================= CHIFFRE D'AFFAIRES — VOLUMES x PRIX ================= */
+  if(volPrixXL){
+    const RV=H.revenus, nomCA=nomOnglet("Chiffre d'affaires"), rCA=q(nomCA);
+    const detXL=AP.map((a,i)=>caLignesBP(H,i));
+    const wsC=wb.addWorksheet(nomCA);
+    titreLiasse(wsC,"Chiffre d'affaires — volumes × prix — cellules jaunes modifiables");
+    const rEnt=wsC.addRow([null,"Ligne / composante","FY"+String(a1).slice(-2)+" réel","Croissance",
+      ...AP.map(a=>"FY"+String(a).slice(-2)+"p")]);
+    styliserEntete(rEnt,2);
+    const cA=i=>5+i;
+    /* numéro d'en-tête relevé au vol : titreLiasse ne pose pas toujours le même nombre de
+       lignes, et une constante en dur écraserait les libellés de colonnes */
+    const rFact=rEnt.number+1, fact="$C$"+rFact;
+    /* volume x prix donne des FCFA ; les états sont en unité d'affichage — le facteur est
+       une cellule visible plutôt qu'une constante enfouie dans chaque formule */
+    cellV(wsC,rFact,2,"Facteur d'unité — volume × prix (FCFA) vers "+u.lib);
+    cellV(wsC,rFact,3,UF/1000,"0.00000000");
+    wsC.getRow(rFact).font={italic:true,color:{argb:"FF808080"}};
+    const jaune=(rn,c,val,fmt)=>{const cl=cellV(wsC,rn,c,val,fmt);cl.fill=JAUNE;return cl;};
+    const QF="#,##0.##", caRows=[];
+    let r=rFact+2;
+    RV.forEach((Lg,li)=>{
+      const rTit=r, rVol=r+1, rPrix=r+2, rCa=r+3;
+      const ded=(Lg.prixMode!=="saisi");
+      const vAn=!!(Lg.volProj&&Lg.volProj.mode==="annuel");
+      const pAn=!!(Lg.prixProj&&Lg.prixProj.mode==="annuel");
+      cellV(wsC,rTit,2,Lg.name||"Ligne de revenus").font={bold:true,color:{argb:"FF172554"}};
+      if(ded) jaune(rTit,3,(+Lg.caHist||0)*UF,NF);
+      else cellF(wsC,rTit,3,`C${rVol}*C${rPrix}*${fact}`,NF);
+      cellV(wsC,rVol,2,"   Volume · "+(Lg.uniteVol||"unité"));
+      jaune(rVol,3,+Lg.volBase||0,QF);
+      if(!vAn) jaune(rVol,4,(Lg.volProj&&+Lg.volProj.croiss)||0,PCT);
+      AP.forEach((a,i)=>{ if(vAn) jaune(rVol,cA(i),detXL[i].lignes[li].vol,QF);
+        else cellF(wsC,rVol,cA(i),`${i===0?"C":L(cA(i-1))}${rVol}*(1+$D$${rVol})`,QF); });
+      cellV(wsC,rPrix,2,"   Prix moyen · FCFA");
+      if(ded) cellF(wsC,rPrix,3,`IF(C${rVol}=0,0,C${rTit}/C${rVol}/${fact})`,QF);
+      else jaune(rPrix,3,+Lg.prixBase||0,QF);
+      if(!pAn) jaune(rPrix,4,(Lg.prixProj&&+Lg.prixProj.croiss)||0,PCT);
+      AP.forEach((a,i)=>{ if(pAn) jaune(rPrix,cA(i),detXL[i].lignes[li].prix,QF);
+        else cellF(wsC,rPrix,cA(i),`${i===0?"C":L(cA(i-1))}${rPrix}*(1+$D$${rPrix})`,QF); });
+      cellV(wsC,rCa,2,"   Chiffre d'affaires");
+      cellF(wsC,rCa,3,`C${rVol}*C${rPrix}*${fact}`,NF);
+      AP.forEach((a,i)=>cellF(wsC,rCa,cA(i),`${L(cA(i))}${rVol}*${L(cA(i))}${rPrix}*${fact}`,NF));
+      wsC.getRow(rCa).font={bold:true};
+      caRows.push(rCa); r+=5;
+    });
+    const rSom=r, rDer=r+1, rTot=r+2, rCpt=r+3, rEc=r+4;
+    const somme=c=>caRows.map(x=>`${c}${x}`).join("+");
+    cellV(wsC,rSom,2,"Total des lignes");
+    cellF(wsC,rSom,3,somme("C"),NF);
+    AP.forEach((a,i)=>cellF(wsC,rSom,cA(i),somme(L(cA(i))),NF));
+    cellV(wsC,rDer,2,"Dérive de scénario — "+sc.lab+" (cumulée)");
+    cellV(wsC,rDer,3,1,"0.000");
+    AP.forEach((a,i)=>jaune(rDer,cA(i),Math.pow(1+(sc.dCA||0),i+1),"0.000"));
+    wsC.getRow(rDer).font={italic:true,color:{argb:"FF808080"}};
+    cellV(wsC,rTot,2,"Chiffre d'affaires retenu");
+    cellF(wsC,rTot,3,`C${rSom}*C${rDer}`,NF);
+    AP.forEach((a,i)=>cellF(wsC,rTot,cA(i),`${L(cA(i))}${rSom}*${L(cA(i))}${rDer}`,NF));
+    totalRow(wsC,rTot,4+N);
+    cellV(wsC,rCpt,2,"Chiffre d'affaires comptable FY"+String(a1).slice(-2)+" (états financiers)");
+    cellV(wsC,rCpt,3,v.CA[a1]*UF,NF);
+    cellV(wsC,rEc,2,"Écart de réconciliation");
+    cellF(wsC,rEc,3,`C${rSom}-C${rCpt}`,NF);
+    wsC.columns=[{width:3},{width:46},{width:15},{width:12},...AP.map(()=>({width:13}))];
+    refCAtot=i=>`${rCA}!${L(cA(i))}${rTot}`;
+  }
+
   /* références Hypothèses */
   const h1=(rn)=>`${rH}!$C$${rn}`;
   const hp=(rn,i)=>`${rH}!${L(cP(i))}$${rn}`;
@@ -160,7 +234,7 @@ function construireFeuillesBP(wb){
   const priorRep=i=>i===0?h1(hy.repdef):`${L(cP(i-1))}${rp.REPDEF}`;   /* stock de déficits à l'ouverture */
   const defsP=[
    {rn:rp.CA,lib:"Chiffre d'affaires",st:1,hist:a=>v.CA[a],
-    f:i=>`${Pp(rp.CA,i)}*(1+${hp(hy.caCroiss,i)})`},
+    f:i=>refCAtot?refCAtot(i):`${Pp(rp.CA,i)}*(1+${hp(hy.caCroiss,i)})`},
    {rn:rp.CD,lib:"Coûts directs",hist:a=>v.COUTS_DIRECTS[a],
     f:i=>`-${P(rp.CA,i)}*${h1(hy.cd)}`},
    {rn:rp.MB,lib:"Marge brute",st:1,hist:a=>v.MARGE_BRUTE[a],
