@@ -1012,6 +1012,31 @@ function mTableVNC(M){
     +'<div class="gfoot"><span><b>Solde d\'ouverture + investissements &minus; dotations = VNC de clôture</b>, qui devient le solde d\'ouverture de l\'exercice suivant. '
     +'La VNC est la base du <b>coût du capital</b> (VNC × WACC) et de l\'actif net. Les <b>intérêts de construction</b> capitalisés, s\'il y en a, s\'ajoutent aux immobilisations du bilan sans figurer ici.</span></div></div>';
 }
+/* ---- BFR : les délais saisis à gauche, le besoin projeté depuis le BILAN ---- */
+function mTableBfr(M,P){
+  var N=M.nb||5, nc=(M.dureeConstruction||0), A=P.annees, b=M.bfr||{}, u=uni();
+  function serie(cle){ return A.map(function(a){ var v=((P.bs[cle]&&P.bs[cle][a])||0);
+    return '<td><span class="gcell gcalc num">'+fmt(v)+'</span></td>'; }).join(''); }
+  var body=''
+    +'<tr><td class="l gc1"><div class="gdrv"><span class="gop">+</span> Créances clients</div></td>'
+      +(G_FX?'<td class="l gc2"><span class="gfx"><input value="'+(b.dso||0)+'" onchange="mSet(&#39;bfr.dso&#39;,this.value,1)"> jours de CA <span class="mut">(DSO)</span></span></td>':'')
+      +serie('CLIENTS')+'</tr>'
+    +'<tr><td class="l gc1"><div class="gdrv"><span class="gop">+</span> Stocks</div></td>'
+      +(G_FX?'<td class="l gc2"><span class="gfx"><input value="'+(b.dio||0)+'" onchange="mSet(&#39;bfr.dio&#39;,this.value,1)"> jours d&#39;achats <span class="mut">(DIO)</span></span></td>':'')
+      +serie('STOCKS')+'</tr>'
+    +'<tr><td class="l gc1"><div class="gdrv"><span class="gop">&minus;</span> Dettes fournisseurs</div></td>'
+      +(G_FX?'<td class="l gc2"><span class="gfx"><input value="'+(b.dpo||0)+'" onchange="mSet(&#39;bfr.dpo&#39;,this.value,1)"> jours d&#39;achats <span class="mut">(DPO)</span></span></td>':'')
+      +serie('FOURNISSEURS')+'</tr>'
+    +'<tr class="gtot"><td class="l gc1">Besoin en fonds de roulement</td>'+(G_FX?'<td class="l gc2" style="font-size:11px;color:var(--muted)">'+u.lib+'</td>':'')
+      +A.map(function(a){return '<td class="num v">'+fmt((P.bs.BFR&&P.bs.BFR[a])||0)+'</td>';}).join('')+'</tr>'
+    +'<tr class="gres"><td class="l gc1"><div class="gdrv"><span class="gop eq">&Delta;</span> Variation <span class="mut" style="margin-left:5px">· ce qui pèse sur la trésorerie</span></div></td>'
+      +(G_FX?'<td class="gc2"></td>':'')
+      +A.map(function(a,i){ var v=((P.bs.BFR&&P.bs.BFR[a])||0)-(i?((P.bs.BFR&&P.bs.BFR[A[i-1]])||0):0);
+        return '<td><span class="gcell gcalc num" style="color:'+(v>0?'#c0392b':'#16904E')+'">'+fmt(-v)+'</span></td>'; }).join('')+'</tr>';
+  return '<div class="gbar"><span class="gt">Besoin en fonds de roulement</span><span class="mut">délais en jours · montants en '+u.lib+'</span></div>'
+    +'<div class="gwrap"><div class="gscroll"><table class="gtab"><thead>'+gHead(N,nc,'Poste','Délai')+'</thead><tbody>'+body+'</tbody></table></div>'
+    +'<div class="gfoot"><span>Le BFR n&#39;est pas une ligne du tableau de flux : sa <b>variation</b> se lit dans les activités opérationnelles. Une variation positive du BFR consomme de la trésorerie.</span></div></div>';
+}
 function mAddLigneTpl(tpl){ if(!tpl)return; var M=assurerModele();
   M.revenus.push({name:M_PRESETS[tpl].lab,tpl:tpl,rows:JSON.parse(JSON.stringify(M_PRESETS[tpl].rows)),prix:{val:1000,unit:"FCFA",g:2}});
   sauverDossier();rendre(); }
