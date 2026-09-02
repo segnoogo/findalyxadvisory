@@ -138,7 +138,7 @@ function construireFeuillesBP(wb){
     const rFact=rEnt.number+1, fact="$C$"+rFact;
     /* volume x prix donne des FCFA ; les états sont en unité d'affichage — le facteur est
        une cellule visible plutôt qu'une constante enfouie dans chaque formule */
-    cellV(wsC,rFact,2,"Facteur d'unité — volume × prix (FCFA) vers "+u.lib);
+    cellV(wsC,rFact,2,"Facteur d'unité — volume × prix ("+devSym()+") vers "+u.lib);
     cellV(wsC,rFact,3,UF/1000,"0.00000000");
     wsC.getRow(rFact).font={italic:true,color:{argb:"FF808080"}};
     const jaune=(rn,c,val,fmt)=>{const cl=cellV(wsC,rn,c,val,fmt);cl.fill=JAUNE;return cl;};
@@ -157,7 +157,7 @@ function construireFeuillesBP(wb){
       if(!vAn) jaune(rVol,4,(Lg.volProj&&+Lg.volProj.croiss)||0,PCT);
       AP.forEach((a,i)=>{ if(vAn) jaune(rVol,cA(i),detXL[i].lignes[li].vol,QF);
         else cellF(wsC,rVol,cA(i),`${i===0?"C":L(cA(i-1))}${rVol}*(1+$D$${rVol})`,QF); });
-      cellV(wsC,rPrix,2,"   Prix moyen · FCFA");
+      cellV(wsC,rPrix,2,"   Prix moyen · "+devSym());
       if(ded) cellF(wsC,rPrix,3,`IF(C${rVol}=0,0,C${rTit}/C${rVol}/${fact})`,QF);
       else jaune(rPrix,3,+Lg.prixBase||0,QF);
       if(!pAn) jaune(rPrix,4,(Lg.prixProj&&+Lg.prixProj.croiss)||0,PCT);

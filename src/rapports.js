@@ -15,6 +15,8 @@ const RP_TINTES={"172554":"E8ECF5","224289":"E5EBF6","FA6706":"FEEBDD","16904E":
 
 const rpU=()=>(typeof CONF_UNITE!=="undefined"&&CONF_UNITE)?CONF_UNITE:{f:1,dec:0,lib:"K"+"FCFA"};
 const rpLib=()=>rpU().lib;
+/* symbole de saisie (F pour le franc CFA, sinon € / $) — utilisé pour les prix unitaires */
+const rpSym=()=>{const D=(typeof dev==="function")?dev():null;return D?(D.sym==="FCFA"?"F":D.sym):"F";};
 function rpFmt(v){if(v===null||v===undefined)return "-";
   const u=rpU(),x=v*u.f;
   if(Math.abs(x)<(u.dec?0.05:0.5))return "-";
@@ -27,18 +29,35 @@ function rpPct(v){if(v===null||!isFinite(v))return "-";if(Math.abs(v)>9.99)retur
    graphique doivent rester courtes quelle que soit l'unité d'affichage du dossier (F/K/M) :
    on choisit ici l'unité qui donne 3 ou 4 caractères (KFCFA, MFCFA, MdFCFA) et le titre du
    graphique porte l'unité retenue. */
+/* etiquettes d'echelle dans la DEVISE du dossier : un deck en euros ne peut pas
+   graduer ses axes en « MFCFA ». Le milliard n'existe pas dans la table d'unites,
+   on le compose (MdFCFA / Md€ / Md$). */
+function rpDevU(k){
+  const D=(typeof dev==="function")?dev():null;
+  if(!D) return k==="Md"?"MdFCFA":(k+"FCFA");
+  if(k==="Md") return (D.sym==="FCFA")?"MdFCFA":("Md"+D.sym);
+  return D.unites[k].lib;
+}
 function rpEch(vals){
   let mx=0;(vals||[]).forEach(v=>{v=Math.abs(+v||0);if(isFinite(v)&&v>mx)mx=v;});
-  if(mx>=1e6)return {f:1e-6,dec:mx>=1e7?1:2,lib:"MdFCFA"};
-  if(mx>=1e3)return {f:1e-3,dec:mx>=1e4?1:2,lib:"MFCFA"};
-  return {f:1,dec:0,lib:"KFCFA"};
+  if(mx>=1e6)return {f:1e-6,dec:mx>=1e7?1:2,lib:rpDevU("Md")};
+  if(mx>=1e3)return {f:1e-3,dec:mx>=1e4?1:2,lib:rpDevU("M")};
+  return {f:1,dec:0,lib:rpDevU("K")};
 }
 function rpFmtE(v,e){if(v===null||v===undefined||!isFinite(v))return "";
   const x=v*e.f;
   const s=Math.abs(x).toLocaleString("fr-FR",{minimumFractionDigits:e.dec,maximumFractionDigits:e.dec}).replace(/[  ]/g," ");
   return x<0?`(${s})`:s;}
 function rpTitreEch(titre,e){
-  const t=String(titre||"").replace(/\(?\s*(?:Md|M|K|F)FCFA\s*\)?/g,"").replace(/\s+/g," ").trim();
+  /* on retire l'ancienne unite du titre, quelle que soit la devise du dossier :
+     par retraits de chaines successifs plutot que par une regex construite a la volee
+     (le symbole $ du dollar et les parentheses seraient a echapper). */
+  let t=String(titre||"");
+  ["MdFCFA","MFCFA","KFCFA","FCFA",rpDevU("Md"),rpDevU("M"),rpDevU("K")].forEach(function(u){
+    if(!u)return;
+    t=t.split("("+u+")").join(" ").split(u).join(" ");
+  });
+  t=t.replace(/\(\s*\)/g," ").replace(/\s+/g," ").trim();
   return (t?t+" ":"")+"("+e.lib+")";}
 
 /* ---------- éléments de page ---------- */
@@ -1328,10 +1347,10 @@ function construireBP(pptx,opts){
     gH("Activité — volumes et prix unitaires",(hyp.revenus||[]).map(L=>[L.name||"Ligne de revenus",descRev(L)]));
     const descCout=cl=>{const m=cl.m||"ind";
       if(m==="pct")return (cl.pct||0)+" % du CA "+((cl.scope&&cl.scope!=="all")?"(d'une ligne)":"(total)");
-      if(m==="unit")return nb0((+cl.val||0))+" F par unité de volume";
+      if(m==="unit")return nb0((+cl.val||0))+" "+rpSym()+" par unité de volume";
       const q=(function(){try{return volInducteurs(cl.rows,0,{revenus:hyp.revenus,fCA:1});}catch(e){return 0;}})();
       const t=(cl.prix&&+cl.prix.val)||0;
-      return (q?(nb0(q)+" × "):"")+nb0(t)+" F"+((cl.prix&&cl.prix.unit)?(" "+cl.prix.unit.replace(/^FCFA\/?/,"/ ")):"");};
+      return (q?(nb0(q)+" × "):"")+nb0(t)+" "+rpSym()+((cl.prix&&cl.prix.unit)?(" "+cl.prix.unit.replace(/^(FCFA|EUR|USD|€|\$)\/?/,"/ ")):"");};
     if((hyp.coutsDirects||[]).length) gH("Coûts directs — quantités et taux",(hyp.coutsDirects||[]).map(cl=>[cl.name||"Coût direct",descCout(cl)]));
     gH("Coûts, charges & BFR",[
       ["Inflation des coûts unitaires",pcH(hyp.inflation||0.03)],

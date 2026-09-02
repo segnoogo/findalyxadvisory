@@ -623,7 +623,7 @@ async function genererDatabook(){
   /* ---- BG par exercice ---- */
   DOSSIER.balances.slice().sort((a,b)=>a.annee-b.annee).forEach(b=>{
     const ws=wb.addWorksheet("BG_"+b.annee);
-    titreLiasse(ws,"Balance générale FY"+b.annee+" — données source (FCFA)");
+    titreLiasse(ws,"Balance générale FY"+b.annee+" — données source ("+(typeof devSym==="function"?devSym():"FCFA")+")");
     dbEntete(ws.addRow([null,"Compte","Libellé","SI débit","SI crédit","Mvt débit","Mvt crédit",
       "SF débit","SF crédit","Solde net"]),3);
     b.comptes.forEach(e=>{
