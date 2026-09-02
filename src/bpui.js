@@ -151,7 +151,7 @@ var MODELES_SECTORIELS=[
      bfr:{dso:20,dio:60,dpo:35}});}},
   {id:"restauration",lab:"Restauration",grp:"Services",
    desc:"Restaurant, maquis, traiteur : couverts servis × ticket moyen ; les matières (food cost) sont le poste clé.",
-   cles:["Couverts par jour et jours d'ouverture","Taux de remplissage (%)","Ticket moyen (FCFA)","Food cost — coût des matières (% du CA)","Loyer et énergie","Investissement cuisine et salle"],
+   cles:["Couverts par jour et jours d'ouverture","Taux de remplissage (%)","Ticket moyen","Food cost — coût des matières (% du CA)","Loyer et énergie","Investissement cuisine et salle"],
    build:function(){return _secM({
      revenus:[{name:"Ventes de couverts",tpl:"restauration",rows:_pz("restauration"),prix:{val:4500,unit:"FCFA",g:2}}],
      coutsDirects:[{name:"Matières (food cost)",m:"pct",scope:"all",pct:33,val:0},{name:"Boissons",m:"pct",scope:"all",pct:6,val:0}],
@@ -161,7 +161,7 @@ var MODELES_SECTORIELS=[
      bfr:{dso:2,dio:10,dpo:25}});}},
   {id:"hotellerie",lab:"Hôtellerie",grp:"Services",
    desc:"Hôtel, résidence : nuitées vendues (chambres × occupation × jours) × prix moyen ; F&B en complément.",
-   cles:["Nombre de chambres","Taux d'occupation (%)","Prix moyen de la nuitée (FCFA)","Coûts opérationnels des chambres (% du CA)","Personnel (réception, étages, restauration)","Investissement bâtiment et rénovation"],
+   cles:["Nombre de chambres","Taux d'occupation (%)","Prix moyen de la nuitée","Coûts opérationnels des chambres (% du CA)","Personnel (réception, étages, restauration)","Investissement bâtiment et rénovation"],
    build:function(){return _secM({
      revenus:[{name:"Hébergement (nuitées)",tpl:"hotellerie",rows:_pz("hotellerie"),prix:{val:35000,unit:"FCFA",g:2}},
               {name:"Restauration et bar",tpl:"quantite",rows:[{op:"x",name:"Couverts/an",val:0,unit:"couv.",g:0}],prix:{val:6000,unit:"FCFA",g:2}}],
@@ -172,7 +172,7 @@ var MODELES_SECTORIELS=[
      bfr:{dso:10,dio:15,dpo:30}});}},
   {id:"ecole",lab:"École / formation",grp:"Services",
    desc:"Établissement scolaire ou centre de formation : élèves inscrits × frais de scolarité, coûts d'enseignement pilotés par la capacité.",
-   cles:["Effectif d'élèves par niveau (par an)","Taux de remplissage / remises (%)","Frais de scolarité par niveau (FCFA)","Enseignants (nombre de classes × heures)","Loyer et charges de fonctionnement","Investissement (bâtiment, mobilier, informatique)"],
+   cles:["Effectif d'élèves par niveau (par an)","Taux de remplissage / remises (%)","Frais de scolarité par niveau","Enseignants (nombre de classes × heures)","Loyer et charges de fonctionnement","Investissement (bâtiment, mobilier, informatique)"],
    build:function(){return _secM({
      revenus:[{name:"Scolarités",tpl:"ecole",rows:_pz("ecole"),prix:{val:400000,unit:"FCFA",g:3}}],
      coutsDirects:[{name:"Enseignants (masse salariale pédagogique)",m:"pct",scope:"all",pct:35,val:0},{name:"Fournitures et supports",m:"pct",scope:"all",pct:3,val:0}],
@@ -182,7 +182,7 @@ var MODELES_SECTORIELS=[
      bfr:{dso:30,dio:0,dpo:30}});}},
   {id:"sante",lab:"Santé (clinique / cabinet)",grp:"Services",
    desc:"Clinique, cabinet, laboratoire : nombre d'actes × tarif moyen ; consommables et plateau technique.",
-   cles:["Nombre d'actes par jour et jours d'ouverture","Tarif moyen par acte (FCFA)","Consommables et médicaments (% du CA)","Personnel médical et paramédical","Investissement en équipement médical","Délais de paiement (assurances, mutuelles)"],
+   cles:["Nombre d'actes par jour et jours d'ouverture","Tarif moyen par acte","Consommables et médicaments (% du CA)","Personnel médical et paramédical","Investissement en équipement médical","Délais de paiement (assurances, mutuelles)"],
    build:function(){return _secM({
      revenus:[{name:"Actes et consultations",tpl:"sante",rows:_pz("sante"),prix:{val:15000,unit:"FCFA",g:2}}],
      coutsDirects:[{name:"Consommables et médicaments",m:"pct",scope:"all",pct:22,val:0}],
@@ -192,7 +192,7 @@ var MODELES_SECTORIELS=[
      bfr:{dso:45,dio:30,dpo:30}});}},
   {id:"agriculture",lab:"Agriculture (production végétale)",grp:"Agriculture & élevage",
    desc:"Exploitation agricole : superficie × rendement × taux de commercialisation × prix de vente à la tonne.",
-   cles:["Superficie cultivée (ha)","Rendement (t/ha)","Taux de commercialisation (%)","Prix de vente (FCFA/t)","Intrants (semences, engrais, phyto — % du CA)","Mécanisation et irrigation (CAPEX)"],
+   cles:["Superficie cultivée (ha)","Rendement (t/ha)","Taux de commercialisation (%)","Prix de vente","Intrants (semences, engrais, phyto — % du CA)","Mécanisation et irrigation (CAPEX)"],
    build:function(){return _secM({
      revenus:[{name:"Ventes de récolte",tpl:"agriculture",rows:_pz("agriculture"),prix:{val:200000,unit:"FCFA/t",g:2}}],
      coutsDirects:[{name:"Intrants (semences, engrais, phyto)",m:"pct",scope:"all",pct:35,val:0},{name:"Récolte et transport",m:"pct",scope:"all",pct:8,val:0}],
@@ -202,7 +202,7 @@ var MODELES_SECTORIELS=[
      bfr:{dso:15,dio:30,dpo:20}});}},
   {id:"energie",lab:"Énergie solaire (IPP)",grp:"Industrie & énergie",
    desc:"Centrale solaire / producteur d'électricité : puissance × facteur de charge × heures × tarif du kWh.",
-   cles:["Puissance installée (kWc)","Facteur de charge (%)","Tarif de rachat du kWh (FCFA)","Coûts d'exploitation et maintenance (% du CA)","Investissement centrale et durée (20-25 ans)","Financement long terme (dette projet)"],
+   cles:["Puissance installée (kWc)","Facteur de charge (%)","Tarif de rachat du kWh","Coûts d'exploitation et maintenance (% du CA)","Investissement centrale et durée (20-25 ans)","Financement long terme (dette projet)"],
    build:function(){return _secM({
      revenus:[{name:"Vente d'électricité",tpl:"energie",rows:[{op:"x",name:"Puissance installée",val:5000,unit:"kWc",g:0},{op:"x",name:"Facteur de charge",val:18,unit:"%",g:0},{op:"x",name:"Heures",val:8760,unit:"h/an",g:0}],prix:{val:85,unit:"FCFA/kWh",g:1}}],
      coutsDirects:[{name:"Exploitation et maintenance (O&M)",m:"pct",scope:"all",pct:8,val:0}],
@@ -222,7 +222,7 @@ var MODELES_SECTORIELS=[
      bfr:{dso:10,dio:15,dpo:25}});}},
   {id:"immobilier",lab:"Immobilier locatif",grp:"Immobilier",
    desc:"Programme locatif (résidentiel, commercial) : lots × taux d'occupation × loyer mensuel.",
-   cles:["Nombre de lots et surfaces","Taux d'occupation (%)","Loyer mensuel moyen par lot (FCFA)","Charges non récupérables (% du CA)","Coût de construction et durée d'amortissement","Financement (fonds propres / crédit)"],
+   cles:["Nombre de lots et surfaces","Taux d'occupation (%)","Loyer mensuel moyen par lot","Charges non récupérables (% du CA)","Coût de construction et durée d'amortissement","Financement (fonds propres / crédit)"],
    build:function(){return _secM({
      revenus:[{name:"Revenus locatifs",tpl:"immobilier",rows:_pz("immobilier"),prix:{val:600000,unit:"FCFA/mois",g:2}}],
      coutsDirects:[{name:"Charges non récupérables et entretien",m:"pct",scope:"all",pct:15,val:0}],
@@ -232,7 +232,7 @@ var MODELES_SECTORIELS=[
      bfr:{dso:10,dio:0,dpo:20}});}},
   {id:"service",lab:"Services / conseil / prestations",grp:"Services",
    desc:"Cabinet, agence, prestataire : capacité de production de services (postes × heures × occupation) × prix de la prestation.",
-   cles:["Nombre de postes / consultants","Heures facturables et taux d'occupation (%)","Prix moyen de la prestation (FCFA)","Sous-traitance (% du CA)","Masse salariale (le poste dominant)","Délais de paiement clients"],
+   cles:["Nombre de postes / consultants","Heures facturables et taux d'occupation (%)","Prix moyen de la prestation","Sous-traitance (% du CA)","Masse salariale (le poste dominant)","Délais de paiement clients"],
    build:function(){return _secM({
      revenus:[{name:"Prestations facturées",tpl:"service",rows:_pz("service"),prix:{val:15000,unit:"FCFA",g:3}}],
      coutsDirects:[{name:"Sous-traitance et frais de mission",m:"pct",scope:"all",pct:18,val:0}],
@@ -537,7 +537,7 @@ function mCarteRevenu(L,li){
     +rows
     +'<button class="btn sm" style="margin-top:2px" onclick="mAddInd('+li+')">+ inducteur</button>'
     +'<div class="mind-res"><div class="mind-price"><span class="x">=</span> <span class="mind-lbl">Volume an&nbsp;1</span> <b style="font-size:15px">'+Math.round(vol).toLocaleString("fr-FR").replace(/[  ]/g," ")+'</b> <span class="mut">unités (pas des FCFA)</span></div>'
-    +'<div class="mind-price"><span class="x">×</span> <span class="mut">Prix an 1 (FCFA)</span> <input class="nin ninm" value="'+mAmt(prix)+'" oninput="mSep(this)" onchange="mPrix('+li+',\'val\',this.value)"><input class="nin" style="width:70px" value="'+esc(L.prix.unit||'')+'" onchange="mPrix('+li+',\'unit\',this.value)">'
+    +'<div class="mind-price"><span class="x">×</span> <span class="mut">Prix an 1 ('+devSym()+')</span> <input class="nin ninm" value="'+mAmt(prix)+'" oninput="mSep(this)" onchange="mPrix('+li+',\'val\',this.value)"><input class="nin" style="width:70px" value="'+esc(L.prix.unit||'')+'" onchange="mPrix('+li+',\'unit\',this.value)">'
     +'<span class="mut">croissance</span> <input class="nin" style="width:60px" value="'+(L.prix.g||0)+'" onchange="mPrix('+li+',\'g\',this.value)"> %'
     +'<span class="mind-ca">CA an 1 · '+fmt(ca/1000)+' '+uni().suf+'</span></div></div>'
     +'<div class="mrev-note">Les coûts directs se paramètrent dans l\'onglet <b>Coûts directs</b> (choix du périmètre : cette ligne, l\'ensemble, ou indépendant).</div>'
@@ -977,7 +977,7 @@ function mTableFixes(M){
   });
   body+='<tr class="gtot"><td class="l gc1">Total frais généraux</td>'+(G_FX?'<td class="gc2"></td>':'')
     +tot.map(function(v){return '<td class="num v">'+gN(v)+'</td>';}).join('')+'</tr>';
-  return '<div class="gbar"><span class="gt">Frais généraux</span><span class="mut">hors personnel · en FCFA</span>'
+  return '<div class="gbar"><span class="gt">Frais généraux</span><span class="mut">hors personnel · en '+devSym()+'</span>'
     +'<span class="push"></span><button class="btn sm primary" onclick="mAddFixe()">+ Charge</button></div>'
     +'<div class="gwrap"><div class="gscroll"><table class="gtab"><thead>'+gHead(N,nc,'Poste','Évolution')+'</thead><tbody>'+body+'</tbody></table></div>'
     +'<div class="gfoot"><span>Cliquer une valeur calculée la passe en saisie année par année (utile pour un loyer qui change à une date connue).</span></div></div>';
@@ -999,7 +999,7 @@ function mTablePersonnel(M){
   });
   body+='<tr class="gtot"><td class="l gc1">Total personnel <span class="mut" style="font-weight:400">· '+eff+' pers.</span></td>'+(G_FX?'<td class="gc2"></td>':'')
     +tot.map(function(v){return '<td class="num v">'+gN(v)+'</td>';}).join('')+'</tr>';
-  return '<div class="gbar" style="margin-top:18px"><span class="gt">Charges de personnel</span><span class="mut">par poste · en FCFA</span>'
+  return '<div class="gbar" style="margin-top:18px"><span class="gt">Charges de personnel</span><span class="mut">par poste · en '+devSym()+'</span>'
     +'<span class="push"></span><button class="btn sm primary" onclick="mAddPoste()">+ Poste</button></div>'
     +'<div class="gwrap"><div class="gscroll"><table class="gtab"><thead>'+gHead(N,nc,'Poste','Effectif × salaire × 12')+'</thead><tbody>'+body+'</tbody></table></div>'
     +'<div class="gfoot"><span>Le total alimente la ligne « Charges du personnel », comprise dans les frais généraux du P&amp;L.</span></div></div>';
@@ -1042,7 +1042,7 @@ function mTableCapex(M){
   });
   body+='<tr class="gtot"><td class="l gc1">Total des investissements</td>'+(G_FX?'<td class="gc2"></td>':'')
     +tot.map(function(v){return '<td class="num v">'+(v?gN(v):'&ndash;')+'</td>';}).join('')+'</tr>';
-  return '<div class="gbar"><span class="gt">1 · Investissements</span><span class="mut">CAPEX · en FCFA</span>'
+  return '<div class="gbar"><span class="gt">1 · Investissements</span><span class="mut">CAPEX · en '+devSym()+'</span>'
     +'<span class="push"></span><button class="btn sm primary" onclick="mAddCapex()">+ Investissement</button></div>'
     +'<div class="gwrap"><div class="gscroll"><table class="gtab"><thead>'+gHead(N,nc,'Poste','Année · durée')+'</thead><tbody>'+body+'</tbody></table></div>'
     +'<div class="gfoot"><span>Chaque investissement tombe dans son année. Saisir le montant directement dans la colonne de l\'année.</span></div></div>';
@@ -1060,7 +1060,7 @@ function mTableAmort(M){
   }).join('');
   body+='<tr class="gtot"><td class="l gc1">Total des dotations</td>'+(G_FX?'<td class="gc2"></td>':'')
     +tot.map(function(v){return '<td class="num v">'+(v?gN(v):'&ndash;')+'</td>';}).join('')+'</tr>';
-  return '<div class="gbar" style="margin-top:18px"><span class="gt">2 · Amortissements</span><span class="mut">dotation de l\'exercice · en FCFA</span></div>'
+  return '<div class="gbar" style="margin-top:18px"><span class="gt">2 · Amortissements</span><span class="mut">dotation de l\'exercice · en '+devSym()+'</span></div>'
     +'<div class="gwrap"><div class="gscroll"><table class="gtab"><thead>'+gHead(N,nc,'Poste','Base &divide; durée')+'</thead><tbody>'+body+'</tbody></table></div>'
     +'<div class="gfoot"><span>Amortissement linéaire, à partir de la mise en service (fin de la période de construction). Le total alimente la ligne « Dotations » du compte de résultat.</span></div></div>';
 }
@@ -1085,7 +1085,7 @@ function mTableVNC(M){
     +ligne('','+','Investissements de l\'exercice',inv,'#16904E','')
     +ligne('','&minus;','Dotations aux amortissements',dot,'#c0392b','')
     +ligne('gtot','','Valeur nette comptable à la clôture',clo,'','devient le solde d\'ouverture suivant');
-  return '<div class="gbar" style="margin-top:18px"><span class="gt">3 · Valeur nette comptable</span><span class="mut">tableau de variation · en FCFA</span></div>'
+  return '<div class="gbar" style="margin-top:18px"><span class="gt">3 · Valeur nette comptable</span><span class="mut">tableau de variation · en '+devSym()+'</span></div>'
     +'<div class="gwrap"><div class="gscroll"><table class="gtab"><thead>'+gHead(N,nc,'','')+'</thead><tbody>'+body+'</tbody></table></div>'
     +'<div class="gfoot"><span><b>Solde d\'ouverture + investissements &minus; dotations = VNC de clôture</b>, qui devient le solde d\'ouverture de l\'exercice suivant. '
     +'La VNC est la base du <b>coût du capital</b> (VNC × WACC) et de l\'actif net. Les <b>intérêts de construction</b> capitalisés, s\'il y en a, s\'ajoutent aux immobilisations du bilan sans figurer ici.</span></div></div>';
@@ -1165,7 +1165,7 @@ function mCarteCout(cl,ci){
     +rows
     +'<button class="btn sm" style="margin-top:2px" onclick="mAddCoutInd('+ci+')">+ inducteur</button>'
     +'<div class="mind-price"><span class="x">= Quantité par année : <b>'+qS+'</b></span></div>'
-    +'<div class="mind-price"><span class="x">×</span> <span class="mut">Taux unitaire an 1 (FCFA)</span> <input class="nin ninm" value="'+mAmt(taux)+'" oninput="mSep(this)" onchange="mCoutTaux('+ci+',\'val\',this.value)"><input class="nin" style="width:70px" value="'+esc((cl.prix&&cl.prix.unit)||'')+'" onchange="mCoutTaux('+ci+',\'unit\',this.value)">'
+    +'<div class="mind-price"><span class="x">×</span> <span class="mut">Taux unitaire an 1 ('+devSym()+')</span> <input class="nin ninm" value="'+mAmt(taux)+'" oninput="mSep(this)" onchange="mCoutTaux('+ci+',\'val\',this.value)"><input class="nin" style="width:70px" value="'+esc((cl.prix&&cl.prix.unit)||'')+'" onchange="mCoutTaux('+ci+',\'unit\',this.value)">'
     +'<span class="mut">croissance</span> <input class="nin" style="width:60px" value="'+((cl.prix&&cl.prix.g)||0)+'" onchange="mCoutTaux('+ci+',\'g\',this.value)"> %'
     +'<span style="margin-left:auto;font-weight:700;color:#c0392b">Coût an 1 : '+fmt(cout/1000)+' '+uni().suf+'</span></div>';
   }
@@ -1235,7 +1235,7 @@ function vueModele(){
 
     /* ---- A. Ce qu'il faut financer ---- */
     var emplois=(Pf.capexFinance||0)+(Pf.bfrDemarrage||0);
-    var tEmp='<div class="gbar"><span class="gt">1 &middot; Ce qu\'il faut financer</span><span class="mut">emplois du montage &middot; en FCFA</span>'
+    var tEmp='<div class="gbar"><span class="gt">1 &middot; Ce qu\'il faut financer</span><span class="mut">emplois du montage &middot; en '+devSym()+'</span>'
       +'<span class="push"></span><span class="gfx">construction <input style="width:38px" value="'+(M.dureeConstruction||0)+'" onchange="mSet(\'dureeConstruction\',this.value,1)"> an(s)</span></div>'
       +'<div class="gwrap"><div class="gscroll"><table class="gtab"><thead><tr><th class="l gc1">Emploi</th><th style="min-width:150px">Montant</th><th class="l" style="min-width:280px">Commentaire</th></tr></thead><tbody>'
       +'<tr><td class="l gc1">Investissements jusqu\'à la mise en service</td><td><span class="gcell gcalc num">'+gN(mtF(Pf.capexFinance))+'</span></td><td class="l mut">onglet Investissements'+(Pf.dureeConstruction>0?' &middot; exploitation à partir de l\'an '+Pf.anneeExploit:'')+'</td></tr>'
@@ -1362,15 +1362,15 @@ function vueModele(){
       +(ccaMode!=="maintenu"?'<div class="hyp-g"><span>'+(ccaMode==="infine"?'Année de remboursement':'Durée de remboursement')+'</span><input class="sel" value="'+(f.ccaDuree||(M.nb||5))+'" onchange="mSet(\'financement.ccaDuree\',this.value,1)"><span class="suf">'+(ccaMode==="infine"?'(année du plan)':'ans')+'</span></div>':'')
       +'<div class="mut" style="'+stTit+'">Ligne de crédit renouvelable <span style="font-weight:400;text-transform:none;letter-spacing:0">&middot; revolver / découvert autorisé</span></div>'
       +'<div class="mut" style="margin:0 0 6px">Tirée automatiquement quand la trésorerie passe sous le seuil, remboursée dès qu\'elle repasse au-dessus. Plafond à 0 = ligne <b>illimitée</b> (hypothèse optimiste : la trésorerie ne peut jamais manquer).</div>'
-      +'<div class="hyp-g"><span>Plafond autorisé <span class="mut">&middot; 0 = illimité</span></span><input class="sel ninm" value="'+mAmt(RV.plafond||0)+'" oninput="mSep(this)" onchange="mSet(\'revolver.plafond\',this.value,1)"><span class="suf">FCFA</span></div>'
+      +'<div class="hyp-g"><span>Plafond autorisé <span class="mut">&middot; 0 = illimité</span></span><input class="sel ninm" value="'+mAmt(RV.plafond||0)+'" oninput="mSep(this)" onchange="mSet(\'revolver.plafond\',this.value,1)"><span class="suf">'+devSym()+'</span></div>'
       +'<div class="hyp-g"><span>Taux d\'intérêt sur le tiré</span><input class="sel" value="'+((RV.taux!=null?RV.taux:0.12)*100)+'" onchange="mSet(\'revolver.taux\',(numFR(this.value)||0)/100)"><span class="suf">%</span></div>'
       +'<div class="hyp-g"><span>Commission d\'engagement <span class="mut">&middot; sur la part non tirée</span></span><input class="sel" value="'+((RV.commission||0)*100)+'" onchange="mSet(\'revolver.commission\',(numFR(this.value)||0)/100)"><span class="suf">%</span></div>'
-      +'<div class="hyp-g"><span>Trésorerie plancher à maintenir</span><input class="sel ninm" value="'+mAmt(RV.seuil||0)+'" oninput="mSep(this)" onchange="mSet(\'revolver.seuil\',this.value,1)"><span class="suf">FCFA</span></div>'
+      +'<div class="hyp-g"><span>Trésorerie plancher à maintenir</span><input class="sel ninm" value="'+mAmt(RV.seuil||0)+'" oninput="mSep(this)" onchange="mSet(\'revolver.seuil\',this.value,1)"><span class="suf">'+devSym()+'</span></div>'
       +'<div class="hyp-l"><span>Tirage maximal sur le plan</span><b style="color:'+(PR.sature?'#c0392b':'#224289')+'">'+fmt(PR.tirageMax||0)+' '+u.suf+'</b></div>'
       +(PR.sature?'<div class="gchk" style="margin-top:8px"><b>Plafond insuffisant</b><ul><li>Le besoin de trésorerie dépasse le plafond autorisé : la trésorerie reste négative et le plan n\'est pas finançable en l\'état. Relevez le plafond, renforcez les fonds propres, ou étalez les investissements.</li></ul></div>':'')
       +'<div class="mut" style="'+stTit+'">Distribution aux associés</div>'
       +'<div class="hyp-g"><span>Dividendes <span class="mut">&middot; % du résultat net N&minus;1, si bénéficiaire</span></span><input class="sel" value="'+((M.dividendes_payout||0)*100)+'" onchange="mSet(\'dividendes_payout\',(numFR(this.value)||0)/100)"><span class="suf">%</span></div>'
-      +'<div class="hyp-g"><span>Trésorerie minimale avant distribution <span class="mut">&middot; le dividende est toujours plafonné par la trésorerie d\'ouverture (vide = plancher 0)</span></span><input class="sel ninm" value="'+(M.dividendes_seuilCash!=null?mAmt(M.dividendes_seuilCash):'')+'" oninput="mSep(this)" onchange="mDivSeuil(this.value)"><span class="suf">FCFA</span></div>'
+      +'<div class="hyp-g"><span>Trésorerie minimale avant distribution <span class="mut">&middot; le dividende est toujours plafonné par la trésorerie d\'ouverture (vide = plancher 0)</span></span><input class="sel ninm" value="'+(M.dividendes_seuilCash!=null?mAmt(M.dividendes_seuilCash):'')+'" oninput="mSep(this)" onchange="mDivSeuil(this.value)"><span class="suf">'+devSym()+'</span></div>'
       +'</div>';
 
     /* ---- D. Situation d'ouverture : entreprise déjà en activité ---- */
@@ -1733,7 +1733,7 @@ function tableRevenusBP(H){
         ?inp(mAmt(Math.round(d.lignes[li].vol*100)/100),`hRevVal(${li},'volProj',${k},this.value)`)
         :calc(gN(d.lignes[li].vol),"Calculé : volume réel × croissance")}</td>`).join("")+`</tr>`;
 
-    const lignePrix=`<tr><td class="l gc1"><span style="padding-left:10px">Prix moyen</span> <span class="mut">· FCFA</span></td>`
+    const lignePrix=`<tr><td class="l gc1"><span style="padding-left:10px">Prix moyen</span> <span class="mut">· `+devSym()+`</span></td>`
       +`<td class="l gc2">${regle("prixProj",pP,pAn)}</td>`
       +`<td class="reelc">${pDed
         ?calc(gN(pBase),"Déduit : chiffre d'affaires réel de la ligne ÷ volume réel. Cliquer pour saisir un prix.",`hRevPrixMode(${li},'saisi')`)
@@ -1770,7 +1770,7 @@ function tableRevenusBP(H){
     +`<td class="reelc num" style="color:${coulEc}"><b>${Math.abs(ecart)<=0.01?"0":fmt(ecart)}</b></td>`+det.map(()=>`<td></td>`).join("")+`</tr>`;
 
   return `<div class="gbar"><span class="gt">Chiffre d'affaires — volumes &times; prix</span>`
-    +`<span class="mut">volumes en unités &middot; prix en FCFA &middot; chiffre d'affaires en ${u.suf}</span>`
+    +`<span class="mut">volumes en unités &middot; prix en `+devSym()+` &middot; chiffre d'affaires en ${u.suf}</span>`
     +`<span class="push"></span>`
     +(Math.abs(ecart)>0.01?`<button class="btn sm" onclick="hRevCaler()" title="Répartit le chiffre d'affaires comptable au prorata des lignes">Caler sur les comptes</button>`:"")
     +`<button class="btn sm primary" onclick="hRevAdd()">+ Ligne de revenus</button></div>`

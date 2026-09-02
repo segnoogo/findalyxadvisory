@@ -66,8 +66,25 @@ function importerDossiersJSON(input){
 
 /* ---------- formats ---------- */
 /* unité d'affichage : F = FCFA, K = milliers (défaut), M = millions — par dossier */
-const UNITES={F:{f:1000,dec:0,lib:"FCFA",suf:"F"},K:{f:1,dec:0,lib:"KFCFA",suf:"K"},M:{f:1/1000,dec:1,lib:"MFCFA",suf:"M"}};
-function uni(){const u=UNITES[(DOSSIER&&DOSSIER.unite)||"K"];globalThis.CONF_UNITE=u;return u;}
+/* ---------- devise du dossier ----------
+   La base interne reste le MILLIER d'unites monetaires, quelle que soit la devise :
+   seuls les LIBELLES changent. Un dossier gabonais presente a des investisseurs
+   europeens se saisit en euros ; le meme moteur, les memes etats, une autre etiquette.
+   Le franc CFA (XOF comme XAF) est a parite FIXE avec l'euro : 655,957 pour 1 EUR. */
+const DEVISES={
+  XOF:{lib:"Franc CFA (UEMOA)",sym:"FCFA",zone:"UEMOA",parite:655.957,
+       unites:{F:{f:1000,dec:0,lib:"FCFA",suf:"F"},K:{f:1,dec:0,lib:"KFCFA",suf:"K"},M:{f:1/1000,dec:1,lib:"MFCFA",suf:"M"}}},
+  XAF:{lib:"Franc CFA (CEMAC)",sym:"FCFA",zone:"CEMAC",parite:655.957,
+       unites:{F:{f:1000,dec:0,lib:"FCFA",suf:"F"},K:{f:1,dec:0,lib:"KFCFA",suf:"K"},M:{f:1/1000,dec:1,lib:"MFCFA",suf:"M"}}},
+  EUR:{lib:"Euro",sym:"€",zone:"",parite:1,
+       unites:{F:{f:1000,dec:0,lib:"€",suf:"€"},K:{f:1,dec:0,lib:"k€",suf:"k€"},M:{f:1/1000,dec:2,lib:"M€",suf:"M€"}}},
+  USD:{lib:"Dollar US",sym:"$",zone:"",parite:0,
+       unites:{F:{f:1000,dec:0,lib:"$",suf:"$"},K:{f:1,dec:0,lib:"k$",suf:"k$"},M:{f:1/1000,dec:2,lib:"M$",suf:"M$"}}}
+};
+function dev(){return DEVISES[(DOSSIER&&DOSSIER.devise)||"XOF"]||DEVISES.XOF;}
+function devSym(){return dev().sym;}   /* etiquette de saisie : FCFA, EUR, USD */
+const UNITES=DEVISES.XOF.unites;       /* compat : anciens appels directs */
+function uni(){const u=dev().unites[(DOSSIER&&DOSSIER.unite)||"K"];globalThis.CONF_UNITE=u;return u;}
 const fmt=v=>{if(v===null||v===undefined)return "-";
   const u=uni(),x=v*u.f;
   if(Math.abs(x)<(u.dec?0.05:0.5))return "-";
@@ -153,7 +170,7 @@ function shell(){
   <div class="main">
     <div class="top">
       <div><div class="name">${DOSSIER?esc(DOSSIER.societe):"Aucun dossier ouvert"}</div>
-      <div class="sub">${DOSSIER&&DOSSIER.sansHistorique?"Business plan — projet · saisie en FCFA · affichage en "+uni().lib:(DOSSIER&&DOSSIER.balances.length?DOSSIER.balances.map(b=>"FY"+b.annee).join(" · ")+" — montants en "+uni().lib:"créez ou ouvrez un dossier")}</div></div>
+      <div class="sub">${DOSSIER&&DOSSIER.sansHistorique?"Business plan — projet · saisie en "+devSym()+" · affichage en "+uni().lib:(DOSSIER&&DOSSIER.balances.length?DOSSIER.balances.map(b=>"FY"+b.annee).join(" · ")+" — montants en "+uni().lib:"créez ou ouvrez un dossier")}</div></div>
       <div class="right">${barreDroite()}</div>
     </div>
     <div class="view" id="vue"></div>
@@ -167,13 +184,16 @@ function shell(){
   rendre();
 }
 function selecteurUnite(){
-  const u=(DOSSIER&&DOSSIER.unite)||"K";
+  const u=(DOSSIER&&DOSSIER.unite)||"K", U=dev().unites;
   return `<select class="sel" title="Unité d'affichage" onchange="changerUnite(this.value)">
-    <option value="F" ${u==="F"?"selected":""}>FCFA</option>
-    <option value="K" ${u==="K"?"selected":""}>K FCFA</option>
-    <option value="M" ${u==="M"?"selected":""}>M FCFA</option></select>`;
+    ${["F","K","M"].map(k=>`<option value="${k}" ${u===k?"selected":""}>${U[k].lib}</option>`).join("")}</select>`;
 }
-function changerUnite(x){if(!DOSSIER)return;DOSSIER.unite=x;sauverDossier();shell();toast("Affichage en "+UNITES[x].lib);}
+function changerUnite(x){if(!DOSSIER)return;DOSSIER.unite=x;sauverDossier();shell();toast("Affichage en "+dev().unites[x].lib);}
+function changerDevise(x){
+  if(!DOSSIER||!DEVISES[x])return;
+  DOSSIER.devise=x; sauverDossier(); shell();
+  toast("Devise du dossier : "+DEVISES[x].lib+" — les montants ne sont PAS convertis, seul le libellé change.");
+}
 function selecteurSocietes(){
   const l=chargerDossiers();
   if(!l.length)return "";
@@ -189,9 +209,14 @@ function chipMapping(){
 }
 /* contenu de la barre d'outils (.top .right) : sélecteurs + chip mapping + avatar.
    Factorisé pour que la mise à jour après un reclassement ne détruise pas les sélecteurs/avatar. */
+function selecteurDevise(){
+  const d=(DOSSIER&&DOSSIER.devise)||"XOF";
+  return `<select class="sel" title="Devise du dossier — change les libellés, ne convertit aucun montant" onchange="changerDevise(this.value)">
+    ${Object.keys(DEVISES).map(k=>`<option value="${k}" ${d===k?"selected":""}>${DEVISES[k].sym}${DEVISES[k].zone?" · "+DEVISES[k].zone:""}</option>`).join("")}</select>`;
+}
 function barreDroite(){
   const c=chipMapping();
-  return `${DOSSIER?selecteurUnite():""}${selecteurSocietes()}${c?`<span class="chip ${c.cls}">${c.txt}</span>`:""}${avatarMenu()}`;
+  return `${DOSSIER?selecteurDevise():""}${DOSSIER?selecteurUnite():""}${selecteurSocietes()}${c?`<span class="chip ${c.cls}">${c.txt}</span>`:""}${avatarMenu()}`;
 }
 /* jours restants avant expiration de la licence */
 function licJoursRestants(exp){
@@ -455,6 +480,7 @@ function vueAccueil(){
     <b>Business plan — projet</b>
     <div class="mut" style="margin:6px 0 12px">Pas de comptabilité à importer ? Construisez le plan à partir d'inducteurs (volumes, prix, coûts) — idéal pour une startup ou un projet nouveau.</div>
     <div class="row" style="gap:8px;flex-wrap:wrap"><input id="nouvNomModele" class="sel" placeholder="Nom de la société" style="flex:2;min-width:170px">
+    <select id="nouvDeviseModele" class="sel" style="flex:0 0 auto;min-width:132px" title="Devise du dossier">${Object.keys(DEVISES).map(k=>'<option value="'+k+'">'+DEVISES[k].sym+(DEVISES[k].zone?' · '+DEVISES[k].zone:'')+'</option>').join('')}</select>
     <select id="nouvSecteurModele" class="sel" style="flex:1;min-width:220px" title="Charge un modèle sectoriel pré-rempli — entièrement modifiable ensuite"><option value="">Secteur : générique (à composer)</option>${typeof MODELES_SECTORIELS!=='undefined'?MODELES_SECTORIELS_GRP.map(g=>'<optgroup label="'+g+'">'+MODELES_SECTORIELS.filter(s=>s.grp===g).map(s=>'<option value="'+s.id+'">'+esc(s.lab)+'</option>').join('')+'</optgroup>').join(''):''}</select>
     <button class="btn primary" onclick="creerModele()">Créer le projet</button></div>
   </div>`;
@@ -471,11 +497,12 @@ async function creerModele(nom,secId){
   if(!nom){const el=document.getElementById("nouvNomModele");nom=el?el.value.trim():"";}
   if(!nom){toast("Entrez un nom de société");return;}
   if(secId===undefined){const s=document.getElementById("nouvSecteurModele");secId=s?s.value:"";}
+  const _dv=document.getElementById("nouvDeviseModele"), devise=(_dv&&DEVISES[_dv.value])?_dv.value:"XOF";
   const id="d"+Date.now();
   const q=await licAjouterSociete(id,nom);
   if(!q.ok){toast("Quota atteint : votre licence permet "+q.max+" société(s) ("+q.used+" utilisées).");return;}
   const sec=(secId&&typeof secteurModele==="function")?secteurModele(secId):null;
-  DOSSIER={id:id,societe:nom,secteur:"Général",balances:[],overrides:{},sansHistorique:true,secteurModele:(sec?secId:""),modele:(sec?sec.build():modeleParDefaut())};
+  DOSSIER={id:id,societe:nom,secteur:"Général",devise:devise,balances:[],overrides:{},sansHistorique:true,secteurModele:(sec?secId:""),modele:(sec?sec.build():modeleParDefaut())};
   if(sec)DOSSIER.infos={secteur:sec.lab};
   recalculer();sauverDossier();localStorage.setItem(ACTIF_KEY,DOSSIER.id);SOUS_MODELE="rev";VUE="modele";shell();
 }
@@ -1854,16 +1881,16 @@ async function exporterExcelModele(sansFormule){
     const rng=row=>`${rH}!$C$${row}:$${CL(N-1)}$${row}`;   /* plage horizontale d'une série (par année d'exploitation) */
     const Nc=Math.max(0,Math.min((M.dureeConstruction!=null?Math.round(+M.dureeConstruction):0),N-1));
     /* ---- UNITÉ D'AFFICHAGE : diviseur piloté par une liste déroulante (reflète le sélecteur d'unité de l'app).
-       Toutes les valeurs monétaires sont saisies en FCFA dans les Hypothèses ; le Modèle les divise par ce diviseur.
+       Toutes les valeurs monétaires sont saisies en "+devSym()+" dans les Hypothèses ; le Modèle les divise par ce diviseur.
        Changer la liste dans Excel recalcule tout le classeur (impact automatique). ---- */
-    const uLabels={F:"FCFA",K:"Milliers (KFCFA)",M:"Millions (MFCFA)"};
+    const _U=dev().unites, uLabels={F:_U.F.lib,K:"Milliers ("+_U.K.lib+")",M:"Millions ("+_U.M.lib+")"};
     sec("UNITÉ D'AFFICHAGE (pilote toutes les valeurs monétaires du classeur)");
     hr++; wsH.getCell(hr,2).value="Unité (liste déroulante)";
     const cUn=wsH.getCell(hr,3); cUn.value=(uLabels[(DOSSIER&&DOSSIER.unite)||"K"]||uLabels.K); cUn.font=BLEU;
-    cUn.dataValidation={type:"list",allowBlank:false,showErrorMessage:true,formulae:['"FCFA,Milliers (KFCFA),Millions (MFCFA)"']};
+    cUn.dataValidation={type:"list",allowBlank:false,showErrorMessage:true,formulae:['"'+uLabels.F+","+uLabels.K+","+uLabels.M+'"']};
     H.unite="$C$"+hr;
     hr++; wsH.getCell(hr,2).value="Diviseur appliqué dans les formules";
-    const cDv=wsH.getCell(hr,3); cDv.value={formula:`IF(${H.unite}="FCFA",1,IF(${H.unite}="Millions (MFCFA)",1000000,1000))`}; cDv.numFmt=QF;
+    const cDv=wsH.getCell(hr,3); cDv.value={formula:`IF(${H.unite}="${uLabels.F}",1,IF(${H.unite}="${uLabels.M}",1000000,1000))`}; cDv.numFmt=QF;
     cDv.fill={type:"pattern",pattern:"solid",fgColor:{argb:"FFEFEFEF"}}; cDv.font={italic:true,color:{argb:"FF6B7280"}};
     H.div="$C$"+hr;
     const DIV=`${rH}!${H.div}`;   /* réf. absolue du diviseur, utilisée dans toutes les formules monétaires du Modèle/états */
@@ -1914,8 +1941,8 @@ async function exporterExcelModele(sansFormule){
       });
       if(!inds.length){ const gg=grow2("   Quantité (volume)",0,0); inds.push({row:gg.row,op:'x',name:"Quantité (volume)"}); }
       let prixInfo;
-      if((L.prix&&L.prix.mode)==='yearly'){ const pv=[]; for(let y=0;y<N;y++)pv.push(valSerie(L.prix.vals,y)); prixInfo={row:ser("   Prix unitaire (FCFA)",pv,QF)}; }
-      else { const gg=grow2("   Prix unitaire (FCFA)",(+((L.prix||{}).val)||0),(+((L.prix||{}).g||0))/100,QF); prixInfo={row:gg.row}; }
+      if((L.prix&&L.prix.mode)==='yearly'){ const pv=[]; for(let y=0;y<N;y++)pv.push(valSerie(L.prix.vals,y)); prixInfo={row:ser("   Prix unitaire ("+devSym()+")",pv,QF)}; }
+      else { const gg=grow2("   Prix unitaire ("+devSym()+")",(+((L.prix||{}).val)||0),(+((L.prix||{}).g||0))/100,QF); prixInfo={row:gg.row}; }
       H.rev[k]={inds:inds,prix:prixInfo};
     });
     /* coûts directs UNIFIÉS : % (d'une ligne ou de l'ensemble), coût unitaire par volume d'une ligne, ou inducteurs */
@@ -1935,8 +1962,8 @@ async function exporterExcelModele(sansFormule){
             if(r.mode==='yearly'){ const vals=[];for(let y=0;y<N;y++){let v=valSerie(r.vals,y);if(pct)v/=100;vals.push(v);} inds.push({row:ser(lib,vals,pct?RF:QF),op:(r.op==='d'?'d':'x'),name:nm,pct:pct,ceil:!!r.ceil}); }
             else { let base=(+r.val||0); if(pct)base/=100; const gg=grow2(lib,base,(+r.g||0)/100,pct?RF:QF); inds.push({row:gg.row,op:(r.op==='d'?'d':'x'),name:nm,pct:pct,ceil:!!r.ceil}); } });
           if(!inds.length){ const gg=grow2("   Quantité",0,0); inds.push({row:gg.row,op:'x',name:"Quantité"}); }
-          let taux; if((cl.prix&&cl.prix.mode)==='yearly'){ const tv=[];for(let y=0;y<N;y++)tv.push(valSerie(cl.prix.vals,y)); taux={row:ser("   Taux unitaire (FCFA)",tv,QF)}; }
-            else { const gg=grow2("   Taux unitaire (FCFA)",(+((cl.prix||{}).val)||0),(+((cl.prix||{}).g||0))/100,QF); taux={row:gg.row}; }
+          let taux; if((cl.prix&&cl.prix.mode)==='yearly'){ const tv=[];for(let y=0;y<N;y++)tv.push(valSerie(cl.prix.vals,y)); taux={row:ser("   Taux unitaire ("+devSym()+")",tv,QF)}; }
+            else { const gg=grow2("   Taux unitaire ("+devSym()+")",(+((cl.prix||{}).val)||0),(+((cl.prix||{}).g||0))/100,QF); taux={row:gg.row}; }
           info.inds=inds; info.taux=taux; }
         H.cd[k]=info;
       });
@@ -1946,14 +1973,14 @@ async function exporterExcelModele(sansFormule){
     if(M.autresProd&&(M.autresProd.mode==="yearly"||(+M.autresProd.val||0))){
       sec("AUTRES PRODUITS D'EXPLOITATION");
       if(M.autresProd.mode==="yearly"){const vals=[];for(let j=0;j<N;j++)vals.push(valSerie(M.autresProd.vals,j));
-        H.autresProd=ser("   Autres produits (FCFA/an)",vals,NF);}
-      else H.autresProd=grow2("   Autres produits (FCFA/an)",(+M.autresProd.val||0),(+M.autresProd.g||0)/100,NF).row;
+        H.autresProd=ser("   Autres produits ("+devSym()+"/an)",vals,NF);}
+      else H.autresProd=grow2("   Autres produits ("+devSym()+"/an)",(+M.autresProd.val||0),(+M.autresProd.g||0)/100,NF).row;
     }
     sec("FRAIS GÉNÉRAUX (charges fixes annuelles, hors personnel)");
     H.opex=[];
     (M.chargesFixes||[]).forEach(c=>{ if(c.personnel)return;
-      if(c.mode==='yearly'){ const vals=[];for(let j=0;j<N;j++)vals.push(valSerie(c.vals,j)); H.opex.push({row:ser("   "+(c.name||"Charge")+" (FCFA)",vals,NF),name:c.name||"Charge"}); }
-      else { const gg=grow2("   "+(c.name||"Charge")+" (FCFA)",(+(c.montant!=null?c.montant:c.val)||0),(+c.g||0)/100,NF); H.opex.push({row:gg.row,name:c.name||"Charge"}); }
+      if(c.mode==='yearly'){ const vals=[];for(let j=0;j<N;j++)vals.push(valSerie(c.vals,j)); H.opex.push({row:ser("   "+(c.name||"Charge")+" ("+devSym()+")",vals,NF),name:c.name||"Charge"}); }
+      else { const gg=grow2("   "+(c.name||"Charge")+" ("+devSym()+")",(+(c.montant!=null?c.montant:c.val)||0),(+c.g||0)/100,NF); H.opex.push({row:gg.row,name:c.name||"Charge"}); }
     });
     /* personnel granulaire : par poste = effectif par salaire mensuel par 12 (cellules jaunes vivantes) */
     H.persPostes=[];
@@ -1964,10 +1991,10 @@ async function exporterExcelModele(sansFormule){
         if(k>0)hr++;   /* ligne vide entre les postes */
         wsH.getCell(++hr,2).value="Poste "+(k+1)+" : "+(pp.poste||"Personnel");wsH.getCell(hr,2).font={italic:true,color:{argb:"FF224289"}};
         const eff=one("   Effectif",(+pp.effectif||0),QF);
-        const sal=one("   Salaire mensuel (FCFA)",(+pp.salaireMensuel||0),QF);
+        const sal=one("   Salaire mensuel ("+devSym()+")",(+pp.salaireMensuel||0),QF);
         const gg=one("   Croissance /an",((+pp.g||0)/100),PCT2);
         /* série annuelle calculée ICI (effectif par salaire par 12, évoluée) : le Modèle importe la série */
-        hr++;wsH.getCell(hr,2).value="   Charge annuelle du poste (FCFA/an)";
+        hr++;wsH.getCell(hr,2).value="   Charge annuelle du poste ("+devSym()+"/an)";
         for(let i=0;i<N;i++){const e=wsH.getCell(hr,3+i);e.value={formula:`${eff}*${sal}*12*(1+${gg})^${i}`};e.numFmt=NF;}
         H.persPostes.push({serie:hr,name:pp.poste||("Poste "+(k+1))});
       });
@@ -1979,31 +2006,31 @@ async function exporterExcelModele(sansFormule){
       const cm=wsH.getCell(hr,3);cm.value=(c.montant!=null?+c.montant:0);cm.numFmt=NF;cm.font=BLEU;H.capM[k]="$C$"+hr;
       const cd=wsH.getCell(hr,4);cd.value=+c.duree||5;cd.numFmt="0";cd.font=BLEU;H.capDur[k]="$D$"+hr;
       const ca=wsH.getCell(hr,5);ca.value=Math.max(1,Math.round(+c.annee||1));ca.numFmt="0";ca.font=BLEU;H.capAn[k]="$E$"+hr;
-      wsH.getCell(hr,6).value="montant (FCFA) / durée / année";wsH.getCell(hr,6).font={italic:true,size:9,color:{argb:"FF808080"}};
+      wsH.getCell(hr,6).value="montant ("+devSym()+") / durée / année";wsH.getCell(hr,6).font={italic:true,size:9,color:{argb:"FF808080"}};
     });
     sec("FINANCEMENT (montage initial, tiré en année 1)");
     H.moisBFR=one("BFR de démarrage (mois de charges de l'année 1)",(M.financement&&M.financement.moisBFR!=null?+M.financement.moisBFR:3),"0.0");
-    H.capital=one("Capital social (FCFA)",Math.round((P.financement.capital||0)*1000),NF);
-    H.primes=one("Primes liées au capital (FCFA)",Math.round((P.financement.primes||0)*1000),NF);
-    H.cca0=one("Comptes courants d'associés : CCA (FCFA)",Math.round((P.financement.cca||0)*1000),NF);
+    H.capital=one("Capital social ("+devSym()+")",Math.round((P.financement.capital||0)*1000),NF);
+    H.primes=one("Primes liées au capital ("+devSym()+")",Math.round((P.financement.primes||0)*1000),NF);
+    H.cca0=one("Comptes courants d'associés : CCA ("+devSym()+")",Math.round((P.financement.cca||0)*1000),NF);
     H.ccaTaux=one("CCA : taux de rémunération",P.financement.ccaTaux||0,PCT2);
-    H.ccaRembRow=ser("   CCA : remboursement de l'année (FCFA, selon le mode choisi)",P.annees.map(a=>Math.round(((P.dette[a]&&P.dette[a].ccaRemb)||0)*1000)),NF);
-    H.subv=one("Subvention (FCFA)",Math.round((P.financement.subvention||0)*1000),NF);
-    H.dette=one("Dette de base (hors IDC) (FCFA)",Math.round((P.financement.dette||0)*1000),NF);
+    H.ccaRembRow=ser("   CCA : remboursement de l'année ("+devSym()+", selon le mode choisi)",P.annees.map(a=>Math.round(((P.dette[a]&&P.dette[a].ccaRemb)||0)*1000)),NF);
+    H.subv=one("Subvention ("+devSym()+")",Math.round((P.financement.subvention||0)*1000),NF);
+    H.dette=one("Dette de base (hors IDC) ("+devSym()+")",Math.round((P.financement.dette||0)*1000),NF);
     H.taux=one("Taux d'intérêt de la dette",(M.financement&&M.financement.emprunt&&+M.financement.emprunt.taux)||0.08,PCT2);
     H.dur=one("Durée de remboursement (ans)",(M.financement&&M.financement.emprunt&&+M.financement.emprunt.duree)||5,"0");
     H.grace=one("Différé de remboursement en années (grâce : intérêts payés, capital décalé)",(M.financement&&M.financement.emprunt&&+M.financement.emprunt.grace)||0,"0");
     H.payout=one("Distribution de dividendes (% du RN N-1, si bénéficiaire)",M.dividendes_payout||0,PCT2);
-    H.divSeuil=one("Trésorerie minimale avant distribution (FCFA, plancher ; vide = 0)",M.dividendes_seuilCash!=null?M.dividendes_seuilCash:"",NF);
+    H.divSeuil=one("Trésorerie minimale avant distribution ("+devSym()+", plancher ; vide = 0)",M.dividendes_seuilCash!=null?M.dividendes_seuilCash:"",NF);
     /* situation d'ouverture : éléments déclarés (non audités, non exhaustifs), symétriques */
     { const O=M.ouverture||{}, PO=(P.financement.ouverture||{});
       sec("SITUATION D'OUVERTURE (éléments déclarés, non audités et non exhaustifs)");
-      H.ouvTreso=one("Trésorerie disponible à l'ouverture (FCFA)",Math.round((+O.treso||0)),NF);
-      H.ouvCre=one("Créances à recouvrer, facturé non encaissé (FCFA)",Math.round((+O.creances||0)),NF);
+      H.ouvTreso=one("Trésorerie disponible à l'ouverture ("+devSym()+")",Math.round((+O.treso||0)),NF);
+      H.ouvCre=one("Créances à recouvrer, facturé non encaissé ("+devSym()+")",Math.round((+O.creances||0)),NF);
       H.ouvTaux=one("… part jugée recouvrable",(O.tauxRecouv!=null?+O.tauxRecouv:1),PCT2);
       H.ouvDrec=one("… étalement de l'encaissement (ans)",Math.max(1,Math.round(+O.dureeRecouv||1)),"0");
-      H.ouvDetF=one("Dettes fournisseurs et autres dettes d'exploitation (FCFA)",Math.round((+O.dettesFrn||0)),NF);
-      H.ouvDetS=one("Dettes fiscales et sociales (FCFA)",Math.round((+O.dettesFiscSoc||0)),NF);
+      H.ouvDetF=one("Dettes fournisseurs et autres dettes d'exploitation ("+devSym()+")",Math.round((+O.dettesFrn||0)),NF);
+      H.ouvDetS=one("Dettes fiscales et sociales ("+devSym()+")",Math.round((+O.dettesFiscSoc||0)),NF);
       H.ouvDdet=one("… étalement du règlement (ans)",Math.max(1,Math.round(+O.dureeDettes||1)),"0");
       hr++; wsH.getCell(hr,2).value=(PO.actif&&!PO.passif)
         ?"⚠ Actif d'ouverture renseigné sans passif : situation asymétrique à justifier auprès de l'acquéreur."
@@ -2041,8 +2068,8 @@ async function exporterExcelModele(sansFormule){
     H.mtMin=one("Multiple de transactions bas en EBITDA",mtB.min!=null?mtB.min:5,"0.0");
     H.mt=one("Multiple de transactions central en EBITDA",mtB.central!=null?mtB.central:6.5,"0.0");
     H.mtMax=one("Multiple de transactions haut en EBITDA",mtB.max!=null?mtB.max:8,"0.0");
-    H.bridge=one("Ajustements du pont EV vers fonds propres (FCFA)",Math.round(((V.bridge||[]).reduce((s,x)=>s+(+x.montant||0),0))*1000),NF);
-    H.anrAdj=one("Ajustements de l'actif net ANR (FCFA)",Math.round(((V.anrAjustements||[]).reduce((s,x)=>s+(+x.montant||0),0))*1000),NF);
+    H.bridge=one("Ajustements du pont EV vers fonds propres ("+devSym()+")",Math.round(((V.bridge||[]).reduce((s,x)=>s+(+x.montant||0),0))*1000),NF);
+    H.anrAdj=one("Ajustements de l'actif net ANR ("+devSym()+")",Math.round(((V.anrAjustements||[]).reduce((s,x)=>s+(+x.montant||0),0))*1000),NF);
     H.sensAmp=one("Amplitude de sensibilité DCF (± points de WACC et de g)",0.01,PCT2);
     sec("PONDÉRATION DES MÉTHODES DE VALORISATION (%)");
     const pd=(V.poids||{dcf:45,comp:20,trans:20,anr:15});
@@ -2093,7 +2120,7 @@ async function exporterExcelModele(sansFormule){
       inds.forEach((ind,j)=>{ const lbl="   "+ind.name+((ind.op==='d')?" (en diviseur)":"");
         row("IND"+k+"_"+j,lbl,(i,X)=>`INDEX(${rng(ind.row)},${OI(X)})`,ind.pct?RF:QF); });
       row("VOL"+k,"   Volume",(i,X)=>{ let e=""; inds.forEach((ind,j)=>{const ref=`${X}${rr("IND"+k+"_"+j)}`; if(j===0)e=(ind.op==='d')?`1/${ref}`:ref; else e+=(ind.op==='d')?`/${ref}`:`*${ref}`;}); return `IFERROR(${X}${rr("FO")}*(${e||"0"})*${X}${rr("R_FCA")},0)`; },QF);
-      row("PRIX"+k,"   Prix unitaire (FCFA)",(i,X)=>`INDEX(${rng(pr.row)},${OI(X)})`,QF);
+      row("PRIX"+k,"   Prix unitaire ("+devSym()+")",(i,X)=>`INDEX(${rng(pr.row)},${OI(X)})`,QF);
       row("CAL"+k,"   Chiffre d'affaires",(i,X)=>`${X}${rr("VOL"+k)}*${X}${rr("PRIX"+k)}/${X}${rr("R_DIV")}`,NF);
     });
     blank();
@@ -2114,7 +2141,7 @@ async function exporterExcelModele(sansFormule){
       } else if(info.m==="unit"){
         const kk=(info.kLine!=null?info.kLine:0);
         sst(nom+" : coût unitaire par unité de volume");
-        row("CUC"+k,"   Coût unitaire (rappel, FCFA)",()=>`${rH}!${info.val}`,QF);
+        row("CUC"+k,"   Coût unitaire (rappel, "+devSym()+")",()=>`${rH}!${info.val}`,QF);
         row("CDI"+k,"   Coût de l'année",(i,X)=>`-${X}${rr("VOL"+kk)}*${X}${rr("CUC"+k)}*(1+${X}${rr("R_INFL")})^(${OI(X)}-1)*${X}${rr("R_FCOUT")}/${X}${rr("R_DIV")}`,NF);
       } else {
         sst(nom);
@@ -2142,7 +2169,7 @@ async function exporterExcelModele(sansFormule){
             baseCode=gcode; seg=[];
           }
         });
-        row("CTX"+k,"   Taux unitaire (FCFA)",(i,X)=>`INDEX(${rng(info.taux.row)},${OI(X)})`,QF);
+        row("CTX"+k,"   Taux unitaire ("+devSym()+")",(i,X)=>`INDEX(${rng(info.taux.row)},${OI(X)})`,QF);
         const finBase=baseCode, finSeg=seg.slice();
         row("CDI"+k,"   Coût de l'année",(i,X)=>{
           let e=finBase?`${X}${rr(finBase)}`:"";
@@ -2158,22 +2185,22 @@ async function exporterExcelModele(sansFormule){
 
     /* ---- FRAIS GÉNÉRAUX & PERSONNEL : chaque charge (base évoluée) + personnel par poste ---- */
     sec2("FRAIS GÉNÉRAUX & CHARGES DE PERSONNEL");
-    if(H.opex.length)sst("Frais généraux : hypothèse (FCFA/an) puis charge de l'année");
+    if(H.opex.length)sst("Frais généraux : hypothèse ("+devSym()+"/an) puis charge de l'année");
     H.opex.forEach((o,k)=>{
-      row("FGI"+k,"   "+o.name+" : hypothèse (FCFA/an)",(i,X)=>`INDEX(${rng(o.row)},${OI(X)})`,NF);
+      row("FGI"+k,"   "+o.name+" : hypothèse ("+devSym()+"/an)",(i,X)=>`INDEX(${rng(o.row)},${OI(X)})`,NF);
       row("OPL"+k,"   "+o.name,(i,X)=>`-${X}${rr("FO")}*${X}${rr("FGI"+k)}/${X}${rr("R_DIV")}`,NF);
     });
-    if((H.persPostes||[]).length){ blank(); sst("Charges de personnel : hypothèse (FCFA/an) puis charge de l'année"); }
+    if((H.persPostes||[]).length){ blank(); sst("Charges de personnel : hypothèse ("+devSym()+"/an) puis charge de l'année"); }
     (H.persPostes||[]).forEach((pp,k)=>{
-      row("PEI"+k,"   "+pp.name+" : hypothèse (FCFA/an)",(i,X)=>`INDEX(${rng(pp.serie)},${OI(X)})`,NF);
+      row("PEI"+k,"   "+pp.name+" : hypothèse ("+devSym()+"/an)",(i,X)=>`INDEX(${rng(pp.serie)},${OI(X)})`,NF);
       row("PEL"+k,"   "+pp.name,(i,X)=>`-${X}${rr("FO")}*${X}${rr("PEI"+k)}/${X}${rr("R_DIV")}`,NF);
     });
     row("PERS","   Charges du personnel (sous-total)",(i,X)=>(H.persPostes||[]).length?H.persPostes.map((_,k)=>`${X}${rr("PEL"+k)}`).join("+"):"0",NF);
     blank();
     row("FGT","Frais généraux (dont personnel) : total",(i,X)=>{const t=[...H.opex.map((_,k)=>`${X}${rr("OPL"+k)}`),((H.persPostes||[]).length?`${X}${rr("PERS")}`:null)].filter(Boolean);return t.length?t.join("+"):"0";},NF,true);
     if(H.autresProd){ blank();
-      sst("Autres produits d'exploitation : hypothèse (FCFA/an) puis produit de l'année");
-      row("API","   Autres produits : hypothèse (FCFA/an)",(i,X)=>`INDEX(${rng(H.autresProd)},${OI(X)})`,NF);
+      sst("Autres produits d'exploitation : hypothèse ("+devSym()+"/an) puis produit de l'année");
+      row("API","   Autres produits : hypothèse ("+devSym()+"/an)",(i,X)=>`INDEX(${rng(H.autresProd)},${OI(X)})`,NF);
       row("AP","   Autres produits",(i,X)=>`${X}${rr("FO")}*${X}${rr("API")}/${X}${rr("R_DIV")}`,NF);
       blank(); }
     row("EBITDA","EBITDA",(i,X)=>`${X}${rr("MB")}${H.autresProd?`+${X}${rr("AP")}`:""}+${X}${rr("FGT")}`,NF,true);
@@ -2181,7 +2208,7 @@ async function exporterExcelModele(sansFormule){
     /* ---- INVESTISSEMENTS, AMORTISSEMENTS & VNC (pour le bilan) ---- */
     sec2("INVESTISSEMENTS, AMORTISSEMENTS & VALEUR NETTE COMPTABLE");
     (M.capex||[]).forEach((c,k)=>{ const nomK=(c.name||("CAPEX "+(k+1)));
-      row("KM"+k,"   Rappel : "+nomK+" : montant (FCFA)",()=>`${rH}!${H.capM[k]}`,NF);
+      row("KM"+k,"   Rappel : "+nomK+" : montant ("+devSym()+")",()=>`${rH}!${H.capM[k]}`,NF);
       row("KD"+k,"   Rappel : "+nomK+" : durée d'amortissement (ans)",()=>`${rH}!${H.capDur[k]}`,"0");
       row("KA"+k,"   Rappel : "+nomK+" : année d'investissement",()=>`${rH}!${H.capAn[k]}`,"0");
     });
