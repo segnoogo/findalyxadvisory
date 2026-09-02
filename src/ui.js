@@ -469,6 +469,8 @@ function vueAccueil(){
     <button class="btn sm" onclick="ACC_LISTE=!ACC_LISTE;rendre()">${ouverte?"Replier la liste":"Afficher la liste"}</button>
     ${l.some(d=>d.demo)?"":'<button class="btn sm" style="margin-left:auto" onclick="creerDemo()" title="Recréer le dossier de démonstration">Dossier d\'exemple</button>'}
     <button class="btn sm"${l.some(d=>d.demo)?' style="margin-left:auto"':""} onclick="creerModelePrompt()">+ Projet</button>
+    <label class="btn sm" title="Reprendre une sauvegarde .json — un dossier reçu, ou vos dossiers depuis un autre poste">⬆ Importer
+      <input type="file" accept="application/json,.json" style="display:none" onchange="importerDossiersJSON(this)"></label>
     <button class="btn sm primary" onclick="ouvrirWizard()">+ Nouvelle société</button>
   </div>`;
   const creation=`<div class="card">
