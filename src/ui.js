@@ -2338,6 +2338,40 @@ async function exporterExcelModele(sansFormule){
     row("DECN","Concours bancaires (découvert, -)",(i,X)=>`-${X}${rr("LCT")}`,NF);
     row("FRNP","Dettes fournisseurs (passif)",(i,X)=>`${X}${rr("FRN")}`,NF);
 
+    /* ---- RATIOS : mêmes indicateurs que l'export d'un dossier avec historique (bpxl.js),
+           calculés ici EN FORMULES pour qu'ils suivent toute modification des hypothèses ---- */
+    sec2("RATIOS");
+    const XF='0.00" \u00d7";(0.00)" \u00d7";"-"', JF='#,##0" j";(#,##0)" j";"-"';
+    const _act =X=>`(${X}${rr("IMN")}+${X}${rr("BFR")}+${X}${rr("TRA")})`;      /* actif économique */
+    const _dfin=X=>`(${X}${rr("DETTE")}+${X}${rr("CCAS")})`;                    /* dette financière, CCA inclus */
+    const _dnet=X=>`(${_dfin(X)}+${X}${rr("LCT")}-${X}${rr("TRA")})`;           /* dette nette */
+    const _actC=X=>`(${X}${rr("CLI")}+${X}${rr("STK")}+${X}${rr("OUVCRE")}+${X}${rr("TRA")})`;
+    const _pasC=X=>`(-${X}${rr("FRN")}-${X}${rr("OUVDET")}+${X}${rr("LCT")})`;
+    const _baseAch=X=>`(-${X}${rr("CD")}-${X}${rr("FGT")}+${X}${rr("PERS")})`;  /* achats hors personnel */
+    const rat=(code,lib,f,fmt)=>row(code,lib,(i,X)=>f(X),fmt||RF);
+    rat("RA_MB","Marge brute / chiffre d'affaires",X=>`IF(${X}${rr("CA")}=0,"",${X}${rr("MB")}/${X}${rr("CA")})`);
+    rat("RA_EBITDA","Marge d'EBITDA",X=>`IF(${X}${rr("CA")}=0,"",${X}${rr("EBITDA")}/${X}${rr("CA")})`);
+    rat("RA_EBIT","Marge d'exploitation (EBIT)",X=>`IF(${X}${rr("CA")}=0,"",${X}${rr("EBIT")}/${X}${rr("CA")})`);
+    rat("RA_RN","Marge nette",X=>`IF(${X}${rr("CA")}=0,"",${X}${rr("RN")}/${X}${rr("CA")})`);
+    rat("RA_FG","Frais généraux / chiffre d'affaires",X=>`IF(${X}${rr("CA")}=0,"",-${X}${rr("FGT")}/${X}${rr("CA")})`);
+    rat("RA_PERS","Charges de personnel / chiffre d'affaires",X=>`IF(${X}${rr("CA")}=0,"",-${X}${rr("PERS")}/${X}${rr("CA")})`);
+    rat("RA_IS","Taux d'impôt effectif",X=>`IF(${X}${rr("EBT")}<=0,"",-${X}${rr("IS")}/${X}${rr("EBT")})`);
+    rat("RA_ROE","Rentabilité des capitaux propres (ROE)",X=>`IF(${X}${rr("CP")}<=0,"",${X}${rr("RN")}/${X}${rr("CP")})`);
+    rat("RA_ROA","Rentabilité de l'actif (ROA)",X=>`IF(${_act(X)}<=0,"",${X}${rr("RN")}/${_act(X)})`);
+    rat("RA_ROCE","Rentabilité des capitaux employés (ROCE)",X=>`IF((${X}${rr("CP")}+${_dfin(X)})<=0,"",${X}${rr("EBIT")}/(${X}${rr("CP")}+${_dfin(X)}))`);
+    rat("RA_AUTO","Autonomie financière (capitaux propres / actif)",X=>`IF(${_act(X)}<=0,"",${X}${rr("CP")}/${_act(X)})`);
+    rat("RA_LIQ","Liquidité générale",X=>`IF(${_pasC(X)}<=0,"",${_actC(X)}/${_pasC(X)})`,XF);
+    rat("RA_GEAR","Gearing (dette financière / capitaux propres)",X=>`IF(${X}${rr("CP")}<=0,"",${_dfin(X)}/${X}${rr("CP")})`,XF);
+    rat("RA_LEV","Levier (dette nette / EBITDA)",X=>`IF(${X}${rr("EBITDA")}<=0,"",${_dnet(X)}/${X}${rr("EBITDA")})`,XF);
+    rat("RA_COUV","Couverture des intérêts (EBITDA / frais financiers)",X=>`IF(${X}${rr("RFIN")}>=0,"",${X}${rr("EBITDA")}/(-${X}${rr("RFIN")}))`,XF);
+    rat("RA_BFRJ","BFR en jours de chiffre d'affaires",X=>`IF(${X}${rr("CA")}=0,"",${X}${rr("BFR")}*360/${X}${rr("CA")})`,JF);
+    rat("RA_DSO","Délai clients (DSO)",X=>`IF(${X}${rr("CA")}=0,"",${X}${rr("CLI")}*360/(${X}${rr("CA")}*(1+IF(${X}${rr("R_TVAEX")}=1,0,${X}${rr("R_TVA")}))))`,JF);
+    rat("RA_DPO","Délai fournisseurs (DPO)",X=>`IF(${_baseAch(X)}<=0,"",(-${X}${rr("FRN")})*360/(${_baseAch(X)}*(1+${X}${rr("R_TVA")})))`,JF);
+    rat("RA_CAFG","Capacité d'autofinancement / chiffre d'affaires",X=>`IF(${X}${rr("CA")}=0,"",${X}${rr("FA")}/${X}${rr("CA")})`);
+    rat("RA_CONV","Conversion en trésorerie (flux d'exploitation / EBITDA)",X=>`IF(${X}${rr("EBITDA")}<=0,"",${X}${rr("ZB")}/${X}${rr("EBITDA")})`);
+    rat("RA_FCF","Flux de trésorerie disponible / chiffre d'affaires",X=>`IF(${X}${rr("CA")}=0,"",(${X}${rr("ZB")}+${X}${rr("ZC")})/${X}${rr("CA")})`);
+    rat("RA_CVI","Couverture des investissements (flux d'exploitation / investissements)",X=>`IF(${X}${rr("ZC")}=0,"",${X}${rr("ZB")}/ABS(${X}${rr("ZC")}))`,XF);
+
     /* PASSE 1 : réserver tous les n° de ligne ; PASSE 2 : écrire libellés, en-têtes de section & formules */
     CROWS.forEach((d,idx)=>{R[d[0]]=cr+1+idx;});
     CROWS.forEach(d=>{if(d[6])return;   /* ligne vide de séparation */
@@ -2401,6 +2435,12 @@ async function exporterExcelModele(sansFormule){
     plDefs.push(["Résultat avant impôt","EBT",1]);
     plDefs.push(["Impôt sur les sociétés","IS"]);
     plDefs.push(["Résultat net","RN",1]);
+    plDefs.push([]);
+    plDefs.push(["Ratios du compte de résultat",null]);
+    [["Marge brute / chiffre d'affaires","RA_MB"],["Marge d'EBITDA","RA_EBITDA"],
+     ["Marge d'exploitation (EBIT)","RA_EBIT"],["Marge nette","RA_RN"],
+     ["Frais généraux / chiffre d'affaires","RA_FG"],["Charges de personnel / chiffre d'affaires","RA_PERS"],
+     ["Taux d'impôt effectif","RA_IS"]].forEach(r=>plDefs.push(["   "+r[0],r[1],0,RF]));
     feuille(nP,"Compte de résultat prévisionnel détaillé",plDefs,
       "Chaque ligne de revenus, de coûts et chaque charge est dépliée. Cellules calculées à partir des Hypothèses (saisies en bleu) via le Modèle ; renvois d'hypothèses en vert."
       +(planCheval()?" "+MENTION_CHEVAL:""));
@@ -2424,7 +2464,20 @@ async function exporterExcelModele(sansFormule){
       ["   Situation nette apportée à l'ouverture","OUVNET"],
       ["   Report à nouveau et résultats antérieurs","RANR"],["   Résultat net de l'exercice","RN"],["Capitaux propres","CP",1],
       [],
-      ["Contrôle : actif net - capitaux propres (= 0)","CTRL"]];
+      ["Contrôle : actif net - capitaux propres (= 0)","CTRL"],
+      [],
+      ["Ratios de structure, de rentabilité et de liquidité",null],
+      ["   Rentabilité des capitaux propres (ROE)","RA_ROE",0,RF],
+      ["   Rentabilité de l'actif (ROA)","RA_ROA",0,RF],
+      ["   Rentabilité des capitaux employés (ROCE)","RA_ROCE",0,RF],
+      ["   Autonomie financière (capitaux propres / actif)","RA_AUTO",0,RF],
+      ["   Liquidité générale","RA_LIQ",0,'0.00" ×";(0.00)" ×";"-"'],
+      ["   Gearing (dette financière / capitaux propres)","RA_GEAR",0,'0.00" ×";(0.00)" ×";"-"'],
+      ["   Levier (dette nette / EBITDA)","RA_LEV",0,'0.00" ×";(0.00)" ×";"-"'],
+      ["   Couverture des intérêts (EBITDA / frais financiers)","RA_COUV",0,'0.00" ×";(0.00)" ×";"-"'],
+      ["   BFR en jours de chiffre d'affaires","RA_BFRJ",0,'#,##0" j";(#,##0)" j";"-"'],
+      ["   Délai clients (DSO)","RA_DSO",0,'#,##0" j";(#,##0)" j";"-"'],
+      ["   Délai fournisseurs (DPO)","RA_DPO",0,'#,##0" j";(#,##0)" j";"-"']];
     feuille(nB,"Bilan prévisionnel détaillé : présentation actif net",bsDefs,
       "Actifs immobilisés (nets) + BFR + trésorerie nette - dettes financières - comptes courants d'associés = Actif net = Capitaux propres. La trésorerie boucle le bilan ; la ligne de contrôle doit être nulle."
       +((P.financement.ouverture&&(P.financement.ouverture.actif||P.financement.ouverture.passif))
@@ -2439,7 +2492,13 @@ async function exporterExcelModele(sansFormule){
       ["Subvention","FL"],["Emprunts nouveaux","TIR"],["Remboursements","REMB",0,null,-1],
       ["Apport en comptes courants d'associés","TIRCCA"],["Remboursement des comptes courants","REMCCA"],
       ["Dividendes versés","DIVN"],["Flux de financement","ZFIN",1],
-      ["Variation nette de trésorerie","ZF",1],["Trésorerie nette à la clôture","ZG",1]],
+      ["Variation nette de trésorerie","ZF",1],["Trésorerie nette à la clôture","ZG",1],
+      [],
+      ["Ratios de flux et de trésorerie",null],
+      ["   Capacité d'autofinancement / chiffre d'affaires","RA_CAFG",0,RF],
+      ["   Conversion en trésorerie (flux d'exploitation / EBITDA)","RA_CONV",0,RF],
+      ["   Flux de trésorerie disponible / chiffre d'affaires","RA_FCF",0,RF],
+      ["   Couverture des investissements","RA_CVI",0,'0.00" ×";(0.00)" ×";"-"']],
       "En période de construction, capital / emprunt / investissement apparaissent dans l'année concernée ; l'exploitation démarre après.");
     feuille(nD,"Tableau de la dette financière",[
       ["Emprunt bancaire",null],
